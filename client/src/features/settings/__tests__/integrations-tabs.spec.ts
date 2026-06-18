@@ -4,12 +4,12 @@ import { INTEGRATIONS_TABS, INTEGRATIONS_TAB_INFO, normalizeIntegrationsTab } fr
 
 describe('integrations-tabs', () => {
   describe('INTEGRATIONS_TABS', () => {
-    it('contains exactly kobo, koreader, hardcover', () => {
-      expect(INTEGRATIONS_TABS).toEqual(['kobo', 'koreader', 'hardcover'])
+    it('contains exactly kobo, koreader, hardcover, storygraph', () => {
+      expect(INTEGRATIONS_TABS).toEqual(['kobo', 'koreader', 'hardcover', 'storygraph'])
     })
 
-    it('is readonly (length is 3)', () => {
-      expect(INTEGRATIONS_TABS.length).toBe(3)
+    it('is readonly (length is 4)', () => {
+      expect(INTEGRATIONS_TABS.length).toBe(4)
     })
   })
 
@@ -50,6 +50,12 @@ describe('integrations-tabs', () => {
       expect(INTEGRATIONS_TAB_INFO.hardcover.titleLabel).toBe('Hardcover')
       expect(INTEGRATIONS_TAB_INFO.hardcover.permission).toBe(Permission.HardcoverSync)
     })
+
+    it('storygraph entry has correct labels', () => {
+      expect(INTEGRATIONS_TAB_INFO.storygraph.navLabel).toBe('StoryGraph')
+      expect(INTEGRATIONS_TAB_INFO.storygraph.titleLabel).toBe('StoryGraph')
+      expect(INTEGRATIONS_TAB_INFO.storygraph.permission).toBe(Permission.StorygraphSync)
+    })
   })
 
   describe('normalizeIntegrationsTab', () => {
@@ -87,6 +93,10 @@ describe('integrations-tabs', () => {
 
     it('returns hardcover when given "hardcover"', () => {
       expect(normalizeIntegrationsTab('hardcover')).toBe('hardcover')
+    })
+
+    it('returns storygraph when given "storygraph"', () => {
+      expect(normalizeIntegrationsTab('storygraph')).toBe('storygraph')
     })
 
     it('is case-sensitive (Kobo is not a valid tab)', () => {

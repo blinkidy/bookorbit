@@ -1,6 +1,6 @@
 import { Permission } from '@bookorbit/types'
 
-export const INTEGRATIONS_TABS = ['kobo', 'koreader', 'hardcover'] as const
+export const INTEGRATIONS_TABS = ['kobo', 'koreader', 'hardcover', 'storygraph'] as const
 
 export type IntegrationsTab = (typeof INTEGRATIONS_TABS)[number]
 
@@ -29,6 +29,12 @@ export const INTEGRATIONS_TAB_INFO: Record<IntegrationsTab, IntegrationsTabInfo>
     titleLabel: 'Hardcover',
     subtitle: 'Sync your reading progress, status, and ratings to Hardcover.',
     permission: Permission.HardcoverSync,
+  },
+  storygraph: {
+    navLabel: 'StoryGraph',
+    titleLabel: 'StoryGraph',
+    subtitle: 'Sync your reading progress and status to The StoryGraph.',
+    permission: Permission.StorygraphSync,
   },
 }
 

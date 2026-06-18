@@ -35,6 +35,9 @@ vi.mock('../KoreaderSettings.vue', () => ({ default: { template: '<div data-test
 vi.mock('@/features/hardcover/components/HardcoverSettings.vue', () => ({
   default: { template: '<div data-testid="hardcover-settings" />' },
 }))
+vi.mock('@/features/storygraph/components/StorygraphSettings.vue', () => ({
+  default: { template: '<div data-testid="storygraph-settings" />' },
+}))
 vi.mock('../SettingsPageHeader.vue', () => ({ default: { template: '<div />' } }))
 
 function mountComponent(opts?: { queryTab?: string; perms?: string[]; su?: boolean }) {
@@ -86,6 +89,13 @@ describe('IntegrationsAllSettings', () => {
     expect(lastReplace()).toEqual({ name: 'settings-integrations', query: { tab: 'hardcover' } })
   })
 
+  it('shows only StoryGraph tab for storygraph_sync users and defaults URL to ?tab=storygraph', () => {
+    const wrapper = mountComponent({ perms: [Permission.StorygraphSync] })
+    expect(labels(wrapper)).toEqual(['StoryGraph'])
+    expect(wrapper.find('[data-testid="storygraph-settings"]').exists()).toBe(true)
+    expect(lastReplace()).toEqual({ name: 'settings-integrations', query: { tab: 'storygraph' } })
+  })
+
   it('falls back to the first allowed tab when query tab is not permitted', () => {
     const wrapper = mountComponent({ queryTab: 'hardcover', perms: [Permission.KoreaderSync] })
     expect(wrapper.find('[data-testid="koreader-settings"]').exists()).toBe(true)
@@ -93,13 +103,13 @@ describe('IntegrationsAllSettings', () => {
     expect(lastReplace()).toEqual({ name: 'settings-integrations', query: { tab: 'koreader' } })
   })
 
-  it('renders and switches all three tabs when user has all three permissions', async () => {
+  it('renders and switches all four tabs when user has all four permissions', async () => {
     const wrapper = mountComponent({
       queryTab: 'kobo',
-      perms: [Permission.KoboSync, Permission.KoreaderSync, Permission.HardcoverSync],
+      perms: [Permission.KoboSync, Permission.KoreaderSync, Permission.HardcoverSync, Permission.StorygraphSync],
     })
 
-    expect(labels(wrapper)).toEqual(['Kobo', 'KOReader', 'Hardcover'])
+    expect(labels(wrapper)).toEqual(['Kobo', 'KOReader', 'Hardcover', 'StoryGraph'])
     expect(wrapper.find('[data-testid="kobo-settings"]').exists()).toBe(true)
 
     const hardcoverButton = wrapper.findAll('button').find((button) => button.text() === 'Hardcover')
@@ -107,5 +117,11 @@ describe('IntegrationsAllSettings', () => {
 
     expect(wrapper.find('[data-testid="hardcover-settings"]').exists()).toBe(true)
     expect(lastReplace()).toEqual({ name: 'settings-integrations', query: { tab: 'hardcover' } })
+
+    const storygraphButton = wrapper.findAll('button').find((button) => button.text() === 'StoryGraph')
+    await storygraphButton!.trigger('click')
+
+    expect(wrapper.find('[data-testid="storygraph-settings"]').exists()).toBe(true)
+    expect(lastReplace()).toEqual({ name: 'settings-integrations', query: { tab: 'storygraph' } })
   })
 })

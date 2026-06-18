@@ -5,6 +5,7 @@ import SettingsPageHeader from './SettingsPageHeader.vue'
 import KoboSettings from './KoboSettings.vue'
 import KoreaderSettings from './KoreaderSettings.vue'
 import HardcoverSettings from '@/features/hardcover/components/HardcoverSettings.vue'
+import StorygraphSettings from '@/features/storygraph/components/StorygraphSettings.vue'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
 import { INTEGRATIONS_TAB_INFO, INTEGRATIONS_TABS, normalizeIntegrationsTab, type IntegrationsTab as Tab } from './lib/integrations-tabs'
 
@@ -63,4 +64,5 @@ function selectTab(tab: Tab) {
   <KoboSettings v-if="tabs.length > 0 && activeTab === 'kobo'" embedded />
   <KoreaderSettings v-else-if="tabs.length > 0 && activeTab === 'koreader'" embedded />
   <HardcoverSettings v-else-if="tabs.length > 0 && activeTab === 'hardcover'" embedded />
+  <StorygraphSettings v-else-if="tabs.length > 0 && activeTab === 'storygraph'" embedded />
 </template>
