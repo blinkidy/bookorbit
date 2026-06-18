@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   api: vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(),
   push: vi.fn<(to: unknown) => void>(),
   hasPermission: vi.fn<(...args: unknown[]) => boolean>(),
+  toastSuccess: vi.fn<(message: string) => void>(),
+  toastError: vi.fn<(message: string) => void>(),
+  toastInfo: vi.fn<(message: string) => void>(),
 }))
 
 vi.mock('vue-router', async (importOriginal) => {
@@ -25,6 +28,10 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/features/auth/composables/usePermissions', () => ({
   usePermissions: () => ({ hasPermission: mocks.hasPermission }),
+}))
+
+vi.mock('vue-sonner', () => ({
+  toast: { success: mocks.toastSuccess, error: mocks.toastError, info: mocks.toastInfo },
 }))
 
 function makeBook(overrides: Partial<BookDetail> = {}): BookDetail {
@@ -130,6 +137,9 @@ describe('DetailsTab cover surface', () => {
     mocks.push.mockReset()
     mocks.hasPermission.mockReset()
     mocks.hasPermission.mockReturnValue(true)
+    mocks.toastSuccess.mockReset()
+    mocks.toastError.mockReset()
+    mocks.toastInfo.mockReset()
 
     mocks.api.mockImplementation(async (input) => {
       const url = String(input)
@@ -277,5 +287,76 @@ describe('DetailsTab cover surface', () => {
 
     const sendButtons = wrapper.findAll('button').filter((b) => b.text().includes('Send via Email'))
     expect(sendButtons.length).toBe(0)
+  })
+
+  it('renders Re-match StoryGraph button when user has storygraph_sync permission', async () => {
+    mocks.hasPermission.mockImplementation((perm) => perm === 'storygraph_sync')
+    const wrapper = mountDetails(makeBook())
+    await flushPromises()
+
+    const rematchButtons = wrapper.findAll('button').filter((b) => b.text().includes('Re-match StoryGraph'))
+    expect(rematchButtons.length).toBeGreaterThan(0) // Desktop and mobile menus
+  })
+
+  it('does not render Re-match StoryGraph button when user lacks storygraph_sync permission', async () => {
+    mocks.hasPermission.mockImplementation((perm) => perm !== 'storygraph_sync')
+    const wrapper = mountDetails(makeBook())
+    await flushPromises()
+
+    const rematchButtons = wrapper.findAll('button').filter((b) => b.text().includes('Re-match StoryGraph'))
+    expect(rematchButtons.length).toBe(0)
+  })
+
+  it('clicking Re-match StoryGraph calls the rematch endpoint and shows a success toast', async () => {
+    mocks.hasPermission.mockImplementation((perm) => perm === 'storygraph_sync')
+    mocks.api.mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/storygraph/books/') && url.includes('/rematch')) return response({ result: 'synced' })
+      return response({})
+    })
+    const book = makeBook()
+    const wrapper = mountDetails(book)
+    await flushPromises()
+
+    const rematchButton = wrapper.findAll('button').find((b) => b.text().includes('Re-match StoryGraph'))
+    await rematchButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.api).toHaveBeenCalledWith(`/api/v1/storygraph/books/${book.id}/rematch`, { method: 'POST' })
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Re-matched and synced with StoryGraph')
+  })
+
+  it('shows an info toast when StoryGraph sync is not connected', async () => {
+    mocks.hasPermission.mockImplementation((perm) => perm === 'storygraph_sync')
+    mocks.api.mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/storygraph/books/') && url.includes('/rematch')) return response({ result: 'skipped' })
+      return response({})
+    })
+    const wrapper = mountDetails(makeBook())
+    await flushPromises()
+
+    const rematchButton = wrapper.findAll('button').find((b) => b.text().includes('Re-match StoryGraph'))
+    await rematchButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.toastInfo).toHaveBeenCalledWith('StoryGraph sync is not connected for your account')
+  })
+
+  it('shows an error toast when the rematch request fails outright', async () => {
+    mocks.hasPermission.mockImplementation((perm) => perm === 'storygraph_sync')
+    mocks.api.mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/storygraph/books/') && url.includes('/rematch')) return { ok: false, status: 500, json: async () => ({}) } as Response
+      return response({})
+    })
+    const wrapper = mountDetails(makeBook())
+    await flushPromises()
+
+    const rematchButton = wrapper.findAll('button').find((b) => b.text().includes('Re-match StoryGraph'))
+    await rematchButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Failed to re-match with StoryGraph')
   })
 })

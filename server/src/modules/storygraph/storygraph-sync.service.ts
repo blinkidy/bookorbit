@@ -59,6 +59,13 @@ export class StorygraphSyncService {
     return this.syncSingleBook(userId, cookies, book, state);
   }
 
+  // Clears a (possibly wrong) cached match and forces a fresh match + sync attempt, even if
+  // status/progress haven't changed since the last sync.
+  async rematchBook(userId: number, bookId: number): Promise<StorygraphSyncBookResult> {
+    await this.repo.clearBookMatch(userId, bookId);
+    return this.syncBook(userId, bookId);
+  }
+
   async syncAll(userId: number): Promise<number> {
     const existing = this.activeSyncs.get(userId);
     if (existing) {

@@ -10,6 +10,7 @@ const mockRepo = {
   updateLastSyncedAt: vi.fn(),
   findSyncableBooks: vi.fn(),
   findSyncableBook: vi.fn(),
+  clearBookMatch: vi.fn(),
 };
 
 const mockClient = {
@@ -51,6 +52,7 @@ describe('StorygraphSyncService', () => {
     mockRepo.findSyncableBook.mockResolvedValue(null);
     mockRepo.upsertBookState.mockResolvedValue({});
     mockRepo.updateLastSyncedAt.mockResolvedValue(undefined);
+    mockRepo.clearBookMatch.mockResolvedValue(undefined);
     mockClient.extractCsrfToken.mockReturnValue('csrf-token');
     mockClient.get.mockResolvedValue({ status: 200, html: '<html></html>', redirectedToSignIn: false });
     mockClient.post.mockResolvedValue({ status: 302, html: '', redirectedToSignIn: false });
@@ -245,6 +247,32 @@ describe('StorygraphSyncService', () => {
       await svc.syncAll(1);
       svc.cancelSync(1);
       expect(svc.getSyncStatus(1)).toBeNull();
+    });
+  });
+
+  describe('rematchBook', () => {
+    it('clears the cached match before delegating to syncBook', async () => {
+      mockSettingsService.getCookiesForUser.mockResolvedValue(cookies);
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+      // clearBookMatch (tested separately on the repository) resets lastSyncedAt to null in the
+      // real DB, which is what makes hasChanges() treat this as a fresh, never-synced book here.
+      mockRepo.findBookState.mockResolvedValue(null);
+      mockMatchService.matchBook.mockResolvedValue({ storygraphBookId: 'correct-id', matchMethod: 'isbn' });
+
+      const result = await makeService().rematchBook(1, 1);
+
+      expect(mockRepo.clearBookMatch).toHaveBeenCalledWith(1, 1);
+      expect(result).toBe('synced');
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ storygraphBookId: 'correct-id' }));
+    });
+
+    it('returns skipped when the user has no cookies configured', async () => {
+      mockSettingsService.getCookiesForUser.mockResolvedValue(null);
+
+      const result = await makeService().rematchBook(1, 1);
+
+      expect(mockRepo.clearBookMatch).toHaveBeenCalledWith(1, 1);
+      expect(result).toBe('skipped');
     });
   });
 });

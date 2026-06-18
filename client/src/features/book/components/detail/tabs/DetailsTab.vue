@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { toast } from 'vue-sonner'
 import {
   BookOpen,
   Check,
@@ -45,6 +46,7 @@ import MetadataScoreBadge from '@/features/metadata-score/components/MetadataSco
 import MetadataScoreBreakdown from '@/features/metadata-score/components/MetadataScoreBreakdown.vue'
 import { useMetadataScoreWeights } from '@/features/metadata-score/composables/useMetadataScoreWeights'
 import { useSafeHtml } from '@/features/book/composables/useSafeHtml'
+import { rematchStorygraphBook } from '@/features/storygraph/api/storygraph.api'
 import { useKoreaderBookProgress } from '@/features/koreader/composables/useKoreaderBookProgress'
 import { RATING_STARS, getRatingStarClass } from '@/features/book/lib/rating-stars'
 import BookCoverSurface from '@/features/book/components/BookCoverSurface.vue'
@@ -83,6 +85,7 @@ const router = useRouter()
 const addToCollectionOpen = ref(false)
 const scoreBreakdownOpen = ref(false)
 const mobileScoreBreakdownOpen = ref(false)
+const rematchingStorygraph = ref(false)
 const moreMenuOpen = ref(false)
 const mobileMoreMenuOpen = ref(false)
 const readMenuOpen = ref(false)
@@ -769,6 +772,23 @@ function handleDeleteFromMenu() {
   promptDelete(props.book.id)
 }
 
+async function handleRematchStorygraphFromMenu() {
+  moreMenuOpen.value = false
+  mobileMoreMenuOpen.value = false
+  if (rematchingStorygraph.value) return
+  rematchingStorygraph.value = true
+  try {
+    const { result } = await rematchStorygraphBook(props.book.id)
+    if (result === 'synced') toast.success('Re-matched and synced with StoryGraph')
+    else if (result === 'failed') toast.error('StoryGraph re-match failed — check the server logs')
+    else toast.info('StoryGraph sync is not connected for your account')
+  } catch {
+    toast.error('Failed to re-match with StoryGraph')
+  } finally {
+    rematchingStorygraph.value = false
+  }
+}
+
 function handleSendFromMenu() {
   moreMenuOpen.value = false
   mobileMoreMenuOpen.value = false
@@ -1165,7 +1185,7 @@ watch(
         <Library class="size-3.5" />
       </button>
       <Popover
-        v-if="hasPermission('library_delete_books') || hasPermission('email_send')"
+        v-if="hasPermission('library_delete_books') || hasPermission('email_send') || hasPermission('storygraph_sync')"
         :open="mobileMoreMenuOpen"
         @update:open="(v) => (mobileMoreMenuOpen = v)"
       >
@@ -1182,6 +1202,15 @@ watch(
           >
             <Send class="size-3.5" />
             Send via Email
+          </button>
+          <button
+            v-if="hasPermission('storygraph_sync')"
+            class="flex w-full items-center gap-2 px-2 py-1.5 rounded text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            :disabled="rematchingStorygraph"
+            @click="handleRematchStorygraphFromMenu"
+          >
+            <RotateCcw class="size-3.5" />
+            Re-match StoryGraph
           </button>
           <button
             v-if="hasPermission('library_delete_books')"
@@ -1318,7 +1347,7 @@ watch(
               <Library class="size-3.5" />
             </button>
             <Popover
-              v-if="hasPermission('library_delete_books') || hasPermission('email_send')"
+              v-if="hasPermission('library_delete_books') || hasPermission('email_send') || hasPermission('storygraph_sync')"
               :open="moreMenuOpen"
               @update:open="(v) => (moreMenuOpen = v)"
             >
@@ -1337,6 +1366,15 @@ watch(
                 >
                   <Send class="size-3.5" />
                   Send via Email
+                </button>
+                <button
+                  v-if="hasPermission('storygraph_sync')"
+                  class="flex w-full items-center gap-2 px-2 py-1.5 rounded text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  :disabled="rematchingStorygraph"
+                  @click="handleRematchStorygraphFromMenu"
+                >
+                  <RotateCcw class="size-3.5" />
+                  Re-match StoryGraph
                 </button>
                 <button
                   v-if="hasPermission('library_delete_books')"

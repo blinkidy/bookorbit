@@ -135,6 +135,22 @@ describe('StorygraphRepository', () => {
     );
   });
 
+  it('clearBookMatch resets the cached match and last-synced snapshot', async () => {
+    const { repo, db, bookStateInsert } = makeRepository();
+    db.insert.mockReset();
+    db.insert.mockReturnValue(bookStateInsert);
+
+    await expect(repo.clearBookMatch(7, 42)).resolves.toBeUndefined();
+    expect(bookStateInsert.values).toHaveBeenCalledWith({
+      userId: 7,
+      bookId: 42,
+      storygraphBookId: null,
+      matchMethod: null,
+      matchError: null,
+      lastSyncedAt: null,
+    });
+  });
+
   it('updateLastSyncedAt updates the settings timestamp', async () => {
     const { repo, updateChain } = makeRepository();
     const syncedAt = new Date('2026-01-01T00:00:00Z');

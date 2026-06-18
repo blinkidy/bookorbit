@@ -94,6 +94,19 @@ export class StorygraphRepository {
     return row!;
   }
 
+  // Clears the cached match and last-synced snapshot so the next sync re-runs matching from
+  // scratch instead of trusting a previous (possibly wrong) match.
+  async clearBookMatch(userId: number, bookId: number): Promise<void> {
+    await this.upsertBookState({
+      userId,
+      bookId,
+      storygraphBookId: null,
+      matchMethod: null,
+      matchError: null,
+      lastSyncedAt: null,
+    });
+  }
+
   // ---- Sync Settings ----
 
   async updateLastSyncedAt(userId: number, at: Date): Promise<void> {

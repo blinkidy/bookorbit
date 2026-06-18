@@ -1,5 +1,5 @@
 import { Permission } from '@bookorbit/types';
-import { Body, Controller, Delete, Get, MessageEvent, Patch, Post, Sse } from '@nestjs/common';
+import { Body, Controller, Delete, Get, MessageEvent, Param, ParseIntPipe, Patch, Post, Sse } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -60,5 +60,10 @@ export class StorygraphController {
   @Get('sync/pending')
   getSyncPendingSummary(@CurrentUser() user: RequestUser) {
     return this.syncService.getSyncPendingSummary(user.id);
+  }
+
+  @Post('books/:bookId/rematch')
+  rematchBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    return this.syncService.rematchBook(user.id, bookId).then((result) => ({ result }));
   }
 }

@@ -16,6 +16,7 @@ const mockSyncService = {
   getSyncStatus: vi.fn(),
   streamSyncStatus: vi.fn(),
   getSyncPendingSummary: vi.fn(),
+  rematchBook: vi.fn(),
 };
 
 const mockUser = { id: 1, isSuperuser: false, permissions: [] };
@@ -78,5 +79,12 @@ describe('StorygraphController', () => {
     const result = await makeController().getSyncPendingSummary(mockUser as any);
     expect(result).toEqual({ totalBooks: 10, pendingBooks: 2 });
     expect(mockSyncService.getSyncPendingSummary).toHaveBeenCalledWith(1);
+  });
+
+  it('rematchBook delegates to service', async () => {
+    mockSyncService.rematchBook.mockResolvedValue('synced');
+    const result = await makeController().rematchBook(mockUser as any, 42);
+    expect(result).toEqual({ result: 'synced' });
+    expect(mockSyncService.rematchBook).toHaveBeenCalledWith(1, 42);
   });
 });

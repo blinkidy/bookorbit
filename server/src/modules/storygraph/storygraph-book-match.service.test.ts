@@ -38,6 +38,10 @@ function searchHtml(bookId: string, format = 'Hardcover'): string {
   `;
 }
 
+function bookPageHtml(opts: { editions: number; userAdded?: boolean }): string {
+  return `<html><body><p>${opts.editions} edition${opts.editions === 1 ? '' : 's'}</p>${opts.userAdded ? '<span>user-added</span>' : ''}</body></html>`;
+}
+
 describe('StorygraphBookMatchService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -120,5 +124,48 @@ describe('StorygraphBookMatchService', () => {
     expect(mockRepo.upsertBookState).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 1, bookId: 42, storygraphBookId: 'cached-result', matchMethod: 'isbn', matchError: null }),
     );
+  });
+
+  it('prefers a canonical multi-edition entry over a user-added single-edition duplicate', async () => {
+    mockRepo.findBookState.mockResolvedValue(undefined);
+    const searchResultsHtml = searchHtml('user-added-id') + searchHtml('canonical-id');
+    mockClient.get
+      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: searchResultsHtml })
+      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: bookPageHtml({ editions: 1, userAdded: true }) })
+      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: bookPageHtml({ editions: 17 }) });
+
+    const result = await makeService().matchBook(1, cookies, baseBook);
+
+    expect(result).toEqual({ storygraphBookId: 'canonical-id', matchMethod: 'isbn' });
+    expect(mockClient.get).toHaveBeenCalledTimes(3);
+    expect(mockClient.get).toHaveBeenNthCalledWith(2, 1, cookies, '/books/user-added-id');
+    expect(mockClient.get).toHaveBeenNthCalledWith(3, 1, cookies, '/books/canonical-id');
+  });
+
+  it('falls back to the first candidate when every candidate page fetch fails', async () => {
+    mockRepo.findBookState.mockResolvedValue(undefined);
+    const searchResultsHtml = searchHtml('first-id') + searchHtml('second-id');
+    mockClient.get
+      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: searchResultsHtml })
+      .mockRejectedValueOnce(new Error('network error'))
+      .mockRejectedValueOnce(new Error('network error'));
+
+    const result = await makeService().matchBook(1, cookies, baseBook);
+
+    expect(result).toEqual({ storygraphBookId: 'first-id', matchMethod: 'isbn' });
+  });
+
+  it('caps candidate evaluation at the configured maximum', async () => {
+    mockRepo.findBookState.mockResolvedValue(undefined);
+    const searchResultsHtml = searchHtml('id-1') + searchHtml('id-2') + searchHtml('id-3') + searchHtml('id-4');
+    mockClient.get.mockImplementation((_userId: number, _cookies: unknown, path: string) => {
+      if (path.startsWith('/browse')) return Promise.resolve({ status: 200, redirectedToSignIn: false, html: searchResultsHtml });
+      return Promise.resolve({ status: 200, redirectedToSignIn: false, html: bookPageHtml({ editions: 1 }) });
+    });
+
+    await makeService().matchBook(1, cookies, baseBook);
+
+    // 1 search request + at most 3 candidate page fetches (MAX_MATCH_CANDIDATES), not 4
+    expect(mockClient.get).toHaveBeenCalledTimes(4);
   });
 });

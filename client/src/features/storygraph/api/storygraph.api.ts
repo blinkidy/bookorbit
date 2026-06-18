@@ -99,3 +99,9 @@ export async function fetchStorygraphSyncPendingSummary(): Promise<StorygraphSyn
   if (!res.ok) return { totalBooks: 0, pendingBooks: 0 }
   return res.json()
 }
+
+export async function rematchStorygraphBook(bookId: number): Promise<{ result: 'synced' | 'skipped' | 'failed' }> {
+  const res = await api(`${BASE}/books/${bookId}/rematch`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to re-match with StoryGraph')
+  return res.json()
+}
