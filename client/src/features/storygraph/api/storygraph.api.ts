@@ -62,10 +62,7 @@ export async function fetchStorygraphSyncStatus(): Promise<StorygraphActiveSyncS
   return res.json()
 }
 
-export async function streamStorygraphSyncStatus(
-  onStatus: (status: StorygraphActiveSyncStatus | null) => void,
-  signal?: AbortSignal,
-): Promise<void> {
+export async function streamStorygraphSyncStatus(onStatus: (status: StorygraphActiveSyncStatus | null) => void, signal?: AbortSignal): Promise<void> {
   const res = await api(`${BASE}/sync/stream`, { signal })
   if (!res.ok || !res.body) throw new Error('Failed to stream StoryGraph sync status')
 

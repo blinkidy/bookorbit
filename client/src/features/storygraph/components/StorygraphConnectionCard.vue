@@ -83,8 +83,8 @@ function toggleCookiesVisible() {
     <div class="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2">
       <Info class="size-3.5 shrink-0 text-amber-600 mt-0.5" />
       <p class="text-xs text-amber-700 leading-relaxed">
-        StoryGraph has no public API. This integration works by reusing two cookies from your own logged-in browser session, the same approach used
-        by community KOReader plugins. It can break if StoryGraph changes their site, and you may occasionally need to re-paste fresh cookie values.
+        StoryGraph has no public API. This integration works by reusing two cookies from your own logged-in browser session, the same approach used by
+        community KOReader plugins. It can break if StoryGraph changes their site, and you may occasionally need to re-paste fresh cookie values.
       </p>
     </div>
 
@@ -98,7 +98,10 @@ function toggleCookiesVisible() {
           in your browser.
         </li>
         <li>Open Developer Tools (F12) and go to Application/Storage &rarr; Cookies for that site.</li>
-        <li>Copy the values of the <code class="px-1 rounded bg-muted">_storygraph_session</code> and <code class="px-1 rounded bg-muted">remember_user_token</code> cookies below.</li>
+        <li>
+          Copy the values of the <code class="px-1 rounded bg-muted">_storygraph_session</code> and
+          <code class="px-1 rounded bg-muted">remember_user_token</code> cookies below.
+        </li>
       </ol>
 
       <div class="space-y-2">
