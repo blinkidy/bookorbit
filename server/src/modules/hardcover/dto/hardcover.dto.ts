@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpsertHardcoverSettingsDto {
   @IsOptional()
@@ -33,4 +33,16 @@ export class ValidateHardcoverTokenDto {
   @IsString()
   @MaxLength(2048)
   token?: string;
+}
+
+export class LinkHardcoverBookDto {
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(2048)
+  input!: string;
+}
+
+export class SetHardcoverEditionDto {
+  @IsInt()
+  editionId!: number;
 }

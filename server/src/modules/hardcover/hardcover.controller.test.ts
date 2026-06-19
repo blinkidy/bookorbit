@@ -16,6 +16,11 @@ const mockSyncService = {
   getSyncStatus: vi.fn(),
   streamSyncStatus: vi.fn(),
   getSyncPendingSummary: vi.fn(),
+  rematchBook: vi.fn(),
+  listLinkedBooks: vi.fn(),
+  linkBookManually: vi.fn(),
+  listEditions: vi.fn(),
+  setEdition: vi.fn(),
 };
 
 const mockUser = { id: 1, isSuperuser: false, permissions: [] };
@@ -77,5 +82,40 @@ describe('HardcoverController', () => {
     const result = await makeController().getSyncPendingSummary(mockUser as any);
     expect(result).toEqual({ totalBooks: 10, pendingBooks: 2 });
     expect(mockSyncService.getSyncPendingSummary).toHaveBeenCalledWith(1);
+  });
+
+  it('rematchBook delegates to service and wraps the result', async () => {
+    mockSyncService.rematchBook.mockResolvedValue('synced');
+    const result = await makeController().rematchBook(mockUser as any, 42);
+    expect(result).toEqual({ result: 'synced' });
+    expect(mockSyncService.rematchBook).toHaveBeenCalledWith(1, 42);
+  });
+
+  it('listLinkedBooks delegates to service', async () => {
+    mockSyncService.listLinkedBooks.mockResolvedValue([{ bookId: 1 }]);
+    const result = await makeController().listLinkedBooks(mockUser as any);
+    expect(result).toEqual([{ bookId: 1 }]);
+    expect(mockSyncService.listLinkedBooks).toHaveBeenCalledWith(1);
+  });
+
+  it('linkBookManually delegates to service', async () => {
+    mockSyncService.linkBookManually.mockResolvedValue({ success: true, hardcoverBookId: 700, title: 'Fyrebirds' });
+    const result = await makeController().linkBookManually(mockUser as any, 42, { input: '700' });
+    expect(result).toEqual({ success: true, hardcoverBookId: 700, title: 'Fyrebirds' });
+    expect(mockSyncService.linkBookManually).toHaveBeenCalledWith(1, 42, '700');
+  });
+
+  it('listEditions delegates to service', async () => {
+    mockSyncService.listEditions.mockResolvedValue([{ id: 901 }]);
+    const result = await makeController().listEditions(mockUser as any, 42);
+    expect(result).toEqual([{ id: 901 }]);
+    expect(mockSyncService.listEditions).toHaveBeenCalledWith(1, 42);
+  });
+
+  it('setEdition delegates to service', async () => {
+    mockSyncService.setEdition.mockResolvedValue({ success: true });
+    const result = await makeController().setEdition(mockUser as any, 42, { editionId: 901 });
+    expect(result).toEqual({ success: true });
+    expect(mockSyncService.setEdition).toHaveBeenCalledWith(1, 42, 901);
   });
 });

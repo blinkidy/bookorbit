@@ -1,11 +1,11 @@
 import { Permission } from '@bookorbit/types';
-import { Body, Controller, Delete, Get, MessageEvent, Patch, Post, Sse } from '@nestjs/common';
+import { Body, Controller, Delete, Get, MessageEvent, Param, ParseIntPipe, Patch, Post, Sse } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import type { RequestUser } from '../../common/types/request-user';
-import { UpsertHardcoverSettingsDto, ValidateHardcoverTokenDto } from './dto';
+import { LinkHardcoverBookDto, SetHardcoverEditionDto, UpsertHardcoverSettingsDto, ValidateHardcoverTokenDto } from './dto';
 import { HardcoverSettingsService } from './hardcover-settings.service';
 import { HardcoverSyncService } from './hardcover-sync.service';
 
@@ -60,5 +60,30 @@ export class HardcoverController {
   @Get('sync/pending')
   getSyncPendingSummary(@CurrentUser() user: RequestUser) {
     return this.syncService.getSyncPendingSummary(user.id);
+  }
+
+  @Post('books/:bookId/rematch')
+  rematchBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    return this.syncService.rematchBook(user.id, bookId).then((result) => ({ result }));
+  }
+
+  @Get('books')
+  listLinkedBooks(@CurrentUser() user: RequestUser) {
+    return this.syncService.listLinkedBooks(user.id);
+  }
+
+  @Patch('books/:bookId/link')
+  linkBookManually(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: LinkHardcoverBookDto) {
+    return this.syncService.linkBookManually(user.id, bookId, dto.input);
+  }
+
+  @Get('books/:bookId/editions')
+  listEditions(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    return this.syncService.listEditions(user.id, bookId);
+  }
+
+  @Patch('books/:bookId/edition')
+  setEdition(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: SetHardcoverEditionDto) {
+    return this.syncService.setEdition(user.id, bookId, dto.editionId);
   }
 }

@@ -1,5 +1,11 @@
 import type { ReadStatus } from '@bookorbit/types';
-import type { HardcoverActiveSyncStatus, HardcoverSyncPendingSummary } from '@bookorbit/types';
+import type {
+  HardcoverActiveSyncStatus,
+  HardcoverEdition,
+  HardcoverLinkedBook,
+  HardcoverLinkResult,
+  HardcoverSyncPendingSummary,
+} from '@bookorbit/types';
 
 import { Injectable, Logger } from '@nestjs/common';
 import { distinctUntilChanged, filter, map, merge, Observable, of, Subject } from 'rxjs';
@@ -10,6 +16,10 @@ import { HardcoverBookMatchService } from './hardcover-book-match.service';
 import { HardcoverClientService } from './hardcover-client.service';
 import { type BookSyncData, HardcoverRepository } from './hardcover.repository';
 import { HardcoverSettingsService } from './hardcover-settings.service';
+
+// "Linked books" only needs to manage matches for books actively being read right now —
+// finished/want-to-read books aren't useful to manually re-link from that view.
+const CURRENTLY_READING_STATUSES = new Set<ReadStatus>(['reading', 'rereading']);
 
 const STATUS_MAP: Partial<Record<ReadStatus, number>> = {
   want_to_read: HARDCOVER_STATUS.WANT_TO_READ,
@@ -125,6 +135,95 @@ export class HardcoverSyncService {
     if (!this.hasChanges(book, state)) return 'skipped';
 
     return this.syncSingleBook(userId, token, book, state);
+  }
+
+  // Clears a (possibly wrong) cached match and forces a fresh match + sync attempt, even if
+  // status/progress haven't changed since the last sync.
+  async rematchBook(userId: number, bookId: number): Promise<HardcoverSyncBookResult> {
+    await this.repo.clearBookMatch(userId, bookId);
+    return this.syncBook(userId, bookId);
+  }
+
+  // Links a book directly to a Hardcover id/slug/URL the user supplied, bypassing the
+  // ISBN/title match cascade entirely — the user is telling us exactly which book is correct.
+  async linkBookManually(userId: number, bookId: number, input: string): Promise<HardcoverLinkResult> {
+    const token = await this.settingsService.getTokenForUser(userId);
+    if (!token) return { success: false };
+
+    const book = await this.repo.findSyncableBook(userId, bookId);
+    if (!book) return { success: false };
+
+    const resolved = await this.matchService.resolveManualInput(userId, token, input, book);
+    if (!resolved) return { success: false };
+
+    await this.repo.upsertBookState({
+      userId,
+      bookId,
+      hardcoverBookId: resolved.hardcoverBookId,
+      hardcoverEditionId: resolved.hardcoverEditionId,
+      matchMethod: 'manual',
+      matchError: null,
+      lastSyncedAt: null,
+    });
+
+    await this.syncBook(userId, bookId);
+
+    return { success: true, hardcoverBookId: resolved.hardcoverBookId, title: resolved.title };
+  }
+
+  async listEditions(userId: number, bookId: number): Promise<HardcoverEdition[]> {
+    const token = await this.settingsService.getTokenForUser(userId);
+    if (!token) return [];
+
+    const state = await this.repo.findBookState(userId, bookId);
+    if (!state?.hardcoverBookId) return [];
+
+    return this.matchService.getEditions(userId, token, state.hardcoverBookId);
+  }
+
+  async setEdition(userId: number, bookId: number, editionId: number): Promise<{ success: boolean }> {
+    const token = await this.settingsService.getTokenForUser(userId);
+    if (!token) return { success: false };
+
+    const state = await this.repo.findBookState(userId, bookId);
+    if (!state?.hardcoverBookId) return { success: false };
+
+    await this.repo.upsertBookState({
+      userId,
+      bookId,
+      hardcoverBookId: state.hardcoverBookId,
+      hardcoverEditionId: editionId,
+      matchMethod: 'manual',
+      matchError: null,
+      lastSyncedAt: null,
+    });
+
+    await this.syncBook(userId, bookId);
+
+    return { success: true };
+  }
+
+  async listLinkedBooks(userId: number): Promise<HardcoverLinkedBook[]> {
+    const allBooks = await this.repo.findSyncableBooks(userId);
+    const books = allBooks.filter((book) => CURRENTLY_READING_STATUSES.has(book.status as ReadStatus));
+    const states = await this.repo.findBookStatesByBookIds(
+      userId,
+      books.map((book) => book.bookId),
+    );
+    const stateByBookId = new Map(states.map((state) => [state.bookId, state]));
+
+    return books.map((book) => {
+      const state = stateByBookId.get(book.bookId);
+      return {
+        bookId: book.bookId,
+        title: book.title,
+        authorName: book.authorName,
+        hardcoverBookId: state?.hardcoverBookId ?? null,
+        hardcoverEditionId: state?.hardcoverEditionId ?? null,
+        matchMethod: state?.matchMethod ?? null,
+        matchError: state?.matchError ?? null,
+      };
+    });
   }
 
   async syncAll(userId: number): Promise<number> {

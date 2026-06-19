@@ -133,6 +133,23 @@ describe('HardcoverRepository', () => {
     );
   });
 
+  it('clearBookMatch nulls out the cached match and last-synced snapshot', async () => {
+    const { repo } = makeRepository();
+    const upsertBookState = vi.spyOn(repo, 'upsertBookState').mockResolvedValue({} as never);
+
+    await repo.clearBookMatch(7, 42);
+
+    expect(upsertBookState).toHaveBeenCalledWith({
+      userId: 7,
+      bookId: 42,
+      hardcoverBookId: null,
+      hardcoverEditionId: null,
+      matchMethod: null,
+      matchError: null,
+      lastSyncedAt: null,
+    });
+  });
+
   it('updateLastSyncedAt updates the settings timestamp', async () => {
     const { repo, updateChain } = makeRepository();
     const syncedAt = new Date('2026-01-01T00:00:00Z');
