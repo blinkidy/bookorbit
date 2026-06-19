@@ -23,6 +23,7 @@ export interface BookSyncData {
   finishedAt: Date | null;
   rating: number | null;
   progress: number | null;
+  audioPositionSeconds: number | null;
 }
 
 @Injectable()
@@ -138,6 +139,7 @@ export class HardcoverRepository {
       .select({
         bookId: schema.books.id,
         maxProgress: sql<number>`max(${schema.readingProgress.percentage})`.as('max_progress'),
+        maxProgressUpdatedAt: sql<Date>`max(${schema.readingProgress.updatedAt})`.as('max_progress_updated_at'),
       })
       .from(schema.books)
       .innerJoin(schema.bookFiles, eq(schema.bookFiles.bookId, schema.books.id))
@@ -145,6 +147,21 @@ export class HardcoverRepository {
       .where(bookFilter)
       .groupBy(schema.books.id)
       .as('max_progress_sq');
+
+    // Audiobooks tracked via the dedicated audio player update audiobook_progress (whole-book
+    // percentage + absolute position in seconds), not reading_progress (per-file, used by
+    // ebook/comic readers and KOReader sync). Without this join, audiobook-edition syncs never
+    // had a percentage to send and never had a seconds-based position to report to Hardcover.
+    const audioProgressSq = this.db
+      .select({
+        bookId: schema.audiobookProgress.bookId,
+        audioPercentage: schema.audiobookProgress.percentage,
+        audioPositionSeconds: schema.audiobookProgress.positionSeconds,
+        audioUpdatedAt: schema.audiobookProgress.updatedAt,
+      })
+      .from(schema.audiobookProgress)
+      .where(and(eq(schema.audiobookProgress.userId, userId), bookId !== undefined ? eq(schema.audiobookProgress.bookId, bookId) : undefined))
+      .as('audio_progress_sq');
 
     const firstAuthorSq = this.db
       .select({
@@ -171,7 +188,19 @@ export class HardcoverRepository {
         startedAt: schema.userBookStatus.startedAt,
         finishedAt: schema.userBookStatus.finishedAt,
         rating: schema.userBookRatings.rating,
-        progress: maxProgressSq.maxProgress,
+        progress: sql<number | null>`
+          coalesce(
+            case
+              when ${maxProgressSq.maxProgressUpdatedAt} is null then ${audioProgressSq.audioPercentage}
+              when ${audioProgressSq.audioUpdatedAt} is null then ${maxProgressSq.maxProgress}
+              when ${maxProgressSq.maxProgressUpdatedAt} >= ${audioProgressSq.audioUpdatedAt} then ${maxProgressSq.maxProgress}
+              else ${audioProgressSq.audioPercentage}
+            end,
+            ${maxProgressSq.maxProgress},
+            ${audioProgressSq.audioPercentage}
+          )
+        `,
+        audioPositionSeconds: audioProgressSq.audioPositionSeconds,
       })
       .from(schema.books)
       .innerJoin(
@@ -181,6 +210,7 @@ export class HardcoverRepository {
       .leftJoin(schema.bookMetadata, eq(schema.bookMetadata.bookId, schema.books.id))
       .leftJoin(schema.userBookRatings, and(eq(schema.userBookRatings.bookId, schema.books.id), eq(schema.userBookRatings.userId, userId)))
       .leftJoin(maxProgressSq, eq(maxProgressSq.bookId, schema.books.id))
+      .leftJoin(audioProgressSq, eq(audioProgressSq.bookId, schema.books.id))
       .leftJoin(firstAuthorSq, eq(firstAuthorSq.bookId, schema.books.id))
       .leftJoin(schema.bookFiles, eq(schema.bookFiles.id, schema.books.primaryFileId))
       .where(bookFilter);
