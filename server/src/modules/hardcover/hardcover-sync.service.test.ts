@@ -227,7 +227,7 @@ describe('HardcoverSyncService', () => {
         expect.objectContaining({ id: 899, object: expect.objectContaining({ progress_pages: 126 }) }),
       );
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[hardcover.sync_progress] [end] userId=1 bookId=1'));
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('progress=42 progressPages=126 - progress sent to Hardcover'));
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('progress=42 progressPages=126 progressSeconds=null - progress sent to Hardcover'));
       logSpy.mockRestore();
     });
 
@@ -236,6 +236,62 @@ describe('HardcoverSyncService', () => {
       mockRepo.findSyncableBook.mockResolvedValue(readingBook);
       mockRepo.findBookState.mockResolvedValue(null);
       mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: 20, editionPages: null, matchMethod: 'cached' });
+      mockClient.query
+        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ user_book_reads: [] })
+        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
+
+      await makeService().syncBook(1, 1);
+
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: null }));
+    });
+
+    it('sends progress_seconds (not progress_pages) when the matched edition is an audiobook', async () => {
+      const audioBook = { ...readingBook, audioPositionSeconds: 4521.7 };
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findSyncableBook.mockResolvedValue(audioBook);
+      mockRepo.findBookState.mockResolvedValue(null);
+      mockMatchService.matchBook.mockResolvedValue({
+        hardcoverBookId: 10,
+        hardcoverEditionId: 20,
+        editionPages: null,
+        editionIsAudio: true,
+        matchMethod: 'cached',
+      });
+      mockClient.query
+        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ user_book_reads: [] })
+        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('synced');
+
+      expect(mockClient.query).toHaveBeenNthCalledWith(
+        4,
+        1,
+        'tok',
+        expect.stringContaining('mutation InsertUserBookRead'),
+        expect.objectContaining({ object: expect.objectContaining({ progress_seconds: 4522 }) }),
+      );
+      expect(mockClient.query.mock.calls[3]![3].object).not.toHaveProperty('progress_pages');
+      // The real bug: progress was previously dropped to null for audio editions, making the
+      // book look permanently "pending" even though the sync otherwise succeeded.
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: audioBook.progress }));
+    });
+
+    it('keeps progress pending for an audio edition when there is no local listening position yet', async () => {
+      const audioBook = { ...readingBook, audioPositionSeconds: null };
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findSyncableBook.mockResolvedValue(audioBook);
+      mockRepo.findBookState.mockResolvedValue(null);
+      mockMatchService.matchBook.mockResolvedValue({
+        hardcoverBookId: 10,
+        hardcoverEditionId: 20,
+        editionPages: null,
+        editionIsAudio: true,
+        matchMethod: 'cached',
+      });
       mockClient.query
         .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
         .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })

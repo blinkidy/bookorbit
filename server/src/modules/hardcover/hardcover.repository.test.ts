@@ -178,6 +178,12 @@ describe('HardcoverRepository', () => {
     expect(mainSelect).toBeDefined();
     expect(mainSelect).toHaveProperty('pageCount');
     expect(mainSelect).toHaveProperty('format');
+    expect(mainSelect).toHaveProperty('audioPositionSeconds');
+
+    // Audiobook progress is tracked in a separate table (audiobook_progress, keyed by book
+    // rather than file) from ebook/comic progress — both subqueries must be selected.
+    const audioProgressSelect = selectArgs.find((cols) => cols && 'audioPercentage' in cols && 'audioPositionSeconds' in cols);
+    expect(audioProgressSelect).toBeDefined();
   });
 
   it('findSyncableBook returns a book from findSyncableBooks', async () => {

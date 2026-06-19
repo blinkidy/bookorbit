@@ -445,8 +445,10 @@ export class HardcoverSyncService {
       let progressSynced = true;
 
       if (startDate || endDate || book.progress != null) {
-        const progressPages = book.progress != null && match.editionPages ? Math.round((book.progress / 100) * match.editionPages) : undefined;
-        progressSynced = book.progress == null || progressPages != null;
+        const progressPages =
+          !match.editionIsAudio && book.progress != null && match.editionPages ? Math.round((book.progress / 100) * match.editionPages) : undefined;
+        const progressSeconds = match.editionIsAudio && book.audioPositionSeconds != null ? Math.round(book.audioPositionSeconds) : undefined;
+        progressSynced = book.progress == null || progressPages != null || progressSeconds != null;
 
         const reads = await this.findUserBookReads(userId, token, userBookId);
         const targetReadId = this.resolveTargetReadId(hardcoverReadId, reads);
@@ -457,21 +459,23 @@ export class HardcoverSyncService {
           startedAt: startDate,
           finishedAt: endDate,
           progressPages,
+          progressSeconds,
           editionId: match.hardcoverEditionId ?? undefined,
         });
 
-        if (progressPages != null && hardcoverReadId != null) {
+        if ((progressPages != null || progressSeconds != null) && hardcoverReadId != null) {
           await this.updateAdditionalOpenReads(userId, token, {
             reads,
             primaryReadId: hardcoverReadId,
             startedAt: startDate,
             finishedAt: endDate,
             progressPages,
+            progressSeconds,
             editionId: match.hardcoverEditionId ?? undefined,
           });
 
           this.logger.log(
-            `[hardcover.sync_progress] [end] userId=${userId} bookId=${book.bookId} hardcoverBookId=${match.hardcoverBookId} hardcoverReadId=${hardcoverReadId} durationMs=${Date.now() - startedAt} progress=${book.progress} progressPages=${progressPages} - progress sent to Hardcover`,
+            `[hardcover.sync_progress] [end] userId=${userId} bookId=${book.bookId} hardcoverBookId=${match.hardcoverBookId} hardcoverReadId=${hardcoverReadId} durationMs=${Date.now() - startedAt} progress=${book.progress} progressPages=${progressPages ?? null} progressSeconds=${progressSeconds ?? null} - progress sent to Hardcover`,
           );
         }
       }
@@ -578,6 +582,7 @@ export class HardcoverSyncService {
       startedAt?: string | null;
       finishedAt?: string | null;
       progressPages?: number;
+      progressSeconds?: number;
       editionId?: number;
     },
   ): Promise<number | null> {
@@ -585,6 +590,7 @@ export class HardcoverSyncService {
     if (input.startedAt) object['started_at'] = input.startedAt;
     if (input.finishedAt) object['finished_at'] = input.finishedAt;
     if (input.progressPages != null) object['progress_pages'] = input.progressPages;
+    if (input.progressSeconds != null) object['progress_seconds'] = input.progressSeconds;
     if (input.editionId != null) object['edition_id'] = input.editionId;
 
     if (input.existingReadId) {
@@ -640,7 +646,8 @@ export class HardcoverSyncService {
       primaryReadId: number;
       startedAt?: string | null;
       finishedAt?: string | null;
-      progressPages: number;
+      progressPages?: number;
+      progressSeconds?: number;
       editionId?: number;
     },
   ): Promise<void> {
@@ -653,7 +660,8 @@ export class HardcoverSyncService {
         this.updateUserBookRead(userId, token, readId, {
           ...(input.startedAt ? { started_at: input.startedAt } : {}),
           ...(input.finishedAt ? { finished_at: input.finishedAt } : {}),
-          progress_pages: input.progressPages,
+          ...(input.progressPages != null ? { progress_pages: input.progressPages } : {}),
+          ...(input.progressSeconds != null ? { progress_seconds: input.progressSeconds } : {}),
           ...(input.editionId != null ? { edition_id: input.editionId } : {}),
         }).catch(() => undefined),
       ),
