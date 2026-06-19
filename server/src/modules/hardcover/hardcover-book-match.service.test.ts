@@ -29,6 +29,7 @@ const baseBook = {
   progress: null,
   pageCount: null,
   format: null,
+  audioPositionSeconds: null,
 };
 
 describe('HardcoverBookMatchService', () => {
@@ -47,7 +48,7 @@ describe('HardcoverBookMatchService', () => {
       books: [{ id: 100, editions: [{ id: 200, pages: 320 }] }],
     });
     const result = await makeService().matchBook(1, 'tok', baseBook);
-    expect(result).toEqual({ hardcoverBookId: 100, hardcoverEditionId: 200, editionPages: 320, matchMethod: 'cached' });
+    expect(result).toEqual({ hardcoverBookId: 100, hardcoverEditionId: 200, editionPages: 320, editionIsAudio: false, matchMethod: 'cached' });
     expect(mockClient.query).toHaveBeenCalledTimes(1);
     expect(mockRepo.upsertBookState).not.toHaveBeenCalled();
   });
@@ -72,7 +73,7 @@ describe('HardcoverBookMatchService', () => {
 
     const result = await makeService().matchBook(1, 'tok', baseBook);
 
-    expect(result).toEqual({ hardcoverBookId: 100, hardcoverEditionId: 200, editionPages: null, matchMethod: 'cached' });
+    expect(result).toEqual({ hardcoverBookId: 100, hardcoverEditionId: 200, editionPages: null, editionIsAudio: false, matchMethod: 'cached' });
     expect(mockRepo.upsertBookState).not.toHaveBeenCalled();
   });
 
@@ -118,7 +119,13 @@ describe('HardcoverBookMatchService', () => {
 
     const result = await makeService().matchBook(1, 'tok', book);
 
-    expect(result).toEqual({ hardcoverBookId: 686104, hardcoverEditionId: 30673405, editionPages: 382, matchMethod: 'metadata_id' });
+    expect(result).toEqual({
+      hardcoverBookId: 686104,
+      hardcoverEditionId: 30673405,
+      editionPages: 382,
+      editionIsAudio: false,
+      matchMethod: 'metadata_id',
+    });
     expect(mockClient.query).toHaveBeenCalledWith(
       1,
       'tok',
@@ -168,7 +175,7 @@ describe('HardcoverBookMatchService', () => {
 
     const result = await makeService().matchBook(1, 'tok', baseBook);
 
-    expect(result).toEqual({ hardcoverBookId: 123, hardcoverEditionId: 30, editionPages: null, matchMethod: 'title' });
+    expect(result).toEqual({ hardcoverBookId: 123, hardcoverEditionId: 30, editionPages: null, editionIsAudio: false, matchMethod: 'title' });
   });
 
   it('returns null and stores no_match when all strategies fail', async () => {
@@ -222,7 +229,7 @@ describe('HardcoverBookMatchService', () => {
     const book = { ...baseBook, hardcoverMetadataId: '700', isbn13: '9781234567890', isbn10: null, pageCount: 512, format: 'epub' };
     const result = await makeService().matchBook(1, 'tok', book);
 
-    expect(result).toEqual({ hardcoverBookId: 700, hardcoverEditionId: 901, editionPages: 512, matchMethod: 'metadata_id' });
+    expect(result).toEqual({ hardcoverBookId: 700, hardcoverEditionId: 901, editionPages: 512, editionIsAudio: false, matchMethod: 'metadata_id' });
   });
 
   it('selects the closest page-count, non-audiobook edition on a title match', async () => {
@@ -243,7 +250,42 @@ describe('HardcoverBookMatchService', () => {
     const book = { ...baseBook, isbn13: null, isbn10: null, pageCount: 400, format: 'epub' };
     const result = await makeService().matchBook(1, 'tok', book);
 
-    expect(result).toEqual({ hardcoverBookId: 123, hardcoverEditionId: 801, editionPages: 405, matchMethod: 'title' });
+    expect(result).toEqual({ hardcoverBookId: 123, hardcoverEditionId: 801, editionPages: 405, editionIsAudio: false, matchMethod: 'title' });
+  });
+
+  it('marks editionIsAudio when the local file is an audiobook and the best edition is the audio one', async () => {
+    mockRepo.findBookState.mockResolvedValue(undefined);
+    mockClient.query.mockResolvedValue({
+      books: [
+        {
+          id: 700,
+          editions: [
+            { id: 900, pages: 320, isbn_13: null, isbn_10: null, audio_seconds: null, reading_format_id: 1 },
+            { id: 901, pages: null, isbn_13: null, isbn_10: null, audio_seconds: 36000, reading_format_id: 2 },
+          ],
+        },
+      ],
+    });
+
+    const book = { ...baseBook, isbn13: null, isbn10: null, hardcoverMetadataId: '700', format: 'm4b' };
+    const result = await makeService().matchBook(1, 'tok', book);
+
+    expect(result).toEqual({ hardcoverBookId: 700, hardcoverEditionId: 901, editionPages: null, editionIsAudio: true, matchMethod: 'metadata_id' });
+  });
+
+  it('reports editionIsAudio for a cached audio edition that is still tracked on Hardcover', async () => {
+    mockRepo.findBookState.mockResolvedValue({
+      hardcoverBookId: 100,
+      hardcoverEditionId: 200,
+      matchError: null,
+    });
+    mockClient.query.mockResolvedValue({
+      books: [{ id: 100, editions: [{ id: 200, pages: null, isbn_13: null, isbn_10: null, audio_seconds: 36000, reading_format_id: 2 }] }],
+    });
+
+    const result = await makeService().matchBook(1, 'tok', baseBook);
+
+    expect(result).toEqual({ hardcoverBookId: 100, hardcoverEditionId: 200, editionPages: null, editionIsAudio: true, matchMethod: 'cached' });
   });
 
   describe('resolveManualInput', () => {

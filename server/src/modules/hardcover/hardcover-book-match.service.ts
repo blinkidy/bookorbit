@@ -10,6 +10,7 @@ export interface HardcoverBookMatch {
   hardcoverBookId: number;
   hardcoverEditionId: number | null;
   editionPages: number | null;
+  editionIsAudio: boolean;
   matchMethod: 'isbn' | 'title' | 'cached' | 'metadata_id';
 }
 
@@ -156,6 +157,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: cached.hardcoverBookId,
         hardcoverEditionId: cachedMatch.hardcoverEditionId,
         editionPages: cachedMatch.editionPages,
+        editionIsAudio: cachedMatch.editionIsAudio,
         matchMethod: 'cached',
       };
     }
@@ -214,6 +216,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: hardcoverBook.id,
         hardcoverEditionId: edition?.id ?? null,
         editionPages: this.normalizeEditionPages(edition?.pages),
+        editionIsAudio: edition ? this.editionIsAudio(edition) : false,
         matchMethod: 'metadata_id',
       };
     } catch (err) {
@@ -235,6 +238,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: hardcoverBook.id,
         hardcoverEditionId: edition?.id ?? null,
         editionPages: this.normalizeEditionPages(edition?.pages),
+        editionIsAudio: edition ? this.editionIsAudio(edition) : false,
         matchMethod: 'metadata_id',
       };
     } catch (err) {
@@ -257,6 +261,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: hardcoverBook.id,
         hardcoverEditionId: edition?.id ?? null,
         editionPages: this.normalizeEditionPages(edition?.pages),
+        editionIsAudio: edition ? this.editionIsAudio(edition) : false,
         matchMethod: 'isbn',
       };
     } catch (err) {
@@ -289,6 +294,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: hardcoverBook.id,
         hardcoverEditionId: edition?.id ?? null,
         editionPages: this.normalizeEditionPages(edition?.pages),
+        editionIsAudio: edition ? this.editionIsAudio(edition) : false,
         matchMethod: 'title',
       };
     } catch (err) {
@@ -306,14 +312,14 @@ export class HardcoverBookMatchService {
     book: BookSyncData,
     hardcoverBookId: number,
     cachedEditionId: number | null,
-  ): Promise<{ hardcoverEditionId: number | null; editionPages: number | null }> {
+  ): Promise<{ hardcoverEditionId: number | null; editionPages: number | null; editionIsAudio: boolean }> {
     try {
       const data = await this.client.query<BooksQueryResult>(userId, token, FIND_BOOK_EDITIONS_BY_HARDCOVER_ID_QUERY, {
         id: hardcoverBookId,
       });
       const hardcoverBook = data.books?.[0];
       if (!hardcoverBook) {
-        return { hardcoverEditionId: cachedEditionId, editionPages: null };
+        return { hardcoverEditionId: cachedEditionId, editionPages: null, editionIsAudio: false };
       }
 
       const editions = hardcoverBook.editions ?? [];
@@ -322,21 +328,29 @@ export class HardcoverBookMatchService {
       if (cachedEditionId != null) {
         const cachedEdition = editions.find((edition) => edition.id === cachedEditionId);
         if (cachedEdition) {
-          return { hardcoverEditionId: cachedEditionId, editionPages: this.normalizeEditionPages(cachedEdition.pages) };
+          return {
+            hardcoverEditionId: cachedEditionId,
+            editionPages: this.normalizeEditionPages(cachedEdition.pages),
+            editionIsAudio: this.editionIsAudio(cachedEdition),
+          };
         }
       }
 
       const edition = this.pickBestEdition(editions, book);
       if (!edition) {
-        return { hardcoverEditionId: cachedEditionId, editionPages: null };
+        return { hardcoverEditionId: cachedEditionId, editionPages: null, editionIsAudio: false };
       }
-      return { hardcoverEditionId: edition.id, editionPages: this.normalizeEditionPages(edition.pages) };
+      return {
+        hardcoverEditionId: edition.id,
+        editionPages: this.normalizeEditionPages(edition.pages),
+        editionIsAudio: this.editionIsAudio(edition),
+      };
     } catch (err) {
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
       this.logger.warn(
         `[hardcover.book_match] [fail] userId=${userId} bookId=${book.bookId} method=cached_pages error="${error}" - cached edition pages lookup failed`,
       );
-      return { hardcoverEditionId: cachedEditionId, editionPages: null };
+      return { hardcoverEditionId: cachedEditionId, editionPages: null, editionIsAudio: false };
     }
   }
 
