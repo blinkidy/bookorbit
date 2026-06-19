@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Link, Save, CheckCircle2, AlertCircle, Info, Loader2, Unlink } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
@@ -64,6 +64,12 @@ async function handleDisconnect() {
 function toggleCookiesVisible() {
   cookiesVisible.value = !cookiesVisible.value
 }
+
+const connectedAtLabel = computed(() => {
+  const iso = settings.value?.connectedAt
+  if (!iso) return null
+  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+})
 </script>
 
 <template>
@@ -165,6 +171,10 @@ function toggleCookiesVisible() {
         <Info class="size-3.5 shrink-0 text-muted-foreground mt-0.5" />
         <p class="text-xs text-muted-foreground leading-relaxed">
           Sync runs only for books that are not unread. This applies to status and progress triggers. These switches control when a sync runs.
+          <template v-if="connectedAtLabel">
+            Books already marked Read, Skimmed, or Abandoned before you connected ({{ connectedAtLabel }}) are skipped by automatic and bulk sync —
+            use "Linked books" below to push one of those anyway.
+          </template>
         </p>
       </div>
 

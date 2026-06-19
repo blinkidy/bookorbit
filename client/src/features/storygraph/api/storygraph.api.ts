@@ -4,6 +4,9 @@ import type {
   StorygraphSyncPendingSummary,
   StorygraphSettings,
   StorygraphCookieValidationResult,
+  StorygraphEdition,
+  StorygraphLinkedBook,
+  StorygraphLinkResult,
   UpsertStorygraphSettingsPayload,
 } from '@bookorbit/types'
 
@@ -100,5 +103,37 @@ export async function fetchStorygraphSyncPendingSummary(): Promise<StorygraphSyn
 export async function rematchStorygraphBook(bookId: number): Promise<{ result: 'synced' | 'skipped' | 'failed' }> {
   const res = await api(`${BASE}/books/${bookId}/rematch`, { method: 'POST' })
   if (!res.ok) throw new Error('Failed to re-match with StoryGraph')
+  return res.json()
+}
+
+export async function fetchStorygraphLinkedBooks(): Promise<StorygraphLinkedBook[]> {
+  const res = await api(`${BASE}/books`)
+  if (!res.ok) return []
+  return res.json()
+}
+
+export async function linkStorygraphBook(bookId: number, input: string): Promise<StorygraphLinkResult> {
+  const res = await api(`${BASE}/books/${bookId}/link`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input }),
+  })
+  if (!res.ok) throw new Error('Failed to link StoryGraph book')
+  return res.json()
+}
+
+export async function fetchStorygraphEditions(bookId: number): Promise<StorygraphEdition[]> {
+  const res = await api(`${BASE}/books/${bookId}/editions`)
+  if (!res.ok) return []
+  return res.json()
+}
+
+export async function setStorygraphEdition(bookId: number, editionId: string): Promise<{ success: boolean }> {
+  const res = await api(`${BASE}/books/${bookId}/edition`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ editionId }),
+  })
+  if (!res.ok) throw new Error('Failed to set StoryGraph edition')
   return res.json()
 }

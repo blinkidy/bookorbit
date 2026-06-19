@@ -1,3 +1,4 @@
+import type { StorygraphEdition } from '@bookorbit/types';
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 
@@ -161,5 +162,127 @@ export class StorygraphBookMatchService {
   private localIsAudio(format: string | null): boolean {
     if (!format) return false;
     return AUDIO_FORMATS.has(format.toLowerCase());
+  }
+
+  /**
+   * Resolves a manually-provided StoryGraph URL or book id directly, with no search/scoring
+   * involved — the user is telling us exactly which book is correct, so we just verify it exists.
+   */
+  async resolveManualInput(userId: number, cookies: StorygraphCookies, input: string): Promise<{ storygraphBookId: string; title: string } | null> {
+    const bookId = this.extractBookIdFromInput(input);
+    if (!bookId) return null;
+
+    try {
+      const response = await this.client.get(userId, cookies, `/books/${bookId}`);
+      if (response.redirectedToSignIn || response.status !== 200) return null;
+
+      return { storygraphBookId: bookId, title: this.parseBookTitle(response.html) };
+    } catch (err) {
+      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
+      this.logger.warn(`[storygraph.manual_link] [fail] userId=${userId} input="${sanitizeLogValue(input)}" error="${error}" - resolve failed`);
+      return null;
+    }
+  }
+
+  private extractBookIdFromInput(input: string): string {
+    const value = input.trim();
+    if (!value) return '';
+
+    const urlMatch = /\/books\/([^/?#]+)/.exec(value);
+    if (urlMatch?.[1]) return urlMatch[1];
+
+    return value;
+  }
+
+  private parseBookTitle(html: string): string {
+    const $ = cheerio.load(html);
+    for (const selector of ['h1', "[data-testid='book-title']", '.book-title']) {
+      const text = $(selector).first().text().trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  /**
+   * Lists the editions tracked against a StoryGraph book (e.g. paperback, ebook, audiobook),
+   * scraped from the book's dedicated /editions page.
+   */
+  async getEditions(userId: number, cookies: StorygraphCookies, storygraphBookId: string): Promise<StorygraphEdition[]> {
+    try {
+      const response = await this.client.get(userId, cookies, `/books/${storygraphBookId}/editions`);
+      if (response.redirectedToSignIn || response.status !== 200) return [];
+
+      return this.parseEditions(response.html);
+    } catch (err) {
+      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
+      this.logger.warn(
+        `[storygraph.editions] [fail] userId=${userId} storygraphBookId=${storygraphBookId} error="${error}" - failed to fetch editions`,
+      );
+      return [];
+    }
+  }
+
+  private parseEditions(html: string): StorygraphEdition[] {
+    const $ = cheerio.load(html);
+    const editions: StorygraphEdition[] = [];
+
+    $('.book-pane').each((_, el) => {
+      const pane = $(el);
+      const id = pane.attr('data-book-id');
+      if (!id) return;
+
+      const title = pane.find("a[href^='/books/']").first().text().trim();
+
+      let format = '';
+      let language = '';
+      pane.find('.edition-info p').each((_, p) => {
+        const text = $(p).text().trim();
+        if (text.includes('Format:')) format = text.replace(/.*Format:\s*/, '').trim();
+        else if (text.includes('Language:')) language = text.replace(/.*Language:\s*/, '').trim();
+      });
+
+      const detailText = pane.find('p.text-xs.font-light').first().text().trim();
+      const pagesMatch = /(\d+)\s*pages?/i.exec(detailText);
+
+      editions.push({
+        id,
+        title,
+        format: format || 'Unknown',
+        pages: pagesMatch ? parseInt(pagesMatch[1]!, 10) : null,
+        isAudio: /audio/i.test(format),
+        language: language || null,
+      });
+    });
+
+    return editions;
+  }
+
+  /** Switches the StoryGraph book/edition currently tracked for this user, mirroring the site's own "switch editions" action. */
+  async switchEdition(userId: number, cookies: StorygraphCookies, fromStorygraphBookId: string, toStorygraphBookId: string): Promise<boolean> {
+    if (!fromStorygraphBookId || !toStorygraphBookId || fromStorygraphBookId === toStorygraphBookId) return true;
+
+    try {
+      const page = await this.client.get(userId, cookies, `/books/${fromStorygraphBookId}/editions`);
+      if (page.redirectedToSignIn || page.status !== 200) return false;
+
+      const csrf = this.client.extractCsrfToken(page.html);
+      if (!csrf) return false;
+
+      const response = await this.client.post(
+        userId,
+        cookies,
+        '/switch-editions',
+        { from_book_id: fromStorygraphBookId, to_book_id: toStorygraphBookId },
+        csrf,
+      );
+
+      return (response.status >= 200 && response.status < 300) || response.status === 302 || response.status === 303;
+    } catch (err) {
+      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
+      this.logger.warn(
+        `[storygraph.switch_edition] [fail] userId=${userId} from=${fromStorygraphBookId} to=${toStorygraphBookId} error="${error}" - switch failed`,
+      );
+      return false;
+    }
   }
 }

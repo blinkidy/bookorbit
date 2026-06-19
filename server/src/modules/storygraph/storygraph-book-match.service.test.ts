@@ -9,6 +9,8 @@ const mockRepo = {
 
 const mockClient = {
   get: vi.fn(),
+  post: vi.fn(),
+  extractCsrfToken: vi.fn(),
 };
 
 function makeService() {
@@ -197,5 +199,139 @@ describe('StorygraphBookMatchService', () => {
 
     // 1 search request + at most 3 candidate page fetches (MAX_MATCH_CANDIDATES), not 4
     expect(mockClient.get).toHaveBeenCalledTimes(4);
+  });
+
+  describe('resolveManualInput', () => {
+    it('extracts the book id from a full StoryGraph URL and resolves its title', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: '<html><body><h1>Real Title</h1></body></html>' });
+
+      const result = await makeService().resolveManualInput(1, cookies, 'https://app.thestorygraph.com/books/canonical-id');
+
+      expect(result).toEqual({ storygraphBookId: 'canonical-id', title: 'Real Title' });
+      expect(mockClient.get).toHaveBeenCalledWith(1, cookies, '/books/canonical-id');
+    });
+
+    it('treats a bare id as the book id directly', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: '<html><body><h1>Real Title</h1></body></html>' });
+
+      const result = await makeService().resolveManualInput(1, cookies, 'canonical-id');
+
+      expect(result).toEqual({ storygraphBookId: 'canonical-id', title: 'Real Title' });
+    });
+
+    it('returns null for empty input', async () => {
+      const result = await makeService().resolveManualInput(1, cookies, '   ');
+      expect(result).toBeNull();
+      expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the session is invalid', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: true, html: '' });
+      const result = await makeService().resolveManualInput(1, cookies, 'canonical-id');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when the book page does not exist', async () => {
+      mockClient.get.mockResolvedValue({ status: 404, redirectedToSignIn: false, html: '' });
+      const result = await makeService().resolveManualInput(1, cookies, 'missing-id');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when the request throws', async () => {
+      mockClient.get.mockRejectedValue(new Error('network error'));
+      const result = await makeService().resolveManualInput(1, cookies, 'canonical-id');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getEditions', () => {
+    function editionPaneHtml(opts: { id: string; title?: string; format?: string; pages?: number; language?: string }): string {
+      return `
+        <div class="book-pane" data-book-id="${opts.id}">
+          <a href="/books/${opts.id}">${opts.title ?? 'Edition Title'}</a>
+          <div class="edition-info">
+            <p>Format: ${opts.format ?? 'Hardcover'}</p>
+            <p>Language: ${opts.language ?? 'English'}</p>
+          </div>
+          <p class="text-xs font-light">${opts.pages != null ? `${opts.pages} pages` : ''}</p>
+        </div>
+      `;
+    }
+
+    it('parses editions with format, pages, audio flag, and language', async () => {
+      const html =
+        editionPaneHtml({ id: 'ed-1', title: 'Hardcover Edition', format: 'Hardcover', pages: 688, language: 'English' }) +
+        editionPaneHtml({ id: 'ed-2', title: 'Audiobook Edition', format: 'Audio', pages: undefined, language: 'English' });
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html });
+
+      const result = await makeService().getEditions(1, cookies, 'canonical-id');
+
+      expect(result).toEqual([
+        { id: 'ed-1', title: 'Hardcover Edition', format: 'Hardcover', pages: 688, isAudio: false, language: 'English' },
+        { id: 'ed-2', title: 'Audiobook Edition', format: 'Audio', pages: null, isAudio: true, language: 'English' },
+      ]);
+      expect(mockClient.get).toHaveBeenCalledWith(1, cookies, '/books/canonical-id/editions');
+    });
+
+    it('returns an empty list when the session is invalid', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: true, html: '' });
+      const result = await makeService().getEditions(1, cookies, 'canonical-id');
+      expect(result).toEqual([]);
+    });
+
+    it('returns an empty list when the request throws', async () => {
+      mockClient.get.mockRejectedValue(new Error('network error'));
+      const result = await makeService().getEditions(1, cookies, 'canonical-id');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('switchEdition', () => {
+    it('returns true without making requests when the ids are the same', async () => {
+      const result = await makeService().switchEdition(1, cookies, 'same-id', 'same-id');
+      expect(result).toBe(true);
+      expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    it('fetches a fresh CSRF token and posts the switch', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: '<html></html>' });
+      mockClient.extractCsrfToken.mockReturnValue('csrf-token');
+      mockClient.post.mockResolvedValue({ status: 302, redirectedToSignIn: false, html: '' });
+
+      const result = await makeService().switchEdition(1, cookies, 'from-id', 'to-id');
+
+      expect(result).toBe(true);
+      expect(mockClient.get).toHaveBeenCalledWith(1, cookies, '/books/from-id/editions');
+      expect(mockClient.post).toHaveBeenCalledWith(1, cookies, '/switch-editions', { from_book_id: 'from-id', to_book_id: 'to-id' }, 'csrf-token');
+    });
+
+    it('returns false when the editions page is not reachable', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: true, html: '' });
+      const result = await makeService().switchEdition(1, cookies, 'from-id', 'to-id');
+      expect(result).toBe(false);
+      expect(mockClient.post).not.toHaveBeenCalled();
+    });
+
+    it('returns false when no CSRF token can be extracted', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: '<html></html>' });
+      mockClient.extractCsrfToken.mockReturnValue(null);
+      const result = await makeService().switchEdition(1, cookies, 'from-id', 'to-id');
+      expect(result).toBe(false);
+      expect(mockClient.post).not.toHaveBeenCalled();
+    });
+
+    it('returns false when the switch request fails', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: '<html></html>' });
+      mockClient.extractCsrfToken.mockReturnValue('csrf-token');
+      mockClient.post.mockResolvedValue({ status: 500, redirectedToSignIn: false, html: '' });
+      const result = await makeService().switchEdition(1, cookies, 'from-id', 'to-id');
+      expect(result).toBe(false);
+    });
+
+    it('returns false when the request throws', async () => {
+      mockClient.get.mockRejectedValue(new Error('network error'));
+      const result = await makeService().switchEdition(1, cookies, 'from-id', 'to-id');
+      expect(result).toBe(false);
+    });
   });
 });

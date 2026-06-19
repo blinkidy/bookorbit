@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpsertStorygraphSettingsDto {
   @IsOptional()
@@ -34,4 +34,18 @@ export class ValidateStorygraphCookiesDto {
   @IsString()
   @MaxLength(4096)
   rememberToken?: string;
+}
+
+export class LinkStorygraphBookDto {
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(2048)
+  input!: string;
+}
+
+export class SetStorygraphEditionDto {
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(64)
+  editionId!: string;
 }

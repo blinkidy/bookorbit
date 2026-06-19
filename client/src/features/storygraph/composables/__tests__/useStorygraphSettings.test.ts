@@ -23,6 +23,7 @@ const SETTINGS: StorygraphSettings = {
   autoSyncOnStatusChange: true,
   autoSyncOnProgressUpdate: true,
   lastSyncedAt: null,
+  connectedAt: null,
 }
 
 async function loadComposable() {

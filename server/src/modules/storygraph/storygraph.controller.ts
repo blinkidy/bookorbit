@@ -5,7 +5,7 @@ import { map, Observable } from 'rxjs';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import type { RequestUser } from '../../common/types/request-user';
-import { UpsertStorygraphSettingsDto, ValidateStorygraphCookiesDto } from './dto';
+import { LinkStorygraphBookDto, SetStorygraphEditionDto, UpsertStorygraphSettingsDto, ValidateStorygraphCookiesDto } from './dto';
 import { StorygraphSettingsService } from './storygraph-settings.service';
 import { StorygraphSyncService } from './storygraph-sync.service';
 
@@ -65,5 +65,25 @@ export class StorygraphController {
   @Post('books/:bookId/rematch')
   rematchBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
     return this.syncService.rematchBook(user.id, bookId).then((result) => ({ result }));
+  }
+
+  @Get('books')
+  listLinkedBooks(@CurrentUser() user: RequestUser) {
+    return this.syncService.listLinkedBooks(user.id);
+  }
+
+  @Patch('books/:bookId/link')
+  linkBookManually(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: LinkStorygraphBookDto) {
+    return this.syncService.linkBookManually(user.id, bookId, dto.input);
+  }
+
+  @Get('books/:bookId/editions')
+  listEditions(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    return this.syncService.listEditions(user.id, bookId);
+  }
+
+  @Patch('books/:bookId/edition')
+  setEdition(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: SetStorygraphEditionDto) {
+    return this.syncService.setEdition(user.id, bookId, dto.editionId);
   }
 }

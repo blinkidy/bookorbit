@@ -18,6 +18,8 @@ export interface BookSyncData {
   format: string | null;
   status: string;
   progress: number | null;
+  finishedAt: Date | null;
+  statusUpdatedAt: Date;
 }
 
 @Injectable()
@@ -168,6 +170,8 @@ export class StorygraphRepository {
         format: schema.bookFiles.format,
         status: schema.userBookStatus.status,
         progress: maxProgressSq.maxProgress,
+        finishedAt: schema.userBookStatus.finishedAt,
+        statusUpdatedAt: schema.userBookStatus.updatedAt,
       })
       .from(schema.books)
       .innerJoin(

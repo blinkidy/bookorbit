@@ -17,6 +17,10 @@ const mockSyncService = {
   streamSyncStatus: vi.fn(),
   getSyncPendingSummary: vi.fn(),
   rematchBook: vi.fn(),
+  listLinkedBooks: vi.fn(),
+  linkBookManually: vi.fn(),
+  listEditions: vi.fn(),
+  setEdition: vi.fn(),
 };
 
 const mockUser = { id: 1, isSuperuser: false, permissions: [] };
@@ -86,5 +90,33 @@ describe('StorygraphController', () => {
     const result = await makeController().rematchBook(mockUser as any, 42);
     expect(result).toEqual({ result: 'synced' });
     expect(mockSyncService.rematchBook).toHaveBeenCalledWith(1, 42);
+  });
+
+  it('listLinkedBooks delegates to service', async () => {
+    mockSyncService.listLinkedBooks.mockResolvedValue([{ bookId: 42 }]);
+    const result = await makeController().listLinkedBooks(mockUser as any);
+    expect(result).toEqual([{ bookId: 42 }]);
+    expect(mockSyncService.listLinkedBooks).toHaveBeenCalledWith(1);
+  });
+
+  it('linkBookManually delegates to service', async () => {
+    mockSyncService.linkBookManually.mockResolvedValue({ success: true, storygraphBookId: 'abc-123' });
+    const result = await makeController().linkBookManually(mockUser as any, 42, { input: 'https://app.thestorygraph.com/books/abc-123' });
+    expect(result).toEqual({ success: true, storygraphBookId: 'abc-123' });
+    expect(mockSyncService.linkBookManually).toHaveBeenCalledWith(1, 42, 'https://app.thestorygraph.com/books/abc-123');
+  });
+
+  it('listEditions delegates to service', async () => {
+    mockSyncService.listEditions.mockResolvedValue([{ id: 'ed-1' }]);
+    const result = await makeController().listEditions(mockUser as any, 42);
+    expect(result).toEqual([{ id: 'ed-1' }]);
+    expect(mockSyncService.listEditions).toHaveBeenCalledWith(1, 42);
+  });
+
+  it('setEdition delegates to service', async () => {
+    mockSyncService.setEdition.mockResolvedValue({ success: true });
+    const result = await makeController().setEdition(mockUser as any, 42, { editionId: 'ed-2' });
+    expect(result).toEqual({ success: true });
+    expect(mockSyncService.setEdition).toHaveBeenCalledWith(1, 42, 'ed-2');
   });
 });

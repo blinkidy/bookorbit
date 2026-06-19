@@ -188,6 +188,8 @@ describe('StorygraphRepository', () => {
     expect(mainSelect).toHaveProperty('title');
     expect(mainSelect).toHaveProperty('authorName');
     expect(mainSelect).toHaveProperty('format');
+    expect(mainSelect).toHaveProperty('finishedAt');
+    expect(mainSelect).toHaveProperty('statusUpdatedAt');
   });
 
   it('findSyncableBook returns a book from findSyncableBooks', async () => {

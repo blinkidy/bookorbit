@@ -1,0 +1,1 @@
+ALTER TABLE "storygraph_user_settings" ADD COLUMN "connected_at" timestamp with time zone;

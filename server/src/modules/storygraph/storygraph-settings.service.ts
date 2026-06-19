@@ -33,6 +33,7 @@ export class StorygraphSettingsService {
       autoSyncOnStatusChange: row?.autoSyncOnStatusChange ?? true,
       autoSyncOnProgressUpdate: row?.autoSyncOnProgressUpdate ?? true,
       lastSyncedAt: row?.lastSyncedAt?.toISOString() ?? null,
+      connectedAt: row?.connectedAt?.toISOString() ?? null,
     };
   }
 
@@ -52,6 +53,9 @@ export class StorygraphSettingsService {
     // the INSERT values must be valid.
     data.sessionCookie = sessionCookie ?? existing!.sessionCookie;
     data.rememberToken = rememberToken ?? existing!.rememberToken;
+    // Books already finished before this moment are treated as pre-existing and skipped by
+    // automatic/bulk sync — only set once, on the connection that creates the settings row.
+    if (!existing) data.connectedAt = new Date();
     if (payload.enabled !== undefined) data.enabled = payload.enabled;
     if (payload.autoSyncOnStatusChange !== undefined) data.autoSyncOnStatusChange = payload.autoSyncOnStatusChange;
     if (payload.autoSyncOnProgressUpdate !== undefined) data.autoSyncOnProgressUpdate = payload.autoSyncOnProgressUpdate;

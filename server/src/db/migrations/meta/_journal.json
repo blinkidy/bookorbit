@@ -169,6 +169,13 @@
       "when": 1781806610489,
       "tag": "0023_add_storygraph_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781840322984,
+      "tag": "0024_add_storygraph_connected_at",
+      "breakpoints": true
     }
   ]
 }

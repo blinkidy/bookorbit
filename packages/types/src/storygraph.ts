@@ -8,6 +8,7 @@ export interface StorygraphSettings {
   autoSyncOnStatusChange: boolean;
   autoSyncOnProgressUpdate: boolean;
   lastSyncedAt: string | null;
+  connectedAt: string | null;
 }
 
 export interface UpsertStorygraphSettingsPayload {
@@ -34,4 +35,28 @@ export interface StorygraphActiveSyncStatus {
   syncedBooks: number;
   totalBooks: number;
   status: StorygraphSyncRunStatus;
+}
+
+export interface StorygraphEdition {
+  id: string;
+  title: string;
+  format: string;
+  pages: number | null;
+  isAudio: boolean;
+  language: string | null;
+}
+
+export interface StorygraphLinkedBook {
+  bookId: number;
+  title: string | null;
+  authorName: string | null;
+  storygraphBookId: string | null;
+  matchMethod: string | null;
+  matchError: string | null;
+}
+
+export interface StorygraphLinkResult {
+  success: boolean;
+  storygraphBookId?: string;
+  title?: string;
 }

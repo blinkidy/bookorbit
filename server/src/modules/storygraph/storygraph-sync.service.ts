@@ -1,5 +1,11 @@
 import type { ReadStatus } from '@bookorbit/types';
-import type { StorygraphActiveSyncStatus, StorygraphSyncPendingSummary } from '@bookorbit/types';
+import type {
+  StorygraphActiveSyncStatus,
+  StorygraphEdition,
+  StorygraphLinkedBook,
+  StorygraphLinkResult,
+  StorygraphSyncPendingSummary,
+} from '@bookorbit/types';
 
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
@@ -11,6 +17,12 @@ import { StorygraphClientService, type StorygraphCookies } from './storygraph-cl
 import { type BookSyncData, StorygraphRepository } from './storygraph.repository';
 import { StorygraphSettingsService } from './storygraph-settings.service';
 import { STORYGRAPH_STATUS } from './storygraph.constants';
+
+// Books already in one of these statuses before the user connected StoryGraph are assumed to
+// already be logged there (the user almost certainly tracked them manually) and are skipped by
+// automatic/bulk sync. Currently-reading books always sync normally — there's no pre-existing
+// StoryGraph log for an in-progress book that connecting could duplicate.
+const FINISHED_STATUSES = new Set<ReadStatus>(['read', 'skimmed', 'abandoned']);
 
 const STATUS_MAP: Partial<Record<ReadStatus, string>> = {
   want_to_read: STORYGRAPH_STATUS.WANT_TO_READ,
@@ -53,6 +65,9 @@ export class StorygraphSyncService {
 
     if (book.status === 'unread') return 'skipped';
 
+    const settings = await this.repo.findSettings(userId);
+    if (this.isPreExistingFinished(book, settings?.connectedAt ?? null)) return 'skipped';
+
     const state = await this.repo.findBookState(userId, book.bookId);
     if (!this.hasChanges(book, state)) return 'skipped';
 
@@ -66,6 +81,85 @@ export class StorygraphSyncService {
     return this.syncBook(userId, bookId);
   }
 
+  // Links a book directly to a StoryGraph URL/id the user supplied, bypassing search/scoring
+  // entirely — the user is telling us exactly which book is correct.
+  async linkBookManually(userId: number, bookId: number, input: string): Promise<StorygraphLinkResult> {
+    const cookies = await this.settingsService.getCookiesForUser(userId);
+    if (!cookies) return { success: false };
+
+    const resolved = await this.matchService.resolveManualInput(userId, cookies, input);
+    if (!resolved) return { success: false };
+
+    await this.repo.upsertBookState({
+      userId,
+      bookId,
+      storygraphBookId: resolved.storygraphBookId,
+      matchMethod: 'manual',
+      matchError: null,
+      lastSyncedAt: null,
+    });
+
+    await this.syncBook(userId, bookId);
+
+    return { success: true, storygraphBookId: resolved.storygraphBookId, title: resolved.title };
+  }
+
+  async listEditions(userId: number, bookId: number): Promise<StorygraphEdition[]> {
+    const cookies = await this.settingsService.getCookiesForUser(userId);
+    if (!cookies) return [];
+
+    const state = await this.repo.findBookState(userId, bookId);
+    if (!state?.storygraphBookId) return [];
+
+    return this.matchService.getEditions(userId, cookies, state.storygraphBookId);
+  }
+
+  async setEdition(userId: number, bookId: number, editionId: string): Promise<{ success: boolean }> {
+    const cookies = await this.settingsService.getCookiesForUser(userId);
+    if (!cookies) return { success: false };
+
+    const state = await this.repo.findBookState(userId, bookId);
+    const currentId = state?.storygraphBookId;
+    if (!currentId) return { success: false };
+
+    const switched = await this.matchService.switchEdition(userId, cookies, currentId, editionId);
+    if (!switched) return { success: false };
+
+    await this.repo.upsertBookState({
+      userId,
+      bookId,
+      storygraphBookId: editionId,
+      matchMethod: 'manual',
+      matchError: null,
+      lastSyncedAt: null,
+    });
+
+    await this.syncBook(userId, bookId);
+
+    return { success: true };
+  }
+
+  async listLinkedBooks(userId: number): Promise<StorygraphLinkedBook[]> {
+    const books = await this.repo.findSyncableBooks(userId);
+    const states = await this.repo.findBookStatesByBookIds(
+      userId,
+      books.map((book) => book.bookId),
+    );
+    const stateByBookId = new Map(states.map((state) => [state.bookId, state]));
+
+    return books.map((book) => {
+      const state = stateByBookId.get(book.bookId);
+      return {
+        bookId: book.bookId,
+        title: book.title,
+        authorName: book.authorName,
+        storygraphBookId: state?.storygraphBookId ?? null,
+        matchMethod: state?.matchMethod ?? null,
+        matchError: state?.matchError ?? null,
+      };
+    });
+  }
+
   async syncAll(userId: number): Promise<number> {
     const existing = this.activeSyncs.get(userId);
     if (existing) {
@@ -77,7 +171,7 @@ export class StorygraphSyncService {
     const cookies = await this.settingsService.getCookiesForUser(userId);
     if (!cookies) return 0;
 
-    const books = await this.repo.findSyncableBooks(userId);
+    const books = await this.filterPreExistingFinished(userId, await this.repo.findSyncableBooks(userId));
 
     // Re-check: a concurrent syncAll may have won the race during findSyncableBooks
     const recheck = this.activeSyncs.get(userId);
@@ -141,7 +235,7 @@ export class StorygraphSyncService {
       return { totalBooks: 0, pendingBooks: 0 };
     }
 
-    const books = await this.repo.findSyncableBooks(userId);
+    const books = await this.filterPreExistingFinished(userId, await this.repo.findSyncableBooks(userId));
     if (books.length === 0) {
       return { totalBooks: 0, pendingBooks: 0 };
     }
@@ -358,6 +452,21 @@ export class StorygraphSyncService {
     const $ = cheerio.load(html);
     const value = $('input[name="read_status[book_num_of_pages]"]').attr('value');
     return value ?? '0';
+  }
+
+  private async filterPreExistingFinished(userId: number, books: BookSyncData[]): Promise<BookSyncData[]> {
+    const settings = await this.repo.findSettings(userId);
+    const connectedAt = settings?.connectedAt ?? null;
+    if (!connectedAt) return books;
+    return books.filter((book) => !this.isPreExistingFinished(book, connectedAt));
+  }
+
+  private isPreExistingFinished(book: BookSyncData, connectedAt: Date | null): boolean {
+    if (!connectedAt) return false;
+    if (!FINISHED_STATUSES.has(book.status as ReadStatus)) return false;
+    const finishedAt = book.finishedAt ?? book.statusUpdatedAt;
+    if (!finishedAt) return false;
+    return finishedAt.getTime() < connectedAt.getTime();
   }
 
   private hasChanges(book: BookSyncData, state: StorygraphBookStateSnapshot): boolean {
