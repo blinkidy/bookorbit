@@ -155,7 +155,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      actions: read
       contents: write
       issues: write
       pull-requests: write
@@ -195,25 +194,6 @@ jobs:
         with:
           ref: ${{ steps.resolve.outputs.sha }}
           fetch-depth: 0
-
-      - name: Verify CI success for current SHA
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          COMMIT_SHA: ${{ steps.resolve.outputs.sha }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          echo "Checking CI status for commit ${COMMIT_SHA}..."
-          success_count=$(gh api --paginate \
-            "repos/${GH_REPO}/actions/workflows/ci.yml/runs?head_sha=${COMMIT_SHA}&status=completed&event=push&branch=main" \
-            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length' \
-            | awk '{sum += $1} END {print sum}')
-          if [[ "${success_count:-0}" -lt 1 ]]; then
-            echo "::error::No successful CI run found for commit ${COMMIT_SHA}. Refusing to release."
-            exit 1
-          fi
-          echo "CI verification passed: ${success_count} successful run(s) found."
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0

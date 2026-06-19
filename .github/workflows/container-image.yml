@@ -28,7 +28,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Main push path: resolve context once, then build multi-arch natively in parallel.
+  # Main push path: resolve context once, then build the amd64 image.
   prepare:
     name: Resolve Build Context
     if: >
@@ -98,8 +98,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     env:
       REGISTRY: ghcr.io
       IMAGE_NAME: ${{ github.repository }}
@@ -119,14 +117,34 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || github.token }}
 
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          SHA_SHORT: ${{ needs.prepare.outputs.source_sha_short }}
+          UPDATE_MAIN: ${{ needs.prepare.outputs.update_main }}
+        run: |
+          TAGS="${REGISTRY}/${IMAGE_NAME}:sha-${SHA_SHORT}"
+          if [[ "$UPDATE_MAIN" == "true" ]]; then
+            TAGS="${TAGS}"$'\n'"${REGISTRY}/${IMAGE_NAME}:main"
+          fi
+          {
+            echo "list<<EOF"
+            echo "$TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build image
         id: build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: ./Dockerfile
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          push: true
           platforms: linux/amd64
+          tags: ${{ steps.tags.outputs.list }}
           build-args: APP_VERSION=sha-${{ needs.prepare.outputs.source_sha_short }}
           cache-from: type=gha,scope=container-image-yml-amd64
           cache-to: type=gha,mode=max,scope=container-image-yml-amd64
@@ -143,119 +161,3 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
-
-  build-arm64:
-    name: Build and Push arm64
-    needs: [prepare]
-    if: needs.prepare.outputs.skip_build != 'true'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with:
-          ref: ${{ needs.prepare.outputs.source_sha }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
-
-      - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || github.token }}
-
-      - name: Build image
-        id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          context: .
-          file: ./Dockerfile
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          platforms: linux/arm64
-          build-args: APP_VERSION=sha-${{ needs.prepare.outputs.source_sha_short }}
-          cache-from: type=gha,scope=container-image-yml-arm64
-          cache-to: type=gha,mode=max,scope=container-image-yml-arm64
-
-      - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        continue-on-error: true
-        env:
-          TRIVY_PLATFORM: linux/arm64
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-          format: table
-          vuln-type: os,library
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "1"
-
-  merge-manifest:
-    name: Merge and Push Multi-Arch Manifest
-    needs: [prepare, build-amd64, build-arm64]
-    if: needs.prepare.outputs.skip_build != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      packages: write
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
-
-      - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || github.token }}
-
-      - name: Create SHA manifest
-        shell: bash
-        env:
-          REGISTRY: ${{ env.REGISTRY }}
-          IMAGE: ${{ env.IMAGE_NAME }}
-          SHA_SHORT: ${{ needs.prepare.outputs.source_sha_short }}
-          AMD64_DIGEST: ${{ needs.build-amd64.outputs.digest }}
-          ARM64_DIGEST: ${{ needs.build-arm64.outputs.digest }}
-        run: |
-          FULL_IMAGE="${REGISTRY}/${IMAGE}"
-          docker buildx imagetools create \
-            --tag "${FULL_IMAGE}:sha-${SHA_SHORT}" \
-            "${FULL_IMAGE}@${AMD64_DIGEST}" \
-            "${FULL_IMAGE}@${ARM64_DIGEST}"
-
-      - name: Update main tag
-        if: needs.prepare.outputs.update_main == 'true'
-        shell: bash
-        env:
-          REGISTRY: ${{ env.REGISTRY }}
-          IMAGE: ${{ env.IMAGE_NAME }}
-          AMD64_DIGEST: ${{ needs.build-amd64.outputs.digest }}
-          ARM64_DIGEST: ${{ needs.build-arm64.outputs.digest }}
-        run: |
-          FULL_IMAGE="${REGISTRY}/${IMAGE}"
-          docker buildx imagetools create \
-            --tag "${FULL_IMAGE}:main" \
-            "${FULL_IMAGE}@${AMD64_DIGEST}" \
-            "${FULL_IMAGE}@${ARM64_DIGEST}"
-
-      - name: Inspect SHA manifest
-        shell: bash
-        env:
-          REGISTRY: ${{ env.REGISTRY }}
-          IMAGE: ${{ env.IMAGE_NAME }}
-          SHA_SHORT: ${{ needs.prepare.outputs.source_sha_short }}
-        run: docker buildx imagetools inspect "${REGISTRY}/${IMAGE}:sha-${SHA_SHORT}"
