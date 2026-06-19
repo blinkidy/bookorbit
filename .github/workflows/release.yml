@@ -1,15 +1,19 @@
 name: Release
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && format('Release - {0}', github.ref_name) || format('Release checks - PR #{0}', github.event.pull_request.number) }}
+  ${{ github.event_name == 'workflow_dispatch' && format('Release - {0}', github.ref_name) || github.event_name == 'workflow_run' && format('Release - {0}', github.event.workflow_run.head_branch) || format('Release checks - PR #{0}', github.event.pull_request.number) }}
 
 on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Container Image"]
+    types: [completed]
+    branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && 'release' || format('pr-{0}', github.event.pull_request.number) }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && 'release' || github.event_name == 'workflow_run' && format('run-{0}', github.event.workflow_run.id) || format('pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: read-all
 
@@ -143,36 +147,11 @@ jobs:
             validate_issue_exists "${issue_repo}" "${issue_number}" "PR description"
           done <<< "${issue_refs}"
 
-  release-dry-run:
-    name: Release Dry Run
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node.js and pnpm
-        uses: ./.github/actions/setup-node-pnpm
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-
-      - name: Semantic release dry run
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec semantic-release --dry-run --no-ci
-
   release:
     name: Publish Release
-    if: github.event_name == 'workflow_dispatch'
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -182,30 +161,46 @@ jobs:
       pull-requests: write
       packages: read
     outputs:
-      published: ${{ steps.semantic.outputs.new_release_published }}
-      version: ${{ steps.semantic.outputs.new_release_version }}
-      tag: ${{ steps.semantic.outputs.new_release_git_tag }}
+      published: ${{ steps.tag.outputs.new_release_published }}
+      version: ${{ steps.tag.outputs.new_release_version }}
+      tag: ${{ steps.tag.outputs.new_release_git_tag }}
+      sha_short: ${{ steps.resolve.outputs.sha_short }}
     steps:
-      - name: Guard against non-main branch
+      - name: Resolve release commit
+        id: resolve
         shell: bash
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          GH_SHA: ${{ github.sha }}
           GH_REF: ${{ github.ref }}
         run: |
-          if [[ "$GH_REF" != "refs/heads/main" ]]; then
-            echo "::error::Release workflow must be dispatched from main. Current ref: $GH_REF"
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            SHA="$WORKFLOW_RUN_HEAD_SHA"
+            BRANCH="$WORKFLOW_RUN_HEAD_BRANCH"
+          else
+            SHA="$GH_SHA"
+            BRANCH="${GH_REF#refs/heads/}"
+          fi
+          if [[ "$BRANCH" != "main" ]]; then
+            echo "::error::Release workflow must run from main. Resolved branch: $BRANCH"
             exit 1
           fi
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=${SHA:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
+          ref: ${{ steps.resolve.outputs.sha }}
           fetch-depth: 0
 
       - name: Verify CI success for current SHA
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_SHA: ${{ steps.resolve.outputs.sha }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -233,50 +228,39 @@ jobs:
       - name: Verify SHA image exists in GHCR
         shell: bash
         env:
-          COMMIT_SHA: ${{ github.sha }}
+          SHA_SHORT: ${{ steps.resolve.outputs.sha_short }}
           IMAGE_NAME: ${{ github.repository }}
         run: |
           set -euo pipefail
-          SHORT_SHA="${COMMIT_SHA:0:12}"
-          SOURCE_TAG="ghcr.io/${IMAGE_NAME}:sha-${SHORT_SHA}"
+          SOURCE_TAG="ghcr.io/${IMAGE_NAME}:sha-${SHA_SHORT}"
           if ! docker buildx imagetools inspect "${SOURCE_TAG}" > /dev/null 2>&1; then
-            echo "::error::Multi-arch image sha-${SHORT_SHA} not found in GHCR. Wait for the Container Image workflow to complete for this commit before releasing."
+            echo "::error::Multi-arch image sha-${SHA_SHORT} not found in GHCR. Wait for the Container Image workflow to complete for this commit before releasing."
             exit 1
           fi
-          echo "Image sha-${SHORT_SHA} verified in GHCR."
+          echo "Image sha-${SHA_SHORT} verified in GHCR."
 
-      - name: Set up Node.js and pnpm
-        uses: ./.github/actions/setup-node-pnpm
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-
-      - name: Run semantic-release
-        id: semantic
+      - name: Create release tag
+        id: tag
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_NUMBER: ${{ github.run_number }}
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
         run: |
           set -euo pipefail
-          BEFORE_TAG=$(git tag --sort=-v:refname | head -1 || true)
-          pnpm exec semantic-release
-          git fetch --tags --quiet
-          AFTER_TAG=$(git tag --sort=-v:refname | head -1 || true)
-          if [[ -n "$AFTER_TAG" && "$AFTER_TAG" != "$BEFORE_TAG" ]]; then
-            VERSION="${AFTER_TAG#v}"
-            echo "new_release_published=true" >> "$GITHUB_OUTPUT"
-            echo "new_release_version=${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "new_release_git_tag=${AFTER_TAG}" >> "$GITHUB_OUTPUT"
-          else
-            echo "new_release_published=false" >> "$GITHUB_OUTPUT"
-          fi
+          VERSION="1.0.${RUN_NUMBER}-personal"
+          TAG="v${VERSION}"
+          gh release create "$TAG" --target "$TARGET_SHA" --title "$TAG" --generate-notes
+          echo "new_release_published=true" >> "$GITHUB_OUTPUT"
+          echo "new_release_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "new_release_git_tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Release summary
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: steps.tag.outputs.new_release_published == 'true'
         shell: bash
         env:
-          VERSION: ${{ steps.semantic.outputs.new_release_version }}
-          TAG: ${{ steps.semantic.outputs.new_release_git_tag }}
+          VERSION: ${{ steps.tag.outputs.new_release_version }}
+          TAG: ${{ steps.tag.outputs.new_release_git_tag }}
         run: |
           echo "## Release Published" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -296,14 +280,6 @@ jobs:
       REGISTRY: ghcr.io
       IMAGE_NAME: ${{ github.repository }}
     steps:
-      - name: Checkout release tag
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with:
-          ref: ${{ needs.release.outputs.tag }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
@@ -314,21 +290,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push versioned image
-        id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.release.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          build-args: APP_VERSION=v${{ needs.release.outputs.version }}
-          cache-from: |
-            type=gha,scope=container-image-yml-amd64
-            type=gha,scope=container-image-yml-arm64
+      - name: Retag image as version + latest
+        shell: bash
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE: ${{ env.IMAGE_NAME }}
+          SHA_SHORT: ${{ needs.release.outputs.sha_short }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          FULL_IMAGE="${REGISTRY}/${IMAGE}"
+          docker buildx imagetools create \
+            --tag "${FULL_IMAGE}:${VERSION}" \
+            --tag "${FULL_IMAGE}:latest" \
+            "${FULL_IMAGE}:sha-${SHA_SHORT}"
 
       - name: Enrich release notes
         shell: bash
@@ -337,9 +312,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release.outputs.tag }}
           VERSION: ${{ needs.release.outputs.version }}
-          SHA: ${{ github.sha }}
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           BODY_FILE="$(mktemp)"
@@ -375,10 +348,10 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.release.outputs.version }}
-          SHA: ${{ github.sha }}
+          SHA_SHORT: ${{ needs.release.outputs.sha_short }}
         run: |
           echo "## Docker Image Published" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Version:** \`${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Tags:** \`${VERSION}\`, \`latest\` (linux/amd64, linux/arm64)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **APP_VERSION baked:** \`v${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Source image:** \`sha-${SHA_SHORT}\` (linux/amd64, linux/arm64)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Tags:** \`${VERSION}\`, \`latest\`" >> "$GITHUB_STEP_SUMMARY"

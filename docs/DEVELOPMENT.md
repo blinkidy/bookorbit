@@ -63,8 +63,7 @@ bookorbit/
 │       └── src/             # Exported via @bookorbit/types
 ├── scripts/                 # Bootstrap, DB reset, E2E orchestration
 ├── docker/                  # Postgres init scripts (extensions)
-├── .github/                 # CI workflows, PR/issue templates
-└── .husky/                  # Git hooks (pre-commit, pre-push)
+└── .github/                 # CI workflows, PR/issue templates
 ```
 
 > **Shared types** live in `packages/types/` and are imported as `@bookorbit/types`. Never duplicate types between client and server.
@@ -320,10 +319,7 @@ For test architecture, suite details, coverage thresholds, the E2E harness, and 
 
 ### Git Hooks
 
-Two hooks run automatically via [Husky](https://typicode.github.io/husky/):
-
-- **Pre-commit:** Runs `lint-staged` on staged files. This auto-fixes lint issues and formats code with Prettier. You do not need to format manually before committing.
-- **Pre-push:** Runs `pnpm verify:fast`. Your push is blocked if lint, typecheck, or tests fail.
+There are no local git hooks — commits and pushes are not blocked by anything on your machine. Run `pnpm verify:fast` (lint + typecheck) yourself before pushing; CI runs the full `pnpm verify` on every PR regardless.
 
 ---
 
@@ -370,14 +366,13 @@ The same pipeline plus:
 
 ### Releases
 
-Releases are created manually via `workflow_dispatch` on the `release.yml` workflow. The release workflow:
+The `release.yml` workflow runs automatically once `container-image.yml` finishes building and pushing an image for a `main` commit (it can also be run manually via `workflow_dispatch`). The release workflow:
 
-1. Verifies CI has passed for the current `main` commit.
-2. Runs semantic-release to determine the next version from commit history.
-3. Creates a Git tag and GitHub Release with auto-generated release notes.
-4. Builds, scans, and publishes a Docker image with version and `latest` tags.
+1. Verifies CI has passed for the commit and that its image already exists in GHCR.
+2. Creates a Git tag and GitHub Release (auto-generated notes) using an incrementing build number.
+3. Retags the already-built image with the version and `latest` tags — no rebuild.
 
-On pull requests, CI enforces branch naming (`BO-<issue-number>-<short-description>`), validates PR titles with commitlint (for squash-merge release safety), validates PR commit headers against [COMMIT_GUIDELINES.md](COMMIT_GUIDELINES.md), and requires at least one GitHub closing-keyword issue reference in the PR description (for example: `Closes #123`, `Fixes: #123`, or `RESOLVED owner/repo#123`). It also verifies that the branch issue exists in this repository and that PR description issue references resolve to valid GitHub issues. Only releasable types (`feat`, `fix`, `perf`, `security`, `db`, `style`) trigger version bumps.
+On pull requests, CI enforces branch naming (`BO-<issue-number>-<short-description>`), validates PR titles with commitlint, validates PR commit headers against [COMMIT_GUIDELINES.md](COMMIT_GUIDELINES.md), and requires at least one GitHub closing-keyword issue reference in the PR description (for example: `Closes #123`, `Fixes: #123`, or `RESOLVED owner/repo#123`). It also verifies that the branch issue exists in this repository and that PR description issue references resolve to valid GitHub issues.
 
 Example PR description snippet:
 
@@ -428,9 +423,9 @@ pnpm install
 
 The shared types package rebuilds automatically during install.
 
-**Pre-push hook is failing**
+**`pnpm verify` failing in CI**
 
-Run the same command the hook uses to see the full error output:
+Run the same command locally to see the full error output:
 
 ```bash
 pnpm run verify:fast
