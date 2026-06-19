@@ -232,6 +232,7 @@ describe('HardcoverSyncService', () => {
     });
 
     it('keeps progress pending when edition pages are unavailable', async () => {
+      const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
       mockRepo.findSyncableBook.mockResolvedValue(readingBook);
       mockRepo.findBookState.mockResolvedValue(null);
@@ -245,6 +246,8 @@ describe('HardcoverSyncService', () => {
       await makeService().syncBook(1, 1);
 
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: null }));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('matched edition has no page count to convert local progress against'));
+      warnSpy.mockRestore();
     });
 
     it('sends progress_seconds (not progress_pages) when the matched edition is an audiobook', async () => {
@@ -281,6 +284,7 @@ describe('HardcoverSyncService', () => {
     });
 
     it('keeps progress pending for an audio edition when there is no local listening position yet', async () => {
+      const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
       const audioBook = { ...readingBook, audioPositionSeconds: null };
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
       mockRepo.findSyncableBook.mockResolvedValue(audioBook);
@@ -301,6 +305,10 @@ describe('HardcoverSyncService', () => {
       await makeService().syncBook(1, 1);
 
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: null }));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('matched edition is audio but no local audiobook_progress row exists for this book'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('stores error on API failure without throwing', async () => {

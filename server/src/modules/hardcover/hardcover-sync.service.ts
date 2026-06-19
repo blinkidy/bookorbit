@@ -477,6 +477,10 @@ export class HardcoverSyncService {
           this.logger.log(
             `[hardcover.sync_progress] [end] userId=${userId} bookId=${book.bookId} hardcoverBookId=${match.hardcoverBookId} hardcoverReadId=${hardcoverReadId} durationMs=${Date.now() - startedAt} progress=${book.progress} progressPages=${progressPages ?? null} progressSeconds=${progressSeconds ?? null} - progress sent to Hardcover`,
           );
+        } else if (book.progress != null) {
+          this.logger.warn(
+            `[hardcover.sync_progress] [skip] userId=${userId} bookId=${book.bookId} hardcoverBookId=${match.hardcoverBookId} hardcoverEditionId=${match.hardcoverEditionId ?? null} editionIsAudio=${match.editionIsAudio} editionPages=${match.editionPages ?? null} localProgress=${book.progress} audioPositionSeconds=${book.audioPositionSeconds ?? null} - no progress sent: ${match.editionIsAudio ? 'matched edition is audio but no local audiobook_progress row exists for this book' : 'matched edition has no page count to convert local progress against'}`,
+          );
         }
       }
 
