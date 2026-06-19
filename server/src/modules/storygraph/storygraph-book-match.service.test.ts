@@ -23,23 +23,39 @@ const baseBook = {
   isbn10: null,
   title: 'Test Book',
   authorName: 'Test Author',
+  format: 'epub',
   status: 'reading',
   progress: null,
 };
 
-function searchHtml(bookId: string, format = 'Hardcover'): string {
-  return `
+function searchHtml(...bookIds: string[]): string {
+  return bookIds
+    .map(
+      (id) => `
     <div class="pane">
       <div class="book-title-author-and-series">
-        <a href="/books/${bookId}">Test Book</a>
+        <a href="/books/${id}">Test Book</a>
       </div>
-      <div class="edition-info"><p>Format: ${format}</p></div>
     </div>
-  `;
+  `,
+    )
+    .join('');
 }
 
-function bookPageHtml(opts: { editions: number; userAdded?: boolean }): string {
-  return `<html><body><p>${opts.editions} edition${opts.editions === 1 ? '' : 's'}</p>${opts.userAdded ? '<span>user-added</span>' : ''}</body></html>`;
+function bookPageHtml(opts: { editions?: number; userAdded?: boolean; audio?: boolean } = {}): string {
+  const editions = opts.editions ?? 1;
+  return `<html><body><p>${editions} edition${editions === 1 ? '' : 's'}</p><p>Format: ${opts.audio ? 'Audio' : 'Hardcover'}</p>${
+    opts.userAdded ? '<span>user-added</span>' : ''
+  }</body></html>`;
+}
+
+/** Configures mockClient.get to answer /browse with searchHtml and /books/:id from candidatePages, defaulting to a plain text, non-user-added, 1-edition page. */
+function mockSearchAndCandidates(searchResultsHtml: string, candidatePages: Record<string, string> = {}) {
+  mockClient.get.mockImplementation((_userId: number, _cookies: unknown, path: string) => {
+    if (path.startsWith('/browse')) return Promise.resolve({ status: 200, redirectedToSignIn: false, html: searchResultsHtml });
+    const id = path.replace('/books/', '');
+    return Promise.resolve({ status: 200, redirectedToSignIn: false, html: candidatePages[id] ?? bookPageHtml() });
+  });
 }
 
 describe('StorygraphBookMatchService', () => {
@@ -58,14 +74,14 @@ describe('StorygraphBookMatchService', () => {
 
   it('re-searches when cached state has a match error', async () => {
     mockRepo.findBookState.mockResolvedValue({ storygraphBookId: null, matchError: 'no_match' });
-    mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: searchHtml('abc-123') });
+    mockSearchAndCandidates(searchHtml('abc-123'));
     const result = await makeService().matchBook(1, cookies, baseBook);
     expect(result).toEqual({ storygraphBookId: 'abc-123', matchMethod: 'isbn' });
   });
 
   it('searches by isbn13 first', async () => {
     mockRepo.findBookState.mockResolvedValue(undefined);
-    mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: searchHtml('isbn-match') });
+    mockSearchAndCandidates(searchHtml('isbn-match'));
     const result = await makeService().matchBook(1, cookies, baseBook);
     expect(result).toEqual({ storygraphBookId: 'isbn-match', matchMethod: 'isbn' });
     expect(mockClient.get).toHaveBeenCalledWith(1, cookies, expect.stringContaining(encodeURIComponent(baseBook.isbn13!)));
@@ -75,7 +91,8 @@ describe('StorygraphBookMatchService', () => {
     mockRepo.findBookState.mockResolvedValue(undefined);
     mockClient.get
       .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: '<html></html>' })
-      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: searchHtml('isbn10-match') });
+      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: searchHtml('isbn10-match') })
+      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: bookPageHtml() });
     const book = { ...baseBook, isbn10: '1234567890' };
     const result = await makeService().matchBook(1, cookies, book);
     expect(result).toEqual({ storygraphBookId: 'isbn10-match', matchMethod: 'isbn' });
@@ -83,19 +100,11 @@ describe('StorygraphBookMatchService', () => {
 
   it('falls back to title+author search when no isbn is available', async () => {
     mockRepo.findBookState.mockResolvedValue(undefined);
-    mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: searchHtml('title-match') });
+    mockSearchAndCandidates(searchHtml('title-match'));
     const book = { ...baseBook, isbn13: null, isbn10: null };
     const result = await makeService().matchBook(1, cookies, book);
     expect(result).toEqual({ storygraphBookId: 'title-match', matchMethod: 'title' });
     expect(mockClient.get).toHaveBeenCalledWith(1, cookies, expect.stringContaining(encodeURIComponent('Test Book Test Author')));
-  });
-
-  it('skips audio editions and picks the first non-audio result', async () => {
-    mockRepo.findBookState.mockResolvedValue(undefined);
-    const html = searchHtml('audio-book', 'Audio') + searchHtml('text-book', 'Hardcover');
-    mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html });
-    const result = await makeService().matchBook(1, cookies, baseBook);
-    expect(result).toEqual({ storygraphBookId: 'text-book', matchMethod: 'isbn' });
   });
 
   it('returns null and records no_match when the session is invalid', async () => {
@@ -119,7 +128,7 @@ describe('StorygraphBookMatchService', () => {
 
   it('stores the match result to cache on success', async () => {
     mockRepo.findBookState.mockResolvedValue(undefined);
-    mockClient.get.mockResolvedValue({ status: 200, redirectedToSignIn: false, html: searchHtml('cached-result') });
+    mockSearchAndCandidates(searchHtml('cached-result'));
     await makeService().matchBook(1, cookies, baseBook);
     expect(mockRepo.upsertBookState).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 1, bookId: 42, storygraphBookId: 'cached-result', matchMethod: 'isbn', matchError: null }),
@@ -128,11 +137,10 @@ describe('StorygraphBookMatchService', () => {
 
   it('prefers a canonical multi-edition entry over a user-added single-edition duplicate', async () => {
     mockRepo.findBookState.mockResolvedValue(undefined);
-    const searchResultsHtml = searchHtml('user-added-id') + searchHtml('canonical-id');
-    mockClient.get
-      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: searchResultsHtml })
-      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: bookPageHtml({ editions: 1, userAdded: true }) })
-      .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: bookPageHtml({ editions: 17 }) });
+    mockSearchAndCandidates(searchHtml('user-added-id', 'canonical-id'), {
+      'user-added-id': bookPageHtml({ editions: 1, userAdded: true }),
+      'canonical-id': bookPageHtml({ editions: 17 }),
+    });
 
     const result = await makeService().matchBook(1, cookies, baseBook);
 
@@ -142,9 +150,35 @@ describe('StorygraphBookMatchService', () => {
     expect(mockClient.get).toHaveBeenNthCalledWith(3, 1, cookies, '/books/canonical-id');
   });
 
+  it('prefers the text edition for a text book even when the audio edition has more editions', async () => {
+    mockRepo.findBookState.mockResolvedValue(undefined);
+    mockSearchAndCandidates(searchHtml('audio-id', 'text-id'), {
+      'audio-id': bookPageHtml({ editions: 20, audio: true }),
+      'text-id': bookPageHtml({ editions: 3, audio: false }),
+    });
+
+    const book = { ...baseBook, format: 'epub' };
+    const result = await makeService().matchBook(1, cookies, book);
+
+    expect(result).toEqual({ storygraphBookId: 'text-id', matchMethod: 'isbn' });
+  });
+
+  it('prefers the audio edition when the local file is an audiobook', async () => {
+    mockRepo.findBookState.mockResolvedValue(undefined);
+    mockSearchAndCandidates(searchHtml('text-id', 'audio-id'), {
+      'text-id': bookPageHtml({ editions: 10, audio: false }),
+      'audio-id': bookPageHtml({ editions: 2, audio: true }),
+    });
+
+    const book = { ...baseBook, format: 'm4b' };
+    const result = await makeService().matchBook(1, cookies, book);
+
+    expect(result).toEqual({ storygraphBookId: 'audio-id', matchMethod: 'isbn' });
+  });
+
   it('falls back to the first candidate when every candidate page fetch fails', async () => {
     mockRepo.findBookState.mockResolvedValue(undefined);
-    const searchResultsHtml = searchHtml('first-id') + searchHtml('second-id');
+    const searchResultsHtml = searchHtml('first-id', 'second-id');
     mockClient.get
       .mockResolvedValueOnce({ status: 200, redirectedToSignIn: false, html: searchResultsHtml })
       .mockRejectedValueOnce(new Error('network error'))
@@ -157,11 +191,7 @@ describe('StorygraphBookMatchService', () => {
 
   it('caps candidate evaluation at the configured maximum', async () => {
     mockRepo.findBookState.mockResolvedValue(undefined);
-    const searchResultsHtml = searchHtml('id-1') + searchHtml('id-2') + searchHtml('id-3') + searchHtml('id-4');
-    mockClient.get.mockImplementation((_userId: number, _cookies: unknown, path: string) => {
-      if (path.startsWith('/browse')) return Promise.resolve({ status: 200, redirectedToSignIn: false, html: searchResultsHtml });
-      return Promise.resolve({ status: 200, redirectedToSignIn: false, html: bookPageHtml({ editions: 1 }) });
-    });
+    mockSearchAndCandidates(searchHtml('id-1', 'id-2', 'id-3', 'id-4'));
 
     await makeService().matchBook(1, cookies, baseBook);
 

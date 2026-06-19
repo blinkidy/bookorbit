@@ -15,6 +15,7 @@ export interface BookSyncData {
   isbn10: string | null;
   title: string | null;
   authorName: string | null;
+  format: string | null;
   status: string;
   progress: number | null;
 }
@@ -164,6 +165,7 @@ export class StorygraphRepository {
         isbn10: schema.bookMetadata.isbn10,
         title: schema.bookMetadata.title,
         authorName: firstAuthorSq.authorName,
+        format: schema.bookFiles.format,
         status: schema.userBookStatus.status,
         progress: maxProgressSq.maxProgress,
       })
@@ -175,6 +177,7 @@ export class StorygraphRepository {
       .leftJoin(schema.bookMetadata, eq(schema.bookMetadata.bookId, schema.books.id))
       .leftJoin(maxProgressSq, eq(maxProgressSq.bookId, schema.books.id))
       .leftJoin(firstAuthorSq, eq(firstAuthorSq.bookId, schema.books.id))
+      .leftJoin(schema.bookFiles, eq(schema.bookFiles.id, schema.books.primaryFileId))
       .where(bookFilter);
 
     return rows as BookSyncData[];

@@ -39,6 +39,7 @@ const readingBook = {
   isbn10: null,
   title: 'Book One',
   authorName: 'Author One',
+  format: 'epub',
   status: 'reading',
   progress: 42,
 };

@@ -168,7 +168,7 @@ describe('StorygraphRepository', () => {
     expect(updateChain.set).toHaveBeenCalledWith(expect.objectContaining({ sessionCookie: 'new-session-value' }));
   });
 
-  it('findSyncableBooks selects the local title and author', async () => {
+  it('findSyncableBooks selects the local title, author, and file format', async () => {
     const { repo, db } = makeRepository();
     const selectArgs: Array<Record<string, unknown>> = [];
     const chain: Record<string, unknown> = {};
@@ -187,6 +187,7 @@ describe('StorygraphRepository', () => {
     expect(mainSelect).toBeDefined();
     expect(mainSelect).toHaveProperty('title');
     expect(mainSelect).toHaveProperty('authorName');
+    expect(mainSelect).toHaveProperty('format');
   });
 
   it('findSyncableBook returns a book from findSyncableBooks', async () => {

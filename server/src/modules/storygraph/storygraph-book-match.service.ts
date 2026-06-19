@@ -14,12 +14,16 @@ export interface StorygraphBookMatch {
 interface CandidateQuality {
   editionCount: number;
   isUserAdded: boolean;
+  isAudio: boolean;
 }
 
-// StoryGraph's search results can surface sparse, user-submitted duplicate entries above the
-// canonical, well-populated book page. We can't tell them apart from the search listing alone,
-// so we fetch a few top candidates and pick the one that looks most canonical.
+// StoryGraph's search results can surface sparse, user-submitted duplicate entries (or a
+// differently-formatted entry, e.g. an audiobook when the local file is text) above the entry
+// that actually matches what's in the user's library. We can't tell candidates apart from the
+// search listing alone, so we fetch a few top candidates' own pages and pick the best one.
 const MAX_MATCH_CANDIDATES = 3;
+
+const AUDIO_FORMATS = new Set(['m4b', 'm4a', 'mp3', 'aax', 'aacx', 'aac', 'flac', 'ogg', 'opus', 'wma', 'mka']);
 
 @Injectable()
 export class StorygraphBookMatchService {
@@ -81,10 +85,10 @@ export class StorygraphBookMatchService {
       const response = await this.client.get(userId, cookies, `/browse?search_term=${encodeURIComponent(searchTerm)}`);
       if (response.redirectedToSignIn || response.status !== 200) return null;
 
-      const candidateIds = this.parseNonAudioResultIds(response.html, MAX_MATCH_CANDIDATES);
+      const candidateIds = this.parseResultIds(response.html, MAX_MATCH_CANDIDATES);
       if (candidateIds.length === 0) return null;
 
-      const bookId = candidateIds.length === 1 ? candidateIds[0]! : await this.pickBestCandidate(userId, cookies, candidateIds);
+      const bookId = await this.pickBestCandidate(userId, cookies, candidateIds, this.localIsAudio(book.format));
 
       return { storygraphBookId: bookId, matchMethod };
     } catch (err) {
@@ -96,23 +100,18 @@ export class StorygraphBookMatchService {
     }
   }
 
-  private parseNonAudioResultIds(html: string, limit: number): string[] {
+  private parseResultIds(html: string, limit: number): string[] {
     const $ = cheerio.load(html);
     const blocks = $('.book-title-author-and-series');
     const ids: string[] = [];
 
     for (let i = 0; i < blocks.length && ids.length < limit; i++) {
-      const block = $(blocks[i]);
-      const titleLink = block.find("a[href^='/books/']").first();
+      const titleLink = $(blocks[i]).find("a[href^='/books/']").first();
       const href = titleLink.attr('href');
       if (!href) continue;
 
       const idMatch = /\/books\/([^/?]+)/.exec(href);
       if (!idMatch?.[1]) continue;
-
-      const pane = block.parent();
-      const editionInfoText = pane.find('.edition-info').text().toLowerCase();
-      if (editionInfoText.includes('format:') && editionInfoText.includes('audio')) continue;
 
       ids.push(idMatch[1]);
     }
@@ -121,11 +120,11 @@ export class StorygraphBookMatchService {
   }
 
   /**
-   * Fetches each candidate's own book page and picks the one that looks most canonical:
-   * not a "user-added" placeholder, and with the most editions tracked against it.
-   * Falls back to the first candidate if every fetch fails.
+   * Fetches each candidate's own book page and picks the best one: matching the local file's
+   * format (text vs. audio) first, then preferring a canonical entry (not "user-added") with
+   * more tracked editions. Falls back to the first candidate if every fetch fails.
    */
-  private async pickBestCandidate(userId: number, cookies: StorygraphCookies, candidateIds: string[]): Promise<string> {
+  private async pickBestCandidate(userId: number, cookies: StorygraphCookies, candidateIds: string[], wantAudio: boolean): Promise<string> {
     let best: { id: string; score: number } | null = null;
 
     for (const id of candidateIds) {
@@ -133,7 +132,7 @@ export class StorygraphBookMatchService {
         const response = await this.client.get(userId, cookies, `/books/${id}`);
         if (response.redirectedToSignIn || response.status !== 200) continue;
 
-        const score = this.scoreCandidateQuality(this.parseCandidateQuality(response.html));
+        const score = this.scoreCandidateQuality(this.parseCandidateQuality(response.html), wantAudio);
         if (!best || score > best.score) best = { id, score };
       } catch {
         continue;
@@ -146,13 +145,21 @@ export class StorygraphBookMatchService {
   private parseCandidateQuality(html: string): CandidateQuality {
     const text = cheerio.load(html)('body').text();
     const editionMatch = /(\d+)\s+editions?\b/i.exec(text);
+    const formatMatch = /Format:\s*([^\n•·|]+)/i.exec(text);
     return {
       editionCount: editionMatch ? parseInt(editionMatch[1]!, 10) : 1,
       isUserAdded: /user-added/i.test(text),
+      isAudio: formatMatch ? /audio/i.test(formatMatch[1]!) : false,
     };
   }
 
-  private scoreCandidateQuality(quality: CandidateQuality): number {
-    return (quality.isUserAdded ? 0 : 1_000_000) + quality.editionCount;
+  private scoreCandidateQuality(quality: CandidateQuality, wantAudio: boolean): number {
+    const formatAligned = quality.isAudio === wantAudio;
+    return (formatAligned ? 10_000_000 : 0) + (quality.isUserAdded ? 0 : 1_000_000) + quality.editionCount;
+  }
+
+  private localIsAudio(format: string | null): boolean {
+    if (!format) return false;
+    return AUDIO_FORMATS.has(format.toLowerCase());
   }
 }
