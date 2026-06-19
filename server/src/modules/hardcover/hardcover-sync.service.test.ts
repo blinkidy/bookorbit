@@ -10,6 +10,7 @@ const mockRepo = {
   updateLastSyncedAt: vi.fn(),
   findSyncableBooks: vi.fn(),
   findSyncableBook: vi.fn(),
+  clearBookMatch: vi.fn(),
 };
 
 const mockClient = {
@@ -18,6 +19,8 @@ const mockClient = {
 
 const mockMatchService = {
   matchBook: vi.fn(),
+  resolveManualInput: vi.fn(),
+  getEditions: vi.fn(),
 };
 
 const mockSettingsService = {
@@ -61,6 +64,7 @@ describe('HardcoverSyncService', () => {
     mockRepo.findSyncableBook.mockResolvedValue(null);
     mockRepo.upsertBookState.mockResolvedValue({});
     mockRepo.updateLastSyncedAt.mockResolvedValue(undefined);
+    mockRepo.clearBookMatch.mockResolvedValue(undefined);
     mockSettingsService.getSettings.mockResolvedValue(defaultSettings);
   });
 
@@ -263,6 +267,183 @@ describe('HardcoverSyncService', () => {
           lastSyncedStatus: 'invalid_status',
         }),
       );
+    });
+  });
+
+  describe('rematchBook', () => {
+    it('clears the cached match before re-syncing', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+      mockRepo.findBookState.mockResolvedValue(null);
+      mockMatchService.matchBook.mockResolvedValue(null);
+
+      const result = await makeService().rematchBook(1, 1);
+
+      expect(mockRepo.clearBookMatch).toHaveBeenCalledWith(1, 1);
+      expect(result).toBe('skipped');
+    });
+  });
+
+  describe('linkBookManually', () => {
+    it('returns failure when no token', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue(null);
+      const result = await makeService().linkBookManually(1, 1, '700');
+      expect(result).toEqual({ success: false });
+      expect(mockRepo.findSyncableBook).not.toHaveBeenCalled();
+    });
+
+    it('returns failure when the book is not found', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findSyncableBook.mockResolvedValue(null);
+      const result = await makeService().linkBookManually(1, 1, '700');
+      expect(result).toEqual({ success: false });
+    });
+
+    it('returns failure when resolution fails', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+      mockMatchService.resolveManualInput.mockResolvedValue(null);
+      const result = await makeService().linkBookManually(1, 1, 'bad-input');
+      expect(result).toEqual({ success: false });
+      expect(mockRepo.upsertBookState).not.toHaveBeenCalled();
+    });
+
+    it('stores the manual match and re-syncs on success', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+      mockRepo.findBookState.mockResolvedValue(null);
+      mockMatchService.resolveManualInput.mockResolvedValue({ hardcoverBookId: 700, hardcoverEditionId: 901, title: 'Fyrebirds' });
+      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 700, hardcoverEditionId: 901, matchMethod: 'cached' });
+      mockClient.query
+        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ user_book_reads: [] })
+        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
+
+      const result = await makeService().linkBookManually(1, 1, 'https://hardcover.app/books/700');
+
+      expect(result).toEqual({ success: true, hardcoverBookId: 700, title: 'Fyrebirds' });
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 1, bookId: 1, hardcoverBookId: 700, hardcoverEditionId: 901, matchMethod: 'manual' }),
+      );
+    });
+  });
+
+  describe('listEditions', () => {
+    it('returns an empty array when there is no token', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue(null);
+      const result = await makeService().listEditions(1, 1);
+      expect(result).toEqual([]);
+    });
+
+    it('returns an empty array when the book has no hardcoverBookId', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findBookState.mockResolvedValue(null);
+      const result = await makeService().listEditions(1, 1);
+      expect(result).toEqual([]);
+      expect(mockMatchService.getEditions).not.toHaveBeenCalled();
+    });
+
+    it('delegates to the match service when a hardcoverBookId is cached', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findBookState.mockResolvedValue({ hardcoverBookId: 700 });
+      mockMatchService.getEditions.mockResolvedValue([{ id: 901, format: 'Physical', pages: 512, audioSeconds: null, isAudio: false, year: 2019 }]);
+
+      const result = await makeService().listEditions(1, 1);
+
+      expect(mockMatchService.getEditions).toHaveBeenCalledWith(1, 'tok', 700);
+      expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('setEdition', () => {
+    it('returns failure when no token', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue(null);
+      const result = await makeService().setEdition(1, 1, 901);
+      expect(result).toEqual({ success: false });
+    });
+
+    it('returns failure when the book has no hardcoverBookId yet', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findBookState.mockResolvedValue(null);
+      const result = await makeService().setEdition(1, 1, 901);
+      expect(result).toEqual({ success: false });
+      expect(mockRepo.upsertBookState).not.toHaveBeenCalled();
+    });
+
+    it('stores the new edition and re-syncs on success', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findBookState.mockResolvedValue({ hardcoverBookId: 700 });
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 700, hardcoverEditionId: 902, matchMethod: 'cached' });
+      mockClient.query
+        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ user_book_reads: [] })
+        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
+
+      const result = await makeService().setEdition(1, 1, 902);
+
+      expect(result).toEqual({ success: true });
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 1, bookId: 1, hardcoverBookId: 700, hardcoverEditionId: 902, matchMethod: 'manual' }),
+      );
+    });
+  });
+
+  describe('listLinkedBooks', () => {
+    it('returns linked book state for currently-reading books', async () => {
+      mockRepo.findSyncableBooks.mockResolvedValue([{ ...readingBook, bookId: 10, title: 'Book Ten', authorName: 'Author One' }]);
+      mockRepo.findBookStatesByBookIds.mockResolvedValue([
+        { bookId: 10, hardcoverBookId: 700, hardcoverEditionId: 901, matchMethod: 'isbn', matchError: null },
+      ]);
+
+      const result = await makeService().listLinkedBooks(1);
+
+      expect(result).toEqual([
+        {
+          bookId: 10,
+          title: 'Book Ten',
+          authorName: 'Author One',
+          hardcoverBookId: 700,
+          hardcoverEditionId: 901,
+          matchMethod: 'isbn',
+          matchError: null,
+        },
+      ]);
+    });
+
+    it('returns unmatched placeholders for books with no cached state', async () => {
+      mockRepo.findSyncableBooks.mockResolvedValue([{ ...readingBook, bookId: 11, title: 'Book Eleven', authorName: 'Author One' }]);
+      mockRepo.findBookStatesByBookIds.mockResolvedValue([]);
+
+      const result = await makeService().listLinkedBooks(1);
+
+      expect(result).toEqual([
+        {
+          bookId: 11,
+          title: 'Book Eleven',
+          authorName: 'Author One',
+          hardcoverBookId: null,
+          hardcoverEditionId: null,
+          matchMethod: null,
+          matchError: null,
+        },
+      ]);
+    });
+
+    it('only includes books currently being read, not finished/want-to-read ones', async () => {
+      mockRepo.findSyncableBooks.mockResolvedValue([
+        { ...readingBook, bookId: 10, title: 'Reading Now', status: 'reading' },
+        { ...readingBook, bookId: 11, title: 'Rereading Now', status: 'rereading' },
+        { ...readingBook, bookId: 12, title: 'Already Read', status: 'read' },
+        { ...readingBook, bookId: 13, title: 'Want To Read', status: 'want_to_read' },
+      ]);
+      mockRepo.findBookStatesByBookIds.mockResolvedValue([]);
+
+      const result = await makeService().listLinkedBooks(1);
+
+      expect(result.map((book) => book.bookId)).toEqual([10, 11]);
     });
   });
 
