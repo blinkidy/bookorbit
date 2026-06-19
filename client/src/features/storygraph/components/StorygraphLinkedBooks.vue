@@ -118,8 +118,8 @@ async function handleSetEdition(book: StorygraphLinkedBook, edition: StorygraphE
     <div>
       <p class="font-medium text-sm">Linked books</p>
       <p class="text-xs text-muted-foreground mt-0.5">
-        StoryGraph has no public API, so matching is sometimes wrong. Fix a book here by pasting its correct StoryGraph URL, or pick a different
-        edition (paperback, ebook, audiobook) once it's linked.
+        Shows books you're currently reading. StoryGraph has no public API, so matching is sometimes wrong. Fix a book here by pasting its correct
+        StoryGraph URL, or pick a different edition (paperback, ebook, audiobook) once it's linked.
       </p>
     </div>
 
@@ -128,7 +128,7 @@ async function handleSetEdition(book: StorygraphLinkedBook, edition: StorygraphE
       Loading books...
     </div>
 
-    <div v-else-if="books.length === 0" class="text-xs text-muted-foreground py-2">No eligible books yet.</div>
+    <div v-else-if="books.length === 0" class="text-xs text-muted-foreground py-2">No books currently being read.</div>
 
     <div v-else class="divide-y divide-border/60">
       <div v-for="book in books" :key="book.bookId" class="py-2.5">

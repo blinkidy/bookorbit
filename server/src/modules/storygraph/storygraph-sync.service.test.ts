@@ -487,5 +487,19 @@ describe('StorygraphSyncService', () => {
         { bookId: 11, title: 'Book Eleven', authorName: 'Author One', storygraphBookId: null, matchMethod: null, matchError: null },
       ]);
     });
+
+    it('only includes books currently being read, not finished/want-to-read ones', async () => {
+      mockRepo.findSyncableBooks.mockResolvedValue([
+        { ...readingBook, bookId: 10, title: 'Reading Now', status: 'reading' },
+        { ...readingBook, bookId: 11, title: 'Rereading Now', status: 'rereading' },
+        { ...readingBook, bookId: 12, title: 'Already Read', status: 'read' },
+        { ...readingBook, bookId: 13, title: 'Want To Read', status: 'want_to_read' },
+      ]);
+      mockRepo.findBookStatesByBookIds.mockResolvedValue([]);
+
+      const result = await makeService().listLinkedBooks(1);
+
+      expect(result.map((book) => book.bookId)).toEqual([10, 11]);
+    });
   });
 });

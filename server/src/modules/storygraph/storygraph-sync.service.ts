@@ -24,6 +24,10 @@ import { STORYGRAPH_STATUS } from './storygraph.constants';
 // StoryGraph log for an in-progress book that connecting could duplicate.
 const FINISHED_STATUSES = new Set<ReadStatus>(['read', 'skimmed', 'abandoned']);
 
+// "Linked books" only needs to manage matches for books actively being read right now —
+// finished/want-to-read books aren't useful to manually re-link from that view.
+const CURRENTLY_READING_STATUSES = new Set<ReadStatus>(['reading', 'rereading']);
+
 const STATUS_MAP: Partial<Record<ReadStatus, string>> = {
   want_to_read: STORYGRAPH_STATUS.WANT_TO_READ,
   reading: STORYGRAPH_STATUS.CURRENTLY_READING,
@@ -140,7 +144,8 @@ export class StorygraphSyncService {
   }
 
   async listLinkedBooks(userId: number): Promise<StorygraphLinkedBook[]> {
-    const books = await this.repo.findSyncableBooks(userId);
+    const allBooks = await this.repo.findSyncableBooks(userId);
+    const books = allBooks.filter((book) => CURRENTLY_READING_STATUSES.has(book.status as ReadStatus));
     const states = await this.repo.findBookStatesByBookIds(
       userId,
       books.map((book) => book.bookId),
