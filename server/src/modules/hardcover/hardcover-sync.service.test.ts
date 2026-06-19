@@ -386,6 +386,7 @@ describe('HardcoverSyncService', () => {
     });
 
     it('keeps progress pending for an audio edition when there is no local listening position yet', async () => {
+      const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
       const audioBook = { ...readingBook, audioPositionSeconds: null };
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
       mockRepo.findSyncableBook.mockResolvedValue(audioBook);
@@ -406,6 +407,10 @@ describe('HardcoverSyncService', () => {
       await makeService().syncBook(1, 1);
 
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: null }));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('matched edition is audio but no local audiobook_progress row exists for this book'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('stores error on API failure without throwing', async () => {
