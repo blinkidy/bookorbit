@@ -447,7 +447,16 @@ export class HardcoverSyncService {
       if (startDate || endDate || book.progress != null) {
         const progressPages =
           !match.editionIsAudio && book.progress != null && match.editionPages ? Math.round((book.progress / 100) * match.editionPages) : undefined;
-        const progressSeconds = match.editionIsAudio && book.audioPositionSeconds != null ? Math.round(book.audioPositionSeconds) : undefined;
+        // Prefer a precise position (from BookOrbit's own audiobook player) over deriving one
+        // from a percentage — some sources (e.g. a KOReader-sync bridge translating audio
+        // position into a "page" percentage) only ever give us the percentage.
+        const progressSeconds = !match.editionIsAudio
+          ? undefined
+          : book.audioPositionSeconds != null
+            ? Math.round(book.audioPositionSeconds)
+            : book.progress != null && match.editionAudioSeconds
+              ? Math.round((book.progress / 100) * match.editionAudioSeconds)
+              : undefined;
         progressSynced = book.progress == null || progressPages != null || progressSeconds != null;
 
         const reads = await this.findUserBookReads(userId, token, userBookId);
@@ -478,8 +487,11 @@ export class HardcoverSyncService {
             `[hardcover.sync_progress] [end] userId=${userId} bookId=${book.bookId} hardcoverBookId=${match.hardcoverBookId} hardcoverReadId=${hardcoverReadId} durationMs=${Date.now() - startedAt} progress=${book.progress} progressPages=${progressPages ?? null} progressSeconds=${progressSeconds ?? null} - progress sent to Hardcover`,
           );
         } else if (book.progress != null) {
+          const reason = match.editionIsAudio
+            ? 'matched edition is audio but Hardcover has no audio_seconds duration for it, and there is no local audiobook_progress row either'
+            : 'matched edition has no page count to convert local progress against';
           this.logger.warn(
-            `[hardcover.sync_progress] [skip] userId=${userId} bookId=${book.bookId} hardcoverBookId=${match.hardcoverBookId} hardcoverEditionId=${match.hardcoverEditionId ?? null} editionIsAudio=${match.editionIsAudio} editionPages=${match.editionPages ?? null} localProgress=${book.progress} audioPositionSeconds=${book.audioPositionSeconds ?? null} - no progress sent: ${match.editionIsAudio ? 'matched edition is audio but no local audiobook_progress row exists for this book' : 'matched edition has no page count to convert local progress against'}`,
+            `[hardcover.sync_progress] [skip] userId=${userId} bookId=${book.bookId} hardcoverBookId=${match.hardcoverBookId} hardcoverEditionId=${match.hardcoverEditionId ?? null} editionIsAudio=${match.editionIsAudio} editionPages=${match.editionPages ?? null} editionAudioSeconds=${match.editionAudioSeconds ?? null} localProgress=${book.progress} audioPositionSeconds=${book.audioPositionSeconds ?? null} - no progress sent: ${reason}`,
           );
         }
       }

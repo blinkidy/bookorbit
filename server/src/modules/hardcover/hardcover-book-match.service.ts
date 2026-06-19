@@ -10,6 +10,7 @@ export interface HardcoverBookMatch {
   hardcoverBookId: number;
   hardcoverEditionId: number | null;
   editionPages: number | null;
+  editionAudioSeconds: number | null;
   editionIsAudio: boolean;
   matchMethod: 'isbn' | 'title' | 'cached' | 'metadata_id';
 }
@@ -157,6 +158,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: cached.hardcoverBookId,
         hardcoverEditionId: cachedMatch.hardcoverEditionId,
         editionPages: cachedMatch.editionPages,
+        editionAudioSeconds: cachedMatch.editionAudioSeconds,
         editionIsAudio: cachedMatch.editionIsAudio,
         matchMethod: 'cached',
       };
@@ -216,6 +218,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: hardcoverBook.id,
         hardcoverEditionId: edition?.id ?? null,
         editionPages: this.normalizeEditionPages(edition?.pages),
+        editionAudioSeconds: this.normalizeEditionAudioSeconds(edition?.audio_seconds),
         editionIsAudio: edition ? this.editionIsAudio(edition) : false,
         matchMethod: 'metadata_id',
       };
@@ -238,6 +241,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: hardcoverBook.id,
         hardcoverEditionId: edition?.id ?? null,
         editionPages: this.normalizeEditionPages(edition?.pages),
+        editionAudioSeconds: this.normalizeEditionAudioSeconds(edition?.audio_seconds),
         editionIsAudio: edition ? this.editionIsAudio(edition) : false,
         matchMethod: 'metadata_id',
       };
@@ -261,6 +265,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: hardcoverBook.id,
         hardcoverEditionId: edition?.id ?? null,
         editionPages: this.normalizeEditionPages(edition?.pages),
+        editionAudioSeconds: this.normalizeEditionAudioSeconds(edition?.audio_seconds),
         editionIsAudio: edition ? this.editionIsAudio(edition) : false,
         matchMethod: 'isbn',
       };
@@ -294,6 +299,7 @@ export class HardcoverBookMatchService {
         hardcoverBookId: hardcoverBook.id,
         hardcoverEditionId: edition?.id ?? null,
         editionPages: this.normalizeEditionPages(edition?.pages),
+        editionAudioSeconds: this.normalizeEditionAudioSeconds(edition?.audio_seconds),
         editionIsAudio: edition ? this.editionIsAudio(edition) : false,
         matchMethod: 'title',
       };
@@ -312,14 +318,14 @@ export class HardcoverBookMatchService {
     book: BookSyncData,
     hardcoverBookId: number,
     cachedEditionId: number | null,
-  ): Promise<{ hardcoverEditionId: number | null; editionPages: number | null; editionIsAudio: boolean }> {
+  ): Promise<{ hardcoverEditionId: number | null; editionPages: number | null; editionAudioSeconds: number | null; editionIsAudio: boolean }> {
     try {
       const data = await this.client.query<BooksQueryResult>(userId, token, FIND_BOOK_EDITIONS_BY_HARDCOVER_ID_QUERY, {
         id: hardcoverBookId,
       });
       const hardcoverBook = data.books?.[0];
       if (!hardcoverBook) {
-        return { hardcoverEditionId: cachedEditionId, editionPages: null, editionIsAudio: false };
+        return { hardcoverEditionId: cachedEditionId, editionPages: null, editionAudioSeconds: null, editionIsAudio: false };
       }
 
       const editions = hardcoverBook.editions ?? [];
@@ -331,6 +337,7 @@ export class HardcoverBookMatchService {
           return {
             hardcoverEditionId: cachedEditionId,
             editionPages: this.normalizeEditionPages(cachedEdition.pages),
+            editionAudioSeconds: this.normalizeEditionAudioSeconds(cachedEdition.audio_seconds),
             editionIsAudio: this.editionIsAudio(cachedEdition),
           };
         }
@@ -338,11 +345,12 @@ export class HardcoverBookMatchService {
 
       const edition = this.pickBestEdition(editions, book);
       if (!edition) {
-        return { hardcoverEditionId: cachedEditionId, editionPages: null, editionIsAudio: false };
+        return { hardcoverEditionId: cachedEditionId, editionPages: null, editionAudioSeconds: null, editionIsAudio: false };
       }
       return {
         hardcoverEditionId: edition.id,
         editionPages: this.normalizeEditionPages(edition.pages),
+        editionAudioSeconds: this.normalizeEditionAudioSeconds(edition.audio_seconds),
         editionIsAudio: this.editionIsAudio(edition),
       };
     } catch (err) {
@@ -350,7 +358,7 @@ export class HardcoverBookMatchService {
       this.logger.warn(
         `[hardcover.book_match] [fail] userId=${userId} bookId=${book.bookId} method=cached_pages error="${error}" - cached edition pages lookup failed`,
       );
-      return { hardcoverEditionId: cachedEditionId, editionPages: null, editionIsAudio: false };
+      return { hardcoverEditionId: cachedEditionId, editionPages: null, editionAudioSeconds: null, editionIsAudio: false };
     }
   }
 
@@ -416,6 +424,11 @@ export class HardcoverBookMatchService {
   private normalizeEditionPages(pages: number | null | undefined): number | null {
     if (typeof pages !== 'number' || !Number.isFinite(pages) || pages <= 0) return null;
     return Math.round(pages);
+  }
+
+  private normalizeEditionAudioSeconds(audioSeconds: number | null | undefined): number | null {
+    if (typeof audioSeconds !== 'number' || !Number.isFinite(audioSeconds) || audioSeconds <= 0) return null;
+    return Math.round(audioSeconds);
   }
 
   /**
@@ -486,7 +499,7 @@ export class HardcoverBookMatchService {
       id: edition.id,
       format,
       pages: this.normalizeEditionPages(edition.pages),
-      audioSeconds: typeof edition.audio_seconds === 'number' && edition.audio_seconds > 0 ? edition.audio_seconds : null,
+      audioSeconds: this.normalizeEditionAudioSeconds(edition.audio_seconds),
       isAudio,
       year: year && Number.isFinite(year) ? year : null,
     };
