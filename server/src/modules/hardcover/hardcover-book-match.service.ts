@@ -1,3 +1,4 @@
+import type { HardcoverEdition } from '@bookorbit/types';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
@@ -54,7 +55,9 @@ const EDITION_FIELDS = `
       pages
       isbn_10
       isbn_13
-      audio_seconds`;
+      audio_seconds
+      reading_format_id
+      release_date`;
 
 const FIND_BOOKS_BY_IDS_QUERY = `
 query FindBooksByIds($ids: [Int!]!) {
@@ -69,6 +72,7 @@ const FIND_BOOK_BY_HARDCOVER_ID_QUERY = `
 query FindBookById($id: Int!) {
   books(where: { id: { _eq: $id } }, limit: 1) {
     id
+    title
     editions(limit: ${EDITION_SELECTION_LIMIT}) {${EDITION_FIELDS}
     }
   }
@@ -78,6 +82,7 @@ const FIND_BOOK_BY_HARDCOVER_SLUG_QUERY = `
 query FindBookBySlug($slug: String!) {
   books(where: { slug: { _eq: $slug } }, limit: 1) {
     id
+    title
     editions(limit: ${EDITION_SELECTION_LIMIT}) {${EDITION_FIELDS}
     }
   }
@@ -94,18 +99,25 @@ query FindBookEditionsById($id: Int!) {
 
 const AUDIO_FORMATS = new Set(['m4b', 'm4a', 'mp3', 'aax', 'aacx', 'aac', 'flac', 'ogg', 'opus', 'wma', 'mka']);
 
-interface HardcoverEdition {
+// Hardcover reading_format_id: 1 = physical, 2 = audiobook, 4 = ebook.
+const AUDIOBOOK_READING_FORMAT_ID = 2;
+const READING_FORMAT_LABELS: Record<number, string> = { 1: 'Physical', 2: 'Audiobook', 4: 'E-book' };
+
+interface HardcoverEditionRaw {
   id: number;
   pages?: number | null;
   isbn_10?: string | null;
   isbn_13?: string | null;
   audio_seconds?: number | null;
+  reading_format_id?: number | null;
+  release_date?: string | null;
 }
 
 interface BooksQueryResult {
   books: Array<{
     id: number;
-    editions?: HardcoverEdition[];
+    title?: string | null;
+    editions?: HardcoverEditionRaw[];
   }>;
 }
 
@@ -336,7 +348,7 @@ export class HardcoverBookMatchService {
    * 4. presence of a page count (needed for page-based progress),
    * 5. stable fallback to Hardcover's own ordering.
    */
-  private pickBestEdition(editions: HardcoverEdition[], book: BookSyncData): HardcoverEdition | undefined {
+  private pickBestEdition(editions: HardcoverEditionRaw[], book: BookSyncData): HardcoverEditionRaw | undefined {
     if (editions.length === 0) return undefined;
 
     if (book.isbn13) {
@@ -355,7 +367,7 @@ export class HardcoverBookMatchService {
     return best;
   }
 
-  private isBetterEdition(candidate: HardcoverEdition, current: HardcoverEdition, book: BookSyncData): boolean {
+  private isBetterEdition(candidate: HardcoverEditionRaw, current: HardcoverEditionRaw, book: BookSyncData): boolean {
     const wantAudio = this.localIsAudio(book.format);
     const candidateAligned = this.editionIsAudio(candidate) === wantAudio;
     const currentAligned = this.editionIsAudio(current) === wantAudio;
@@ -378,8 +390,8 @@ export class HardcoverBookMatchService {
     return false;
   }
 
-  private editionIsAudio(edition: HardcoverEdition): boolean {
-    return typeof edition.audio_seconds === 'number' && edition.audio_seconds > 0;
+  private editionIsAudio(edition: HardcoverEditionRaw): boolean {
+    return edition.reading_format_id === AUDIOBOOK_READING_FORMAT_ID || (typeof edition.audio_seconds === 'number' && edition.audio_seconds > 0);
   }
 
   private localIsAudio(format: string | null): boolean {
@@ -390,5 +402,79 @@ export class HardcoverBookMatchService {
   private normalizeEditionPages(pages: number | null | undefined): number | null {
     if (typeof pages !== 'number' || !Number.isFinite(pages) || pages <= 0) return null;
     return Math.round(pages);
+  }
+
+  /**
+   * Resolves a manually-provided Hardcover URL, numeric book id, or slug directly — the user is
+   * telling us exactly which book is correct, so we just look it up and pick its best edition.
+   */
+  async resolveManualInput(
+    userId: number,
+    token: string,
+    input: string,
+    book: BookSyncData,
+  ): Promise<{ hardcoverBookId: number; hardcoverEditionId: number | null; title: string } | null> {
+    const identifier = this.extractBookIdentifierFromInput(input);
+    if (!identifier) return null;
+
+    try {
+      const query = identifier.kind === 'id' ? FIND_BOOK_BY_HARDCOVER_ID_QUERY : FIND_BOOK_BY_HARDCOVER_SLUG_QUERY;
+      const variables = identifier.kind === 'id' ? { id: identifier.value } : { slug: identifier.value };
+      const data = await this.client.query<BooksQueryResult>(userId, token, query, variables);
+      const hardcoverBook = data.books?.[0];
+      if (!hardcoverBook) return null;
+
+      const edition = this.pickBestEdition(hardcoverBook.editions ?? [], book);
+      return { hardcoverBookId: hardcoverBook.id, hardcoverEditionId: edition?.id ?? null, title: hardcoverBook.title ?? '' };
+    } catch (err) {
+      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
+      this.logger.warn(`[hardcover.manual_link] [fail] userId=${userId} input="${sanitizeLogValue(input)}" error="${error}" - resolve failed`);
+      return null;
+    }
+  }
+
+  private extractBookIdentifierFromInput(input: string): { kind: 'id'; value: number } | { kind: 'slug'; value: string } | null {
+    const value = input.trim();
+    if (!value) return null;
+
+    let candidate = value;
+    try {
+      const parsed = new URL(value);
+      const segments = parsed.pathname.split('/').filter(Boolean);
+      if (segments.length > 0) candidate = segments[segments.length - 1]!;
+    } catch {
+      // Not a URL - treat the raw input as an id or slug.
+    }
+
+    if (/^\d+$/.test(candidate)) return { kind: 'id', value: parseInt(candidate, 10) };
+    return candidate ? { kind: 'slug', value: candidate } : null;
+  }
+
+  /** Lists the editions tracked against a Hardcover book (e.g. physical, ebook, audiobook). */
+  async getEditions(userId: number, token: string, hardcoverBookId: number): Promise<HardcoverEdition[]> {
+    try {
+      const data = await this.client.query<BooksQueryResult>(userId, token, FIND_BOOK_EDITIONS_BY_HARDCOVER_ID_QUERY, { id: hardcoverBookId });
+      const editions = data.books?.[0]?.editions ?? [];
+      return editions.map((edition) => this.toPublicEdition(edition));
+    } catch (err) {
+      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
+      this.logger.warn(`[hardcover.editions] [fail] userId=${userId} hardcoverBookId=${hardcoverBookId} error="${error}" - failed to fetch editions`);
+      return [];
+    }
+  }
+
+  private toPublicEdition(edition: HardcoverEditionRaw): HardcoverEdition {
+    const isAudio = this.editionIsAudio(edition);
+    const format = (edition.reading_format_id ? READING_FORMAT_LABELS[edition.reading_format_id] : undefined) ?? (isAudio ? 'Audiobook' : 'Unknown');
+    const year = edition.release_date && edition.release_date.length >= 4 ? parseInt(edition.release_date.slice(0, 4), 10) : null;
+
+    return {
+      id: edition.id,
+      format,
+      pages: this.normalizeEditionPages(edition.pages),
+      audioSeconds: typeof edition.audio_seconds === 'number' && edition.audio_seconds > 0 ? edition.audio_seconds : null,
+      isAudio,
+      year: year && Number.isFinite(year) ? year : null,
+    };
   }
 }

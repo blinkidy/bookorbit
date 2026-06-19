@@ -6,7 +6,14 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import type { RequestUser } from '../../common/types/request-user';
 import { BookService } from '../book/book.service';
-import { ApplyHardcoverImportDto, UpdateHardcoverBookSyncDto, UpsertHardcoverSettingsDto, ValidateHardcoverTokenDto } from './dto';
+import {
+  ApplyHardcoverImportDto,
+  LinkHardcoverBookDto,
+  SetHardcoverEditionDto,
+  UpdateHardcoverBookSyncDto,
+  UpsertHardcoverSettingsDto,
+  ValidateHardcoverTokenDto,
+} from './dto';
 import { HardcoverImportService } from './hardcover-import.service';
 import { HardcoverSettingsService } from './hardcover-settings.service';
 import { HardcoverSyncService } from './hardcover-sync.service';
@@ -98,5 +105,30 @@ export class HardcoverController {
   @Post('import/apply')
   applyImport(@CurrentUser() user: RequestUser, @Body() dto: ApplyHardcoverImportDto) {
     return this.importService.applyImport(user, dto);
+  }
+
+  @Post('books/:bookId/rematch')
+  rematchBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    return this.syncService.rematchBook(user.id, bookId).then((result) => ({ result }));
+  }
+
+  @Get('books')
+  listLinkedBooks(@CurrentUser() user: RequestUser) {
+    return this.syncService.listLinkedBooks(user.id);
+  }
+
+  @Patch('books/:bookId/link')
+  linkBookManually(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: LinkHardcoverBookDto) {
+    return this.syncService.linkBookManually(user.id, bookId, dto.input);
+  }
+
+  @Get('books/:bookId/editions')
+  listEditions(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    return this.syncService.listEditions(user.id, bookId);
+  }
+
+  @Patch('books/:bookId/edition')
+  setEdition(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: SetHardcoverEditionDto) {
+    return this.syncService.setEdition(user.id, bookId, dto.editionId);
   }
 }
