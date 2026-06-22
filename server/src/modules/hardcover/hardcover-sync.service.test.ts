@@ -283,6 +283,36 @@ describe('HardcoverSyncService', () => {
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: audioBook.progress }));
     });
 
+    it("falls back to deriving progress_seconds from percentage when there is no precise audio position (e.g. progress arrives via KOReader sync rather than BookOrbit's own audiobook player)", async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+      mockRepo.findBookState.mockResolvedValue(null);
+      mockMatchService.matchBook.mockResolvedValue({
+        hardcoverBookId: 10,
+        hardcoverEditionId: 20,
+        editionPages: null,
+        editionAudioSeconds: 73560,
+        editionIsAudio: true,
+        matchMethod: 'cached',
+      });
+      mockClient.query
+        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ user_book_reads: [] })
+        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('synced');
+
+      expect(mockClient.query).toHaveBeenNthCalledWith(
+        4,
+        1,
+        'tok',
+        expect.stringContaining('mutation InsertUserBookRead'),
+        expect.objectContaining({ object: expect.objectContaining({ progress_seconds: 30895 }) }),
+      );
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: readingBook.progress }));
+    });
+
     it('keeps progress pending for an audio edition when there is no local listening position yet', async () => {
       const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
       const audioBook = { ...readingBook, audioPositionSeconds: null };
@@ -306,7 +336,9 @@ describe('HardcoverSyncService', () => {
 
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: null }));
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('matched edition is audio but no local audiobook_progress row exists for this book'),
+        expect.stringContaining(
+          'matched edition is audio but Hardcover has no audio_seconds duration for it, and there is no local audiobook_progress row either',
+        ),
       );
       warnSpy.mockRestore();
     });
