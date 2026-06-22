@@ -1,4 +1,6 @@
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+
+import type { ApplyHardcoverImportPayload } from '@bookorbit/types';
 
 export class UpsertHardcoverSettingsDto {
   @IsOptional()
@@ -45,4 +47,18 @@ export class LinkHardcoverBookDto {
 export class SetHardcoverEditionDto {
   @IsInt()
   editionId!: number;
+}
+
+export class ApplyHardcoverImportDto implements ApplyHardcoverImportPayload {
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(10000)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  hardcoverUserBookIds?: number[];
+
+  @IsOptional()
+  @IsBoolean()
+  importProgress?: boolean;
 }

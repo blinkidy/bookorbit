@@ -1,7 +1,10 @@
 import { api } from '@/lib/api'
 import type {
+  ApplyHardcoverImportPayload,
   HardcoverActiveSyncStatus,
   HardcoverEdition,
+  HardcoverImportApplyResult,
+  HardcoverImportPreview,
   HardcoverLinkedBook,
   HardcoverLinkResult,
   HardcoverSyncPendingSummary,
@@ -135,5 +138,27 @@ export async function setHardcoverEdition(bookId: number, editionId: number): Pr
     body: JSON.stringify({ editionId }),
   })
   if (!res.ok) throw new Error('Failed to set Hardcover edition')
+  return res.json()
+}
+
+export async function previewHardcoverImport(): Promise<HardcoverImportPreview> {
+  const res = await api(`${BASE}/import/preview`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { message?: string }).message ?? 'Failed to preview Hardcover import')
+  }
+  return res.json()
+}
+
+export async function applyHardcoverImport(payload: ApplyHardcoverImportPayload = {}): Promise<HardcoverImportApplyResult> {
+  const res = await api(`${BASE}/import/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { message?: string }).message ?? 'Failed to import Hardcover read status')
+  }
   return res.json()
 }

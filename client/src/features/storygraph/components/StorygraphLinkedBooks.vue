@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, HelpCircle, Loader2, RefreshCw, Link2 } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, HelpCircle, Loader2, RefreshCw, Link2 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import type { StorygraphEdition, StorygraphLinkedBook } from '@bookorbit/types'
 import {

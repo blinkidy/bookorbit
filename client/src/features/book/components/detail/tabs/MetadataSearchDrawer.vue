@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { X, Sparkles } from 'lucide-vue-next'
+import { X, Sparkles } from '@lucide/vue'
 import { isAudioFormat } from '@bookorbit/types'
 import type { BookDetail, BookMetadataLockField, MetadataCandidate, MetadataSource } from '@bookorbit/types'
 import { useMetadataSearch } from '../../../composables/useMetadataSearch'
@@ -16,7 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const { coverUrl } = useCoverVersions()
-const bookCoverUrl = computed(() => coverUrl(props.book.id, 'cover'))
+const bookCoverUrl = computed(() => coverUrl(props.book.id, 'cover', props.book.updatedAt ?? props.book.addedAt))
 const searchDefaults = computed(() => ({
   title: props.book.title ?? undefined,
   author: props.book.authors[0]?.name ?? undefined,
@@ -63,7 +63,7 @@ const drawerSubtitle = computed(() =>
 )
 
 onMounted(() => {
-  loadProviders()
+  loadProviders(props.book.id)
 })
 
 function handleClose() {
@@ -74,7 +74,7 @@ function handleSearch(params: { title: string; author: string; isbn: string }) {
   const isAudiobook = props.book.files.some((f) => f.format != null && isAudioFormat(f.format))
   selectedCandidate.value = null
   view.value = 'search'
-  search({ ...params, isAudiobook })
+  search({ ...params, bookId: props.book.id, isAudiobook })
 }
 
 function handleSelect(candidate: MetadataCandidate) {

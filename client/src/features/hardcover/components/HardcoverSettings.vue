@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import SettingsPageHeader from '@/features/settings/SettingsPageHeader.vue'
 import HardcoverConnectionCard from '../components/HardcoverConnectionCard.vue'
+import HardcoverImportStatus from '../components/HardcoverImportStatus.vue'
 import HardcoverLinkedBooks from '../components/HardcoverLinkedBooks.vue'
 import HardcoverSyncProgress from '../components/HardcoverSyncProgress.vue'
 import { useHardcoverSettings } from '../composables/useHardcoverSettings'
@@ -29,5 +30,7 @@ onUnmounted(() => {
 
     <HardcoverSyncProgress v-if="settings?.tokenConfigured" />
     <HardcoverLinkedBooks v-if="settings?.tokenConfigured" />
+
+    <HardcoverImportStatus v-if="settings?.tokenConfigured" />
   </div>
 </template>

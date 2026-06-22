@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { AlertCircle, RefreshCw, XCircle, Loader2 } from 'lucide-vue-next'
+import { AlertCircle, RefreshCw, XCircle, Loader2 } from '@lucide/vue'
 import { useStorygraphSync } from '../composables/useStorygraphSync'
 import { useStorygraphSettings } from '../composables/useStorygraphSettings'
 

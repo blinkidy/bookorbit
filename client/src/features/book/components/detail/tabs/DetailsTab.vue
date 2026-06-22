@@ -17,7 +17,7 @@ import {
   Trash2,
   TriangleAlert,
   X,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import { DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogRoot } from 'reka-ui'
 import { getFormatColor } from '@/features/book/lib/format-colors'
 import { providerIconPath } from '@/features/book/lib/provider-icons'
@@ -267,7 +267,7 @@ const coverSeed = computed(() => props.book.title ?? props.book.folderPath.split
 const coverPlaceholderTitle = computed(() => props.book.title ?? props.book.folderPath.split('/').pop() ?? null)
 const hasCover = computed(() => props.book.coverSource !== null)
 const { coverUrl } = useCoverVersions()
-const coverSrc = computed(() => coverUrl(props.book.id, 'cover'))
+const coverSrc = computed(() => coverUrl(props.book.id, 'cover', props.book.updatedAt ?? props.book.addedAt))
 
 watch(coverSrc, () => {
   coverLoaded.value = false
