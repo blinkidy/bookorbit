@@ -47,6 +47,7 @@ jobs:
     outputs:
       source_sha: ${{ steps.ctx.outputs.source_sha }}
       source_sha_short: ${{ steps.ctx.outputs.source_sha_short }}
+      app_version: ${{ steps.ctx.outputs.app_version }}
       update_main: ${{ steps.ctx.outputs.update_main }}
       skip_build: ${{ steps.ctx.outputs.skip_build }}
     steps:
@@ -79,6 +80,22 @@ jobs:
           SOURCE_SHA_SHORT="${SOURCE_SHA:0:12}"
           echo "source_sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
           echo "source_sha_short=${SOURCE_SHA_SHORT}" >> "$GITHUB_OUTPUT"
+
+          EXISTING_TAG="$(gh api "repos/${IMAGE_NAME}/releases" --paginate --jq ".[] | select(.target_commitish == \"${SOURCE_SHA}\") | .tag_name" \
+            | grep -E '^v1\.0\.[0-9]+-personal$' \
+            | head -n1 || true)"
+          if [[ -n "$EXISTING_TAG" ]]; then
+            APP_VERSION="$EXISTING_TAG"
+          else
+            LATEST_PATCH="$(gh api "repos/${IMAGE_NAME}/releases" --paginate --jq '.[].tag_name' \
+              | sed -nE 's/^v1\.0\.([0-9]+)-personal$/\1/p' \
+              | sort -n \
+              | tail -n1)"
+            NEXT_PATCH="$(( ${LATEST_PATCH:-0} + 1 ))"
+            APP_VERSION="v1.0.${NEXT_PATCH}-personal"
+          fi
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+
           IMAGE_LOWER=$(echo "${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')
           HTTP_STATUS_SHORT=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -151,7 +168,7 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.tags.outputs.list }}
-          build-args: APP_VERSION=sha-${{ needs.prepare.outputs.source_sha_short }}
+          build-args: APP_VERSION=${{ needs.prepare.outputs.app_version }}
           cache-from: type=gha,scope=container-image-yml-amd64
           cache-to: type=gha,mode=max,scope=container-image-yml-amd64
 

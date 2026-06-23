@@ -224,11 +224,28 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_NUMBER: ${{ github.run_number }}
+          GH_REPO: ${{ github.repository }}
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
         run: |
           set -euo pipefail
-          VERSION="1.0.${RUN_NUMBER}-personal"
+
+          EXISTING_TAG="$(gh api "repos/${GH_REPO}/releases" --paginate --jq ".[] | select(.target_commitish == \"${TARGET_SHA}\") | .tag_name" \
+            | grep -E '^v1\.0\.[0-9]+-personal$' \
+            | head -n1 || true)"
+          if [[ -n "$EXISTING_TAG" ]]; then
+            echo "Release ${EXISTING_TAG} already exists for ${TARGET_SHA}; skipping."
+            echo "new_release_published=false" >> "$GITHUB_OUTPUT"
+            echo "new_release_version=${EXISTING_TAG#v}" >> "$GITHUB_OUTPUT"
+            echo "new_release_git_tag=${EXISTING_TAG}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LATEST_PATCH="$(gh api "repos/${GH_REPO}/releases" --paginate --jq '.[].tag_name' \
+            | sed -nE 's/^v1\.0\.([0-9]+)-personal$/\1/p' \
+            | sort -n \
+            | tail -n1)"
+          NEXT_PATCH="$(( ${LATEST_PATCH:-0} + 1 ))"
+          VERSION="1.0.${NEXT_PATCH}-personal"
           TAG="v${VERSION}"
           gh release create "$TAG" --target "$TARGET_SHA" --title "$TAG" --generate-notes
           echo "new_release_published=true" >> "$GITHUB_OUTPUT"
