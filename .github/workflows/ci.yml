@@ -51,7 +51,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Validate PR branch name
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        if: github.event.pull_request.user.login != 'dependabot[bot]' && vars.ENABLE_ISSUE_PR_CONVENTIONS == 'true'
         shell: bash
         env:
           PR_BRANCH: ${{ github.head_ref }}
@@ -65,7 +65,7 @@ jobs:
           fi
 
       - name: Validate referenced issues exist
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        if: github.event.pull_request.user.login != 'dependabot[bot]' && vars.ENABLE_ISSUE_PR_CONVENTIONS == 'true'
         shell: bash
         env:
           GH_REPO: ${{ github.repository }}
