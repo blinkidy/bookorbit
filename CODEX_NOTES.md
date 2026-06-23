@@ -42,7 +42,7 @@ This file is a project-local handoff for future Codex sessions working on this f
 
 - Branch: `fix/personal-release-version-display`
 - PR: `https://github.com/blinkidy/bookorbit/pull/3`
-- Status at time of writing: open and ready for review.
+- Status: merged into `main`.
 - Files changed:
   - `.github/workflows/container-image.yml`
   - `.github/workflows/release.yml`
@@ -67,5 +67,6 @@ corepack pnpm run typecheck:client
 - At the start of future sessions, check this file and `CLAUDE.md` if present. Treat `CLAUDE.md` as useful project history from Claude, then verify important details against the repo before editing.
 - Treat `blinkidy/bookorbit` as the target repo unless the user explicitly asks to operate on upstream.
 - Do not push or open PRs against `bookorbit/bookorbit` for this personalization work.
-- Check open PRs before starting new workflow/release work; PR #2 and PR #3 may already contain relevant changes.
+- Check open PRs before starting new workflow/release work.
+- The image build and release publish can race when multiple PRs merge close together. The release workflow should treat the created `v1.0.x-personal` tag as the source of truth for the final published image version.
 - If the sidebar still shows `sha-...`, confirm whether the running container image was rebuilt after PR #3 merged. Existing images keep the version baked in at build time.
