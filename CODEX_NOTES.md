@@ -64,6 +64,7 @@ corepack pnpm run typecheck:client
 
 ## Notes For Future Codex
 
+- At the start of future sessions, check this file and `CLAUDE.md` if present. Treat `CLAUDE.md` as useful project history from Claude, then verify important details against the repo before editing.
 - Treat `blinkidy/bookorbit` as the target repo unless the user explicitly asks to operate on upstream.
 - Do not push or open PRs against `bookorbit/bookorbit` for this personalization work.
 - Check open PRs before starting new workflow/release work; PR #2 and PR #3 may already contain relevant changes.
