@@ -163,6 +163,7 @@ jobs:
       published: ${{ steps.tag.outputs.new_release_published }}
       version: ${{ steps.tag.outputs.new_release_version }}
       tag: ${{ steps.tag.outputs.new_release_git_tag }}
+      sha: ${{ steps.resolve.outputs.sha }}
       sha_short: ${{ steps.resolve.outputs.sha_short }}
     steps:
       - name: Resolve release commit
@@ -265,7 +266,7 @@ jobs:
           echo "- **Tag:** ${TAG}" >> "$GITHUB_STEP_SUMMARY"
 
   docker-promote:
-    name: Promote Docker Image
+    name: Build Release Docker Image
     needs: [release]
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
@@ -277,6 +278,11 @@ jobs:
       REGISTRY: ghcr.io
       IMAGE_NAME: ${{ github.repository }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
@@ -287,20 +293,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Retag image as version + latest
-        shell: bash
-        env:
-          REGISTRY: ${{ env.REGISTRY }}
-          IMAGE: ${{ env.IMAGE_NAME }}
-          SHA_SHORT: ${{ needs.release.outputs.sha_short }}
-          VERSION: ${{ needs.release.outputs.version }}
-        run: |
-          set -euo pipefail
-          FULL_IMAGE="${REGISTRY}/${IMAGE}"
-          docker buildx imagetools create \
-            --tag "${FULL_IMAGE}:${VERSION}" \
-            --tag "${FULL_IMAGE}:latest" \
-            "${FULL_IMAGE}:sha-${SHA_SHORT}"
+      - name: Build release image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ needs.release.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.release.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          build-args: APP_VERSION=${{ needs.release.outputs.tag }}
+          cache-from: type=gha,scope=release-image-yml-amd64
+          cache-to: type=gha,mode=max,scope=release-image-yml-amd64
 
       - name: Enrich release notes
         shell: bash
@@ -350,5 +356,6 @@ jobs:
           echo "## Docker Image Published" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Version:** \`${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Source image:** \`sha-${SHA_SHORT}\` (linux/amd64, linux/arm64)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Build version:** \`v${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Source SHA tag:** \`sha-${SHA_SHORT}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Tags:** \`${VERSION}\`, \`latest\`" >> "$GITHUB_STEP_SUMMARY"
