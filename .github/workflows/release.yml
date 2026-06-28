@@ -215,7 +215,7 @@ jobs:
           set -euo pipefail
           SOURCE_TAG="ghcr.io/${IMAGE_NAME}:sha-${SHA_SHORT}"
           if ! docker buildx imagetools inspect "${SOURCE_TAG}" > /dev/null 2>&1; then
-            echo "::error::Multi-arch image sha-${SHA_SHORT} not found in GHCR. Wait for the Container Image workflow to complete for this commit before releasing."
+            echo "::error::Image sha-${SHA_SHORT} not found in GHCR. Wait for the Container Image workflow to complete for this commit before releasing."
             exit 1
           fi
           echo "Image sha-${SHA_SHORT} verified in GHCR."
@@ -283,9 +283,6 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.sha }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
@@ -302,15 +299,13 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ needs.release.outputs.sha_short }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.release.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           build-args: APP_VERSION=${{ needs.release.outputs.tag }}
-          cache-from: |
-            type=gha,scope=container-image-yml-amd64
-            type=gha,scope=container-image-yml-arm64
+          cache-from: type=gha,scope=container-image-yml
 
       - name: Enrich release notes
         shell: bash
