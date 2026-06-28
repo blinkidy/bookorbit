@@ -6,7 +6,8 @@ import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import ConditionConfigurator from './ConditionConfigurator.vue'
 import { useBookMetadataFetchConfig } from '@/features/book-metadata-fetch/composables/useBookMetadataFetchConfig'
 import { useBookMetadataFetchActions } from '@/features/book-metadata-fetch/composables/useBookMetadataFetchActions'
-import { useEligibleCountPreview } from '@/features/book-metadata-fetch/composables/useEligibleCountPreview'
+import { useBookMetadataFetchStatus } from '@/features/book-metadata-fetch/composables/useBookMetadataFetchStatus'
+import { invalidateEligibleCountPreviews, useEligibleCountPreview } from '@/features/book-metadata-fetch/composables/useEligibleCountPreview'
 import { useMediaQuery } from '@vueuse/core'
 
 const props = defineProps<{
@@ -16,6 +17,7 @@ const props = defineProps<{
 
 const { fetchLibraryConfig, saveLibraryConfig } = useBookMetadataFetchConfig()
 const { triggerForLibrary } = useBookMetadataFetchActions()
+const { status } = useBookMetadataFetchStatus()
 
 const libraryData = ref<BookMetadataFetchLibraryConfig | null>(null)
 const inheriting = ref(true)
@@ -30,6 +32,18 @@ const conditionsOpen = ref(true)
 
 const conditions = computed(() => (inheriting.value ? props.globalConfig.conditions : (local.value?.conditions ?? null)))
 const { count: eligibleCount, loading: countLoading } = useEligibleCountPreview(conditions, props.library.id)
+
+const statusLabel = computed<string | null>(() => {
+  if (triggerResult.value) return triggerResult.value
+  const remaining = status.value.queued + status.value.processing
+  if (remaining > 0) {
+    return status.value.paused ? `${remaining} in queue - paused` : `${remaining} remaining`
+  }
+  if (eligibleCount.value !== null) {
+    return countLoading.value ? null : `~${eligibleCount.value} eligible`
+  }
+  return null
+})
 const activeConditionSummary = computed(() => {
   const c = displayConfig.value.conditions
   const parts: string[] = []
@@ -60,8 +74,7 @@ const lastRunLabel = computed(() => {
 
 onMounted(async () => {
   try {
-    libraryData.value = await fetchLibraryConfig(props.library.id)
-    local.value = JSON.parse(JSON.stringify(libraryData.value))
+    applyLibraryData(await fetchLibraryConfig(props.library.id))
   } finally {
     loading.value = false
   }
@@ -69,10 +82,19 @@ onMounted(async () => {
 
 const displayConfig = computed(() => (inheriting.value ? props.globalConfig : local.value) ?? props.globalConfig)
 
-function handleInheritToggle(isInheriting: boolean) {
+async function handleInheritToggle(isInheriting: boolean) {
+  const wasInheriting = inheriting.value
   inheriting.value = isInheriting
-  if (isInheriting) {
-    local.value = JSON.parse(JSON.stringify(props.globalConfig))
+  triggerResult.value = null
+  const nextConfig = isInheriting || wasInheriting ? props.globalConfig : (libraryData.value ?? props.globalConfig)
+  local.value = cloneConfigOnly(nextConfig)
+  if (!isInheriting) return
+
+  saving.value = true
+  try {
+    applyLibraryData(await saveLibraryConfig(props.library.id, null))
+  } finally {
+    saving.value = false
   }
 }
 
@@ -81,7 +103,7 @@ async function handleSave() {
   saving.value = true
   try {
     const override = inheriting.value ? null : local.value
-    await saveLibraryConfig(props.library.id, override)
+    applyLibraryData(await saveLibraryConfig(props.library.id, override))
   } finally {
     saving.value = false
   }
@@ -93,6 +115,7 @@ async function handleTrigger() {
   try {
     const { queued } = await triggerForLibrary(props.library.id)
     triggerResult.value = queued > 0 ? `Queued ${queued} books` : 'No eligible books found'
+    invalidateEligibleCountPreviews()
     if (libraryData.value) {
       libraryData.value.lastRunAt = new Date().toISOString()
       libraryData.value.lastQueuedCount = queued
@@ -110,6 +133,28 @@ watch(
   },
   { immediate: true },
 )
+
+watch(
+  () => props.globalConfig,
+  (config) => {
+    if (inheriting.value) local.value = cloneConfigOnly(config)
+  },
+  { deep: true },
+)
+
+function applyLibraryData(data: BookMetadataFetchLibraryConfig) {
+  libraryData.value = data
+  inheriting.value = data.override === null
+  local.value = cloneConfigOnly(data)
+}
+
+function cloneConfigOnly(config: BookMetadataFetchConfig): BookMetadataFetchConfig {
+  return {
+    enabled: config.enabled,
+    triggerOnImport: config.triggerOnImport,
+    conditions: JSON.parse(JSON.stringify(config.conditions)),
+  }
+}
 </script>
 
 <template>
@@ -158,10 +203,7 @@ watch(
         <button :disabled="triggering" class="settings-btn-outline" @click="handleTrigger">
           {{ triggering ? 'Running...' : 'Run now' }}
         </button>
-        <span v-if="triggerResult" class="text-xs text-muted-foreground">{{ triggerResult }}</span>
-        <span v-else-if="eligibleCount !== null" class="text-xs text-muted-foreground">
-          {{ countLoading ? '...' : `~${eligibleCount} eligible` }}
-        </span>
+        <span v-if="statusLabel" class="text-xs text-muted-foreground">{{ statusLabel }}</span>
       </div>
 
       <div class="md:hidden sticky bottom-2 z-10 border border-border/60 bg-card/95 backdrop-blur rounded-lg px-3 py-2">
@@ -173,10 +215,7 @@ watch(
           <button :disabled="triggering" class="settings-btn-outline h-9 px-3" @click="handleTrigger">
             {{ triggering ? 'Running...' : 'Run now' }}
           </button>
-          <span v-if="triggerResult" class="text-xs text-muted-foreground">{{ triggerResult }}</span>
-          <span v-else-if="eligibleCount !== null" class="text-xs text-muted-foreground">
-            {{ countLoading ? '...' : `~${eligibleCount} eligible` }}
-          </span>
+          <span v-if="statusLabel" class="text-xs text-muted-foreground">{{ statusLabel }}</span>
         </div>
       </div>
     </template>

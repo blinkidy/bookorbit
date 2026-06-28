@@ -37,9 +37,17 @@ export interface MetadataSeriesMembership {
   seriesIndex?: number | null;
 }
 
+export interface BookCommunityRating {
+  provider: MetadataProviderKey;
+  rating: number;
+  ratingCount: number | null;
+  updatedAt: string | null;
+}
+
 export interface MetadataCandidate {
   provider: MetadataProviderKey;
   providerId: string;
+  hardcoverEditionId?: string;
   title: string;
   subtitle?: string;
   authors?: string[];
@@ -62,6 +70,8 @@ export interface MetadataCandidate {
   audibleId?: string;
   chapters?: AudiobookChapter[];
   comicMetadata?: ComicMetadataFields;
+  communityRating?: number;
+  communityRatingCount?: number;
 }
 
 export interface MetadataProviderInfo {
@@ -114,4 +124,6 @@ export interface MetadataSource {
   narrators: string[];
   durationSeconds: number | null;
   abridged: boolean | null;
+  hardcoverEditionId: string | null;
+  communityRatings: BookCommunityRating[];
 }

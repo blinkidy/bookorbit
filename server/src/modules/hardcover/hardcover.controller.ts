@@ -5,7 +5,15 @@ import { map, Observable } from 'rxjs';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import type { RequestUser } from '../../common/types/request-user';
-import { ApplyHardcoverImportDto, LinkHardcoverBookDto, SetHardcoverEditionDto, UpsertHardcoverSettingsDto, ValidateHardcoverTokenDto } from './dto';
+import { BookService } from '../book/book.service';
+import {
+  ApplyHardcoverImportDto,
+  LinkHardcoverBookDto,
+  SetHardcoverEditionDto,
+  UpdateHardcoverBookSyncDto,
+  UpsertHardcoverSettingsDto,
+  ValidateHardcoverTokenDto,
+} from './dto';
 import { HardcoverImportService } from './hardcover-import.service';
 import { HardcoverSettingsService } from './hardcover-settings.service';
 import { HardcoverSyncService } from './hardcover-sync.service';
@@ -17,6 +25,7 @@ export class HardcoverController {
     private readonly settingsService: HardcoverSettingsService,
     private readonly syncService: HardcoverSyncService,
     private readonly importService: HardcoverImportService,
+    private readonly bookService: BookService,
   ) {}
 
   @Get('settings')
@@ -65,7 +74,8 @@ export class HardcoverController {
   }
 
   @Post('books/:bookId/rematch')
-  rematchBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+  async rematchBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    await this.bookService.verifyBookAccess(bookId, user);
     return this.syncService.rematchBook(user.id, bookId).then((result) => ({ result }));
   }
 
@@ -75,18 +85,45 @@ export class HardcoverController {
   }
 
   @Patch('books/:bookId/link')
-  linkBookManually(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: LinkHardcoverBookDto) {
+  async linkBookManually(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: LinkHardcoverBookDto) {
+    await this.bookService.verifyBookAccess(bookId, user);
     return this.syncService.linkBookManually(user.id, bookId, dto.input);
   }
 
   @Get('books/:bookId/editions')
-  listEditions(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+  async listEditions(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    await this.bookService.verifyBookAccess(bookId, user);
     return this.syncService.listEditions(user.id, bookId);
   }
 
   @Patch('books/:bookId/edition')
-  setEdition(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: SetHardcoverEditionDto) {
+  async setEdition(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: SetHardcoverEditionDto) {
+    await this.bookService.verifyBookAccess(bookId, user);
     return this.syncService.setEdition(user.id, bookId, dto.editionId);
+  }
+
+  @Get('books/:bookId/sync-state')
+  async getBookSyncState(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    await this.bookService.verifyBookAccess(bookId, user);
+    return this.syncService.getBookSyncState(user.id, bookId);
+  }
+
+  @Patch('books/:bookId/sync-state')
+  async updateBookSyncState(
+    @CurrentUser() user: RequestUser,
+    @Param('bookId', ParseIntPipe) bookId: number,
+    @Body() dto: UpdateHardcoverBookSyncDto,
+  ) {
+    await this.bookService.verifyBookAccess(bookId, user);
+    return this.syncService.updateBookSyncState(user.id, bookId, dto);
+  }
+
+  @Post('books/:bookId/sync')
+  async syncBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    await this.bookService.verifyBookAccess(bookId, user);
+    const result = await this.syncService.syncBook(user.id, bookId);
+    const state = await this.syncService.getBookSyncState(user.id, bookId);
+    return { result, state };
   }
 
   @Post('import/preview')

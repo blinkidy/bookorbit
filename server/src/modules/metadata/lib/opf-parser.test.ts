@@ -41,6 +41,23 @@ function epub3OpfFull(parts: { metadata?: string; manifest?: string }): string {
 }
 
 describe('parseOpf', () => {
+  describe('custom metadata', () => {
+    it('parses BookOrbit custom metadata from named and property meta tags', () => {
+      const xml = epub3Opf(`
+        <meta property="bookorbit:custom:original_title">Le Comte de Monte-Cristo</meta>
+        <meta name="bookorbit:custom:novel_source" content="https://example.test/novel" />
+        <meta property="bookorbit:custom:bad-key">Ignored</meta>
+      `);
+
+      const r = parseOpf(xml);
+
+      expect(r.customMetadata).toEqual({
+        original_title: 'Le Comte de Monte-Cristo',
+        novel_source: 'https://example.test/novel',
+      });
+    });
+  });
+
   describe('title', () => {
     it('parses a single title', () => {
       const r = parseOpf(epub2Opf('<dc:title>Foundation</dc:title>'));
@@ -367,6 +384,12 @@ describe('parseOpf', () => {
       expect(r.hardcoverId).toBe('new-orleans-rush');
     });
 
+    it('parses Hardcover edition ID from opf:scheme, urn, and prefix formats', () => {
+      expect(parseOpf(epub2Opf(`<dc:identifier opf:scheme="HARDCOVER_EDITION">8941973</dc:identifier>`)).hardcoverEditionId).toBe('8941973');
+      expect(parseOpf(epub2Opf(`<dc:identifier>urn:hardcover_edition:8941974</dc:identifier>`)).hardcoverEditionId).toBe('8941974');
+      expect(parseOpf(epub3Opf(`<dc:identifier>hardcover-edition:8941975</dc:identifier>`)).hardcoverEditionId).toBe('8941975');
+    });
+
     it('parses iTunes ID from opf:scheme attribute', () => {
       const xml = epub2Opf(`<dc:identifier opf:scheme="ITUNES">123456789</dc:identifier>`);
       const r = parseOpf(xml);
@@ -395,8 +418,56 @@ describe('parseOpf', () => {
       expect(r.ranobedbId).toBe('ranobe-legacy');
     });
 
+    it('normalizes urn-prefixed provider IDs when opf:scheme is present', () => {
+      const xml = epub2Opf(`
+        <dc:identifier opf:scheme="GOOGLE">urn:google:RPyFDwAAQBAJ</dc:identifier>
+        <dc:identifier opf:scheme="AMAZON">urn:amazon:0345415000</dc:identifier>
+        <dc:identifier opf:scheme="GOODREADS">urn:goodreads:42129393</dc:identifier>
+        <dc:identifier opf:scheme="HARDCOVER">urn:hardcover:new-orleans-rush</dc:identifier>
+        <dc:identifier opf:scheme="OPENLIBRARY">urn:openlibrary:OL20652610W</dc:identifier>
+        <dc:identifier opf:scheme="RANOBEDB">urn:ranobedb:ranobe-legacy</dc:identifier>
+        <dc:identifier opf:scheme="KOBO">urn:kobo:kobo-123</dc:identifier>
+        <dc:identifier opf:scheme="LUBIMYCZYTAC">urn:lubimyczytac:lub-99999</dc:identifier>
+        <dc:identifier opf:scheme="ALADIN">urn:aladin:9791190090018</dc:identifier>
+        <dc:identifier opf:scheme="ITUNES">urn:itunes:123456789</dc:identifier>
+      `);
+      const r = parseOpf(xml);
+      expect(r.googleBooksId).toBe('RPyFDwAAQBAJ');
+      expect(r.amazonId).toBe('0345415000');
+      expect(r.goodreadsId).toBe('42129393');
+      expect(r.hardcoverId).toBe('new-orleans-rush');
+      expect(r.openLibraryId).toBe('OL20652610W');
+      expect(r.ranobedbId).toBe('ranobe-legacy');
+      expect(r.koboId).toBe('kobo-123');
+      expect(r.lubimyczytacId).toBe('lub-99999');
+      expect(r.aladinId).toBe('9791190090018');
+      expect(r.itunesId).toBe('123456789');
+    });
+
+    it('normalizes the real-world Amazon URN value that exceeds the amazon_id column when untrimmed', () => {
+      const r = parseOpf(epub2Opf(`<dc:identifier opf:scheme="AMAZON">urn:amazon:0345415000</dc:identifier>`));
+      expect(r.amazonId).toBe('0345415000');
+      expect(r.amazonId).toHaveLength(10);
+    });
+
+    it('normalizes provider URN prefixes case-insensitively', () => {
+      const xml = epub2Opf(`
+        <dc:identifier>URN:GOOGLE:CaseSensitiveGoogleId</dc:identifier>
+        <dc:identifier>URN:AMAZON:B0G3YRNY6Y</dc:identifier>
+      `);
+      const r = parseOpf(xml);
+      expect(r.googleBooksId).toBe('CaseSensitiveGoogleId');
+      expect(r.amazonId).toBe('B0G3YRNY6Y');
+    });
+
+    it('normalizes Amazon alias prefixes when opf:scheme is present', () => {
+      expect(parseOpf(epub2Opf(`<dc:identifier opf:scheme="AMAZON">amazon:B0G3YRNY6Y</dc:identifier>`)).amazonId).toBe('B0G3YRNY6Y');
+      expect(parseOpf(epub2Opf(`<dc:identifier opf:scheme="AMAZON">asin:B0G3YRNY6Y</dc:identifier>`)).amazonId).toBe('B0G3YRNY6Y');
+      expect(parseOpf(epub2Opf(`<dc:identifier opf:scheme="AMAZON">mobi-asin:B0ABCDEFGH</dc:identifier>`)).amazonId).toBe('B0ABCDEFGH');
+    });
+
     it('opf:scheme format wins over urn: when both are present for the same provider', () => {
-      // urn: appears first in document order — scheme should still win
+      // urn: appears first in document order; scheme should still win.
       const xml = epub2Opf(`
         <dc:identifier>urn:google:OLD_URN_VALUE</dc:identifier>
         <dc:identifier opf:scheme="GOOGLE">SCHEME_VALUE</dc:identifier>
@@ -444,6 +515,7 @@ describe('parseOpf', () => {
       expect(r.amazonId).toBeNull();
       expect(r.goodreadsId).toBeNull();
       expect(r.hardcoverId).toBeNull();
+      expect(r.hardcoverEditionId).toBeNull();
       expect(r.openLibraryId).toBeNull();
       expect(r.ranobedbId).toBeNull();
       expect(r.itunesId).toBeNull();
@@ -457,6 +529,7 @@ describe('parseOpf', () => {
           <dc:identifier>google:ABCD1234</dc:identifier>
           <dc:identifier>openlibrary:OL99999999W</dc:identifier>
           <dc:identifier>hardcover:test-book-slug</dc:identifier>
+          <dc:identifier>hardcover_edition:8941973</dc:identifier>
           <dc:identifier>kobo:test-kobo-id</dc:identifier>
           <dc:identifier>itunes:987654321</dc:identifier>
           <dc:identifier>lubimyczytac:lub-99999</dc:identifier>
@@ -468,6 +541,7 @@ describe('parseOpf', () => {
         expect(r.googleBooksId).toBe('ABCD1234');
         expect(r.openLibraryId).toBe('OL99999999W');
         expect(r.hardcoverId).toBe('test-book-slug');
+        expect(r.hardcoverEditionId).toBe('8941973');
         expect(r.koboId).toBe('test-kobo-id');
         expect(r.itunesId).toBe('987654321');
         expect(r.lubimyczytacId).toBe('lub-99999');

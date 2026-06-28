@@ -1,6 +1,14 @@
 import { computed, reactive, ref } from 'vue'
 import { api } from '@/lib/api'
-import { FORMAT_TO_GROUP, type BookDetail, type BookMetadataLockField, type BookMetadataSaveResult } from '@bookorbit/types'
+import {
+  FORMAT_TO_GROUP,
+  type BookCommunityRating,
+  type BookDetail,
+  type BookMetadataLockField,
+  type BookMetadataSaveResult,
+  type CustomMetadataBookValue,
+  type CustomMetadataBookValueInput,
+} from '@bookorbit/types'
 
 export type EditableSeriesMembership = {
   seriesName: string
@@ -25,6 +33,7 @@ const ROOT_FIELDS = [
   'goodreadsId',
   'amazonId',
   'hardcoverId',
+  'hardcoverEditionId',
   'openLibraryId',
   'itunesId',
   'audibleId',
@@ -81,6 +90,16 @@ function seriesMembershipsFromBook(book: BookDetail): EditableSeriesMembership[]
   return book.seriesName ? [{ seriesName: book.seriesName, seriesIndex: book.seriesIndex }] : []
 }
 
+function changedCustomMetadataPayload(
+  currentValues: readonly CustomMetadataBookValue[],
+  previousValues: readonly CustomMetadataBookValue[],
+): CustomMetadataBookValueInput[] {
+  const previousByFieldId = new Map(previousValues.map((field) => [field.fieldId, field.value]))
+  return currentValues
+    .filter((field) => JSON.stringify(field.value) !== JSON.stringify(previousByFieldId.get(field.fieldId)))
+    .map((field) => ({ fieldId: field.fieldId, value: field.value }))
+}
+
 export function useMetadataEditor() {
   const saving = ref(false)
   const error = ref<string | null>(null)
@@ -93,6 +112,7 @@ export function useMetadataEditor() {
     publishedYear: null as number | null,
     language: null as string | null,
     pageCount: null as number | null,
+    communityRatings: [] as BookCommunityRating[],
     seriesName: null as string | null,
     seriesIndex: null as number | null,
     seriesMemberships: [] as EditableSeriesMembership[],
@@ -109,6 +129,7 @@ export function useMetadataEditor() {
     goodreadsId: null as string | null,
     amazonId: null as string | null,
     hardcoverId: null as string | null,
+    hardcoverEditionId: null as string | null,
     openLibraryId: null as string | null,
     itunesId: null as string | null,
     audibleId: null as string | null,
@@ -128,6 +149,7 @@ export function useMetadataEditor() {
     comicCharacters: [] as string[],
     comicTeams: [] as string[],
     comicLocations: [] as string[],
+    customMetadata: [] as CustomMetadataBookValue[],
   })
 
   const snapshot = ref(JSON.stringify(form))
@@ -143,6 +165,7 @@ export function useMetadataEditor() {
     form.publishedYear = book.publishedYear
     form.language = book.language
     form.pageCount = book.pageCount
+    form.communityRatings = [...book.communityRatings]
     form.seriesName = book.seriesName
     form.seriesIndex = book.seriesIndex
     form.seriesMemberships = seriesMembershipsFromBook(book)
@@ -159,6 +182,7 @@ export function useMetadataEditor() {
     form.goodreadsId = book.providerIds.goodreads ?? null
     form.amazonId = book.providerIds.amazon ?? null
     form.hardcoverId = book.providerIds.hardcover ?? null
+    form.hardcoverEditionId = book.hardcoverEditionId
     form.openLibraryId = book.providerIds.openLibrary ?? null
     form.itunesId = book.providerIds.itunes ?? null
     form.audibleId = book.providerIds.audible ?? null
@@ -179,6 +203,7 @@ export function useMetadataEditor() {
     form.comicCharacters = cm?.characters ?? []
     form.comicTeams = cm?.teams ?? []
     form.comicLocations = cm?.locations ?? []
+    form.customMetadata = (book.customMetadata ?? []).map((field) => ({ ...field }))
     includeAudioMetadata.value = book.audioMetadata != null || book.files.some((f) => f.format != null && FORMAT_TO_GROUP[f.format] === 'audio')
     snapshot.value = JSON.stringify(form)
     error.value = null
@@ -207,6 +232,12 @@ export function useMetadataEditor() {
       payload.seriesMemberships = currentSeriesMemberships
     }
 
+    const currentCommunityRatings = form.communityRatings.map(({ provider, rating, ratingCount }) => ({ provider, rating, ratingCount }))
+    const previousCommunityRatings = previous.communityRatings.map(({ provider, rating, ratingCount }) => ({ provider, rating, ratingCount }))
+    if (JSON.stringify(currentCommunityRatings) !== JSON.stringify(previousCommunityRatings)) {
+      payload.communityRatings = currentCommunityRatings
+    }
+
     const comicMetadata: Record<string, unknown> = {}
     for (const [payloadKey, formKey] of Object.entries(COMIC_FIELDS)) {
       if (JSON.stringify(form[formKey]) !== JSON.stringify(previous[formKey])) {
@@ -227,6 +258,11 @@ export function useMetadataEditor() {
       if (Object.keys(audioMetadata).length > 0) {
         payload.audioMetadata = audioMetadata
       }
+    }
+
+    const customMetadata = changedCustomMetadataPayload(form.customMetadata, previous.customMetadata)
+    if (customMetadata.length > 0) {
+      payload.customMetadata = customMetadata
     }
     return payload
   }

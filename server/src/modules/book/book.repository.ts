@@ -14,6 +14,7 @@ import * as schema from '../../db/schema';
 import {
   authors,
   bookAuthors,
+  bookCommunityRatings,
   bookFiles,
   bookGenres,
   bookMetadata,
@@ -63,6 +64,8 @@ type CollapsedRawRow = {
   locked_fields: string[] | null;
   subtitle: string | null;
   isbn13: string | null;
+  hardcover_id: string | null;
+  hardcover_edition_id: string | null;
   publisher: string | null;
   page_count: number | null;
   sort_title: string | null;
@@ -167,6 +170,8 @@ export class BookRepository {
         publisher: bookMetadata.publisher,
         pageCount: bookMetadata.pageCount,
         isbn13: bookMetadata.isbn13,
+        hardcoverId: bookMetadata.hardcoverId,
+        hardcoverEditionId: bookMetadata.hardcoverEditionId,
         metadataScore: bookMetadata.metadataScore,
         _total: sql<number>`count(*) over()`.as('_total'),
       })
@@ -356,6 +361,8 @@ export class BookRepository {
       publisher: string | null;
       pageCount: number | null;
       isbn13: string | null;
+      hardcoverId: string | null;
+      hardcoverEditionId: string | null;
       bookCount: number | null;
       readCount: number | null;
       coverBookIds: number[] | null;
@@ -409,6 +416,8 @@ export class BookRepository {
           book_metadata.page_count,
           book_metadata.subtitle,
           book_metadata.isbn13,
+          book_metadata.hardcover_id,
+          book_metadata.hardcover_edition_id,
           book_metadata.metadata_score,
           NULLIF(lower(btrim(book_metadata.series_name)), '') AS norm_series
         FROM books
@@ -538,6 +547,8 @@ export class BookRepository {
           base.page_count,
           base.subtitle,
           base.isbn13,
+          base.hardcover_id,
+          base.hardcover_edition_id,
           base.metadata_score,
           base.primary_author_sort_name AS author_sort_name,
           COALESCE(base.norm_series, lower(base.title)) AS sort_title,
@@ -602,6 +613,8 @@ export class BookRepository {
       publisher: r.publisher,
       pageCount: r.page_count !== null ? Number(r.page_count) : null,
       isbn13: r.isbn13,
+      hardcoverId: r.hardcover_id,
+      hardcoverEditionId: r.hardcover_edition_id,
       bookCount: r.book_count !== null ? Number(r.book_count) : null,
       readCount: r.read_count !== null ? Number(r.read_count) : null,
       coverBookIds: r.cover_book_ids,
@@ -734,7 +747,7 @@ export class BookRepository {
 
     if (!book) return null;
 
-    const [authorRows, genreRows, tagRows, fileRows, narratorRows, seriesMembershipRows] = await Promise.all([
+    const [authorRows, genreRows, tagRows, fileRows, narratorRows, seriesMembershipRows, communityRatingRows] = await Promise.all([
       this.db
         .select({ id: authors.id, name: authors.name, sortName: authors.sortName })
         .from(bookAuthors)
@@ -773,9 +786,19 @@ export class BookRepository {
         .innerJoin(bookSeries, eq(bookSeries.id, bookSeriesMemberships.seriesId))
         .where(eq(bookSeriesMemberships.bookId, id))
         .orderBy(asc(bookSeriesMemberships.displayOrder), asc(bookSeriesMemberships.seriesId)),
+      this.db
+        .select({
+          provider: bookCommunityRatings.provider,
+          rating: bookCommunityRatings.rating,
+          ratingCount: bookCommunityRatings.ratingCount,
+          updatedAt: bookCommunityRatings.updatedAt,
+        })
+        .from(bookCommunityRatings)
+        .where(eq(bookCommunityRatings.bookId, id))
+        .orderBy(asc(bookCommunityRatings.provider)),
     ]);
 
-    return { book, authorRows, genreRows, tagRows, fileRows, narratorRows, seriesMembershipRows };
+    return { book, authorRows, genreRows, tagRows, fileRows, narratorRows, seriesMembershipRows, communityRatingRows };
   }
 
   async findRatingByBookAndUser(bookId: number, userId: number): Promise<number | null> {
@@ -890,6 +913,21 @@ export class BookRepository {
       .leftJoin(readingProgress, and(eq(readingProgress.bookFileId, bookFiles.id), eq(readingProgress.userId, userId)))
       .where(eq(bookFiles.bookId, bookId))
       .orderBy(asc(bookFiles.sortOrder), asc(bookFiles.id));
+  }
+
+  async findProgressByBooks(userId: number, bookIds: number[]) {
+    if (bookIds.length === 0) return [];
+    return this.db
+      .select({
+        bookId: bookFiles.bookId,
+        fileId: bookFiles.id,
+        percentage: readingProgress.percentage,
+        koreaderProgress: readingProgress.koreaderProgress,
+        updatedAt: readingProgress.updatedAt,
+      })
+      .from(bookFiles)
+      .innerJoin(readingProgress, and(eq(readingProgress.bookFileId, bookFiles.id), eq(readingProgress.userId, userId)))
+      .where(inArray(bookFiles.bookId, bookIds));
   }
 
   async findKoboReadingState(userId: number, bookId: number) {
@@ -1166,6 +1204,25 @@ export class BookRepository {
       .orderBy(asc(books.id));
   }
 
+  async findPrimaryReaderFilesByBookIds(
+    bookIds: number[],
+  ): Promise<{ id: number; bookId: number; absolutePath: string; format: string | null; fileHash: string | null; sizeBytes: number | null }[]> {
+    if (bookIds.length === 0) return [];
+    return this.db
+      .select({
+        id: bookFiles.id,
+        bookId: books.id,
+        absolutePath: bookFiles.absolutePath,
+        format: bookFiles.format,
+        fileHash: bookFiles.fileHash,
+        sizeBytes: bookFiles.sizeBytes,
+      })
+      .from(books)
+      .innerJoin(bookFiles, eq(bookFiles.id, books.primaryFileId))
+      .where(inArray(books.id, bookIds))
+      .orderBy(asc(books.id));
+  }
+
   async findAllFilesByBookIds(
     bookIds: number[],
   ): Promise<{ bookId: number; absolutePath: string; format: string | null; sizeBytes: number | null; sortOrder: number }[]> {
@@ -1284,6 +1341,27 @@ export class BookRepository {
     await executor.update(books).set({ updatedAt: new Date() }).where(eq(books.id, bookId));
   }
 
+  async replaceCommunityRatings(
+    bookId: number,
+    ratings: Array<{ provider: string; rating: number; ratingCount: number | null }>,
+    executor: MetadataUpdateExecutor = this.db,
+  ): Promise<void> {
+    const now = new Date();
+    await executor.delete(bookCommunityRatings).where(eq(bookCommunityRatings.bookId, bookId));
+    if (ratings.length > 0) {
+      await executor.insert(bookCommunityRatings).values(
+        ratings.map((rating) => ({
+          bookId,
+          provider: rating.provider,
+          rating: rating.rating,
+          ratingCount: rating.ratingCount,
+          updatedAt: now,
+        })),
+      );
+    }
+    await executor.update(books).set({ updatedAt: now }).where(eq(books.id, bookId));
+  }
+
   async bulkUpdateMetadataFields(
     bookIds: number[],
     fields: Partial<typeof bookMetadata.$inferInsert>,
@@ -1379,7 +1457,9 @@ export class BookRepository {
     const normalizedKoboLocationType = this.normalizeKoboLocationPart(koboLocationType);
     const normalizedKoboLocationValue = this.normalizeKoboLocationPart(koboLocationValue);
     const normalizedKoboContentSourceProgressPercent = this.clampNullableProgressPercentage(koboContentSourceProgressPercent);
-    if (!normalizedKoboLocationSource || normalizedKoboLocationType !== 'KoboSpan' || !normalizedKoboLocationValue) return false;
+    // Location values are optional: without them the bookmark advances percent-wise
+    // and the precise KoboSpan Location is computed server-side at delivery time.
+    const hasLocation = Boolean(normalizedKoboLocationSource && normalizedKoboLocationType === 'KoboSpan' && normalizedKoboLocationValue);
 
     const now = new Date();
     const nowIso = now.toISOString();
@@ -1398,6 +1478,7 @@ export class BookRepository {
 
     const existingBookmark = this.asJsonObj(existing?.currentBookmark);
     if (
+      hasLocation &&
       this.isKoboBookmarkCurrent(
         existingBookmark,
         clampedPercentage,
@@ -1409,20 +1490,27 @@ export class BookRepository {
     ) {
       return true;
     }
+    if (!hasLocation && this.isKoboBookmarkPercentCurrent(existingBookmark, clampedPercentage)) {
+      return true;
+    }
 
     const currentBookmark: JsonObj = {
       ...(existingBookmark ?? {}),
       LastModified: nowIso,
       ProgressPercent: clampedPercentage,
-      Location: {
-        Source: normalizedKoboLocationSource,
-        Type: normalizedKoboLocationType,
-        Value: normalizedKoboLocationValue,
-      },
+      ...(hasLocation
+        ? {
+            Location: {
+              Source: normalizedKoboLocationSource,
+              Type: normalizedKoboLocationType,
+              Value: normalizedKoboLocationValue,
+            },
+          }
+        : {}),
     };
-    if (normalizedKoboContentSourceProgressPercent !== null) {
+    if (hasLocation && normalizedKoboContentSourceProgressPercent !== null) {
       currentBookmark.ContentSourceProgressPercent = normalizedKoboContentSourceProgressPercent;
-    } else {
+    } else if (hasLocation) {
       delete currentBookmark.ContentSourceProgressPercent;
     }
     const statusInfo = {
@@ -1560,6 +1648,11 @@ export class BookRepository {
   private hasNonInternalBookmarkFields(bookmark: JsonObj | null): boolean {
     if (!bookmark) return false;
     return Object.keys(bookmark).some((key) => key !== 'LastModified' && key !== 'ProgressPercent');
+  }
+
+  private isKoboBookmarkPercentCurrent(bookmark: JsonObj | null, percentage: number): boolean {
+    const existingPercent = this.extractKoboPercent(bookmark);
+    return existingPercent !== null && Math.abs(existingPercent - percentage) < PROGRESS_EPSILON;
   }
 
   private deriveKoboStatus(percentage: number): string {

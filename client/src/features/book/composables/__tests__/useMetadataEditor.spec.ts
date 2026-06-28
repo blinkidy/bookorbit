@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BookDetail } from '@bookorbit/types'
+import { MetadataProviderKey, type BookDetail } from '@bookorbit/types'
 import { useMetadataEditor } from '../useMetadataEditor'
 
 const apiMock = vi.hoisted(() => vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<unknown>>())
@@ -29,7 +29,9 @@ function makeBook(overrides: Partial<BookDetail> = {}): BookDetail {
     seriesName: null,
     seriesIndex: null,
     rating: null,
+    communityRatings: [],
     coverSource: null,
+    hardcoverEditionId: null,
     providerIds: {},
     authors: [],
     genres: [],
@@ -52,6 +54,7 @@ function makeBook(overrides: Partial<BookDetail> = {}): BookDetail {
     audioMetadata: null,
     formatPriority: [],
     comicMetadata: null,
+    customMetadata: [],
     lockedFields: [],
     collections: [],
     ...overrides,
@@ -131,6 +134,53 @@ describe('useMetadataEditor', () => {
     })
   })
 
+  it('sends only changed custom metadata values in the metadata payload', async () => {
+    const book = makeBook({
+      customMetadata: [
+        { fieldId: 7, key: 'original_title', label: 'Original Title', type: 'text', displayOrder: 0, value: null },
+        { fieldId: 8, key: 'translated', label: 'Translated', type: 'boolean', displayOrder: 1, value: false },
+      ],
+    })
+    apiMock.mockResolvedValue({ ok: true, json: async () => book })
+
+    const { form, load, save } = useMetadataEditor()
+    load(book)
+    form.customMetadata[0]!.value = 'Le Comte de Monte-Cristo'
+    await save(book.id, [])
+
+    const [, req] = apiMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(req.body))).toEqual({
+      metadata: {
+        customMetadata: [{ fieldId: 7, value: 'Le Comte de Monte-Cristo' }],
+      },
+      lockedFields: [],
+    })
+  })
+
+  it('sends changed community rating rows in the metadata payload', async () => {
+    const book = makeBook()
+    apiMock.mockResolvedValue({ ok: true, json: async () => book })
+
+    const { form, load, save } = useMetadataEditor()
+    load(book)
+    form.communityRatings = [
+      { provider: MetadataProviderKey.HARDCOVER, rating: 4.2, ratingCount: 6, updatedAt: null },
+      { provider: MetadataProviderKey.AMAZON, rating: 4.8, ratingCount: 104451, updatedAt: null },
+    ]
+    await save(book.id, [])
+
+    const [, req] = apiMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(req.body))).toEqual({
+      metadata: {
+        communityRatings: [
+          { provider: MetadataProviderKey.HARDCOVER, rating: 4.2, ratingCount: 6 },
+          { provider: MetadataProviderKey.AMAZON, rating: 4.8, ratingCount: 104451 },
+        ],
+      },
+      lockedFields: [],
+    })
+  })
+
   it('returns the metadata save result from the API response', async () => {
     const book = makeBook({ title: 'Original Title' })
     apiMock.mockResolvedValue({
@@ -185,6 +235,25 @@ describe('useMetadataEditor', () => {
     const [, req] = apiMock.mock.calls[0] as [string, RequestInit]
     expect(JSON.parse(String(req.body))).toEqual({
       metadata: { koboId: 'new-kobo-id' },
+      lockedFields: [],
+    })
+  })
+
+  it('loads and saves Hardcover edition IDs separately from Hardcover book IDs', async () => {
+    const book = makeBook({ providerIds: { hardcover: 'old-book-slug' }, hardcoverEditionId: '8941973' })
+    apiMock.mockResolvedValue({ ok: true, json: async () => ({ ...book, hardcoverEditionId: '8941974' }) })
+
+    const { form, load, save } = useMetadataEditor()
+    load(book)
+    expect(form.hardcoverId).toBe('old-book-slug')
+    expect(form.hardcoverEditionId).toBe('8941973')
+
+    form.hardcoverEditionId = '8941974'
+    await save(book.id, [])
+
+    const [, req] = apiMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(req.body))).toEqual({
+      metadata: { hardcoverEditionId: '8941974' },
       lockedFields: [],
     })
   })

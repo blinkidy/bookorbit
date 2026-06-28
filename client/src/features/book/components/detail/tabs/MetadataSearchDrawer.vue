@@ -31,6 +31,7 @@ const currentSource = computed<MetadataSource>(() => ({
   publishedYear: props.book.publishedYear,
   language: props.book.language,
   pageCount: props.book.pageCount,
+  communityRatings: props.book.communityRatings,
   seriesName: props.book.seriesName,
   seriesIndex: props.book.seriesIndex,
   isbn10: props.book.isbn10,
@@ -40,6 +41,7 @@ const currentSource = computed<MetadataSource>(() => ({
   narrators: props.book.audioMetadata?.narrators.map((n) => n.name) ?? [],
   durationSeconds: props.book.audioMetadata?.durationSeconds ?? null,
   abridged: props.book.audioMetadata?.abridged ?? null,
+  hardcoverEditionId: props.book.hardcoverEditionId,
 }))
 
 const {

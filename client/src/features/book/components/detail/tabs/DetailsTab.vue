@@ -20,13 +20,13 @@ import {
 } from '@lucide/vue'
 import { DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogRoot } from 'reka-ui'
 import { getFormatColor } from '@/features/book/lib/format-colors'
-import { providerIconPath } from '@/features/book/lib/provider-icons'
+import { providerIconPath, providerIconPathSafe } from '@/features/book/lib/provider-icons'
 import { lubimyczytacBookUrl } from '@/features/book/lib/provider-links'
-import { getProviderColor } from '@/lib/provider-colors'
+import { getProviderColor, PROVIDER_SHORT_LABELS } from '@/lib/provider-colors'
 import { useCoverVersions } from '@/features/book/composables/useCoverVersions'
 import { COVER_ASPECT_RATIO_KEY, DEFAULT_COVER_ASPECT_RATIO } from '@/features/book/lib/cover-aspect-ratio'
 import { FORMAT_TO_GROUP, READER_OPENABLE_FORMATS } from '@bookorbit/types'
-import type { BookDetail, BookKoboState, ReadStatus, UserBookStatus } from '@bookorbit/types'
+import type { BookDetail, BookKoboState, CustomMetadataBookValue, ReadStatus, UserBookStatus } from '@bookorbit/types'
 import { STATUS_OPTIONS, STATUS_ICONS, STATUS_COLORS, useBookStatus } from '@/features/book/composables/useBookStatus'
 import BookDownloadButton from '@/features/book/components/BookDownloadButton.vue'
 import DiscoverRow from '@/features/book/components/detail/DiscoverRow.vue'
@@ -47,8 +47,10 @@ import { useMetadataScoreWeights } from '@/features/metadata-score/composables/u
 import { useSafeHtml } from '@/features/book/composables/useSafeHtml'
 import { useKoreaderBookProgress } from '@/features/koreader/composables/useKoreaderBookProgress'
 import { RATING_STARS, getRatingStarClass } from '@/features/book/lib/rating-stars'
+import { formatCommunityRatingValue } from '@/features/book/lib/community-rating'
 import BookCoverSurface from '@/features/book/components/BookCoverSurface.vue'
 import { useDisplaySettings } from '@/composables/useDisplaySettings'
+import HardcoverBookSyncGridItem from '@/features/hardcover/components/HardcoverBookSyncGridItem.vue'
 
 type FileProgress = {
   percentage: number
@@ -92,7 +94,9 @@ const showSendDialog = ref(false)
 const { weights: scoreWeights, fetchWeights } = useMetadataScoreWeights()
 const { bookProgress: koreaderBookProgress, fetchBookProgress: fetchKoreaderProgress } = useKoreaderBookProgress()
 
-onMounted(fetchWeights)
+onMounted(() => {
+  void fetchWeights()
+})
 
 const {
   pendingId: deleteBookId,
@@ -114,6 +118,7 @@ const genreMeasureContainer = ref<HTMLElement | null>(null)
 const genreHiddenCount = ref(0)
 const visibleGenreCount = ref(0)
 const safeDescription = useSafeHtml(() => props.book.description)
+const filledCustomMetadata = computed(() => (props.book.customMetadata ?? []).filter((field) => field.value !== null && field.value !== ''))
 const displayedGenres = computed(() => {
   if (genresExpanded.value || genreHiddenCount.value === 0) return props.book.genres
   const count = visibleGenreCount.value > 0 ? visibleGenreCount.value : props.book.genres.length
@@ -215,6 +220,12 @@ function scheduleGenreOverflowMeasure() {
       measureGenreOverflow()
     })
   })
+}
+
+function formatCustomMetadataValue(field: CustomMetadataBookValue): string {
+  if (field.value === null) return ''
+  if (field.type === 'boolean') return field.value ? 'Yes' : 'No'
+  return String(field.value)
 }
 
 watch(
@@ -331,6 +342,17 @@ function formatDuration(seconds: number | null | undefined): string {
 const localRating = ref<number | null>(null)
 const hoverRating = ref<number | null>(null)
 const displayRating = computed(() => hoverRating.value ?? localRating.value)
+const communityRatingByProvider = computed(() => {
+  const map: Record<string, { score: string; tooltip: string }> = {}
+  for (const rating of props.book.communityRatings) {
+    if (rating.rating == null || !Number.isFinite(rating.rating)) continue
+    const score = Number.isInteger(rating.rating) ? rating.rating.toFixed(0) : rating.rating.toFixed(1)
+    const label = PROVIDER_SHORT_LABELS[rating.provider] ?? rating.provider
+    const value = formatCommunityRatingValue(rating.rating, rating.ratingCount)
+    map[rating.provider] = { score, tooltip: `${label} ${value}` }
+  }
+  return map
+})
 
 watch(
   () => props.book.rating,
@@ -624,6 +646,29 @@ const providerLinks = computed<ProviderLink[]>(() => {
   return out
 })
 
+const communityRatingBadges = computed(() => {
+  const linkByKey = new Map(providerLinks.value.map((link) => [link.key, link]))
+  return props.book.communityRatings
+    .filter((rating) => rating.rating != null && Number.isFinite(rating.rating))
+    .map((rating) => {
+      const link = linkByKey.get(rating.provider)
+      const meta = communityRatingByProvider.value[rating.provider]
+      const label = PROVIDER_SHORT_LABELS[rating.provider] ?? rating.provider
+      return {
+        key: rating.provider,
+        label,
+        fallback: label.slice(0, 2).toUpperCase(),
+        iconUrl: link?.iconUrl ?? providerIconPathSafe(rating.provider),
+        url: link?.url ?? null,
+        score: meta?.score ?? '',
+        tooltip: meta?.tooltip ?? '',
+      }
+    })
+    .filter((badge) => badge.iconUrl)
+})
+
+const unlinkedCommunityBadges = computed(() => communityRatingBadges.value.filter((badge) => !badge.url))
+
 const fileProgressRows = computed(() =>
   props.book.files.map((file) => ({
     file,
@@ -861,7 +906,11 @@ async function loadSupplemental() {
   try {
     const progressPromise = api(`/api/v1/books/${props.book.id}/progress`).catch(() => null)
     const audioProgressPromise = hasAudio ? api(`/api/v1/books/${props.book.id}/audio-progress`).catch(() => null) : Promise.resolve(null)
-    const collectionsPromise = api(`/api/v1/collections?bookIds=${props.book.id}`)
+    const collectionsPromise = api('/api/v1/collections/membership', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookIds: [props.book.id] }),
+    })
     const koboPromise = canViewKobo.value ? api(`/api/v1/books/${props.book.id}/kobo-state`) : Promise.resolve(null)
     const koreaderProgressPromise = canViewKoreader.value ? fetchKoreaderProgress(props.book.id) : Promise.resolve()
 
@@ -1066,6 +1115,37 @@ watch(
               <Lock class="size-3" />
             </div>
           </template>
+        </div>
+        <div v-if="communityRatingBadges.length" class="mt-2 flex flex-wrap items-center gap-1.5">
+          <component
+            :is="badge.url ? 'a' : 'span'"
+            v-for="badge in communityRatingBadges"
+            :key="badge.key"
+            :href="badge.url ?? undefined"
+            :target="badge.url ? '_blank' : undefined"
+            :rel="badge.url ? 'noopener noreferrer' : undefined"
+            :title="badge.tooltip"
+            class="inline-flex h-6 items-center overflow-hidden rounded-md border transition-colors"
+            :class="badge.url ? 'hover:bg-muted/60' : ''"
+            :style="providerLinkStyle(badge.key)"
+          >
+            <span class="flex size-6 items-center justify-center">
+              <img
+                v-if="!providerIconErrors[badge.key]"
+                :src="badge.iconUrl ?? undefined"
+                :alt="badge.label"
+                class="size-3.5 rounded-[2px] object-contain"
+                loading="lazy"
+                @error="providerIconErrors[badge.key] = true"
+              />
+              <span v-else class="text-[8px] font-bold leading-none text-foreground/90">{{ badge.fallback }}</span>
+            </span>
+            <span
+              class="flex h-full items-center border-l border-border/60 bg-background/50 px-1.5 text-[11px] font-semibold tabular-nums text-foreground"
+            >
+              {{ badge.score }}
+            </span>
+          </component>
         </div>
         <!-- Read status: own row -->
         <div class="mt-1">
@@ -1501,7 +1581,7 @@ watch(
       </div>
 
       <!-- Format badges + provider links -->
-      <div v-if="formats.length || providerLinks.length" class="flex items-center flex-wrap gap-2 mt-0 md:mt-4">
+      <div v-if="formats.length || providerLinks.length || unlinkedCommunityBadges.length" class="flex items-center flex-wrap gap-2 mt-0 md:mt-4">
         <span
           v-for="fmt in formats"
           :key="fmt"
@@ -1516,7 +1596,7 @@ watch(
           </Tooltip>
           {{ fmt }}
         </span>
-        <div v-if="providerLinks.length" class="flex items-center gap-2 w-full sm:w-auto sm:shrink-0">
+        <div v-if="providerLinks.length || unlinkedCommunityBadges.length" class="flex items-center flex-wrap gap-2 w-full sm:w-auto sm:shrink-0">
           <div class="hidden sm:block w-px h-3.5 bg-border" />
           <a
             v-for="link in providerLinks"
@@ -1524,20 +1604,52 @@ watch(
             :href="link.url"
             target="_blank"
             rel="noopener noreferrer"
-            :title="`Open in ${link.label}`"
-            class="inline-flex size-7 items-center justify-center rounded-md border transition-colors hover:bg-muted/60"
+            :title="communityRatingByProvider[link.key]?.tooltip ?? `Open in ${link.label}`"
+            class="inline-flex h-7 items-center overflow-hidden rounded-md border transition-colors hover:bg-muted/60"
             :style="providerLinkStyle(link.key)"
           >
-            <img
-              v-if="!providerIconErrors[link.key]"
-              :src="link.iconUrl"
-              :alt="link.label"
-              class="size-4 rounded-[2px] object-contain"
-              loading="lazy"
-              @error="providerIconErrors[link.key] = true"
-            />
-            <span v-else class="text-[8px] font-bold leading-none text-foreground/90">{{ link.fallback }}</span>
+            <span class="flex size-7 items-center justify-center">
+              <img
+                v-if="!providerIconErrors[link.key]"
+                :src="link.iconUrl"
+                :alt="link.label"
+                class="size-4 rounded-[2px] object-contain"
+                loading="lazy"
+                @error="providerIconErrors[link.key] = true"
+              />
+              <span v-else class="text-[8px] font-bold leading-none text-foreground/90">{{ link.fallback }}</span>
+            </span>
+            <span
+              v-if="communityRatingByProvider[link.key]"
+              class="flex h-full items-center border-l border-border/60 bg-background/50 px-1.5 text-xs font-semibold tabular-nums text-foreground"
+            >
+              {{ communityRatingByProvider[link.key]?.score }}
+            </span>
           </a>
+          <span
+            v-for="badge in unlinkedCommunityBadges"
+            :key="badge.key"
+            :title="badge.tooltip"
+            class="inline-flex h-7 items-center overflow-hidden rounded-md border"
+            :style="providerLinkStyle(badge.key)"
+          >
+            <span class="flex size-7 items-center justify-center">
+              <img
+                v-if="!providerIconErrors[badge.key]"
+                :src="badge.iconUrl ?? undefined"
+                :alt="badge.label"
+                class="size-4 rounded-[2px] object-contain"
+                loading="lazy"
+                @error="providerIconErrors[badge.key] = true"
+              />
+              <span v-else class="text-[8px] font-bold leading-none text-foreground/90">{{ badge.fallback }}</span>
+            </span>
+            <span
+              class="flex h-full items-center border-l border-border/60 bg-background/50 px-1.5 text-xs font-semibold tabular-nums text-foreground"
+            >
+              {{ badge.score }}
+            </span>
+          </span>
         </div>
       </div>
 
@@ -1650,6 +1762,7 @@ watch(
           </template>
           <dd v-else class="text-sm text-foreground mt-0.5">-</dd>
         </div>
+        <HardcoverBookSyncGridItem :book-id="book.id" />
         <div class="min-w-0">
           <dt class="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">Date Started</dt>
           <template v-if="isEditingReadingDate('startedAt')">
@@ -1786,6 +1899,27 @@ watch(
         </Tooltip>
       </div>
 
+      <div v-if="filledCustomMetadata.length > 0" class="mt-6 pt-5 border-t border-border">
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">Custom Metadata</p>
+        <dl class="grid gap-3 sm:grid-cols-2">
+          <div v-for="field in filledCustomMetadata" :key="field.fieldId" class="min-w-0">
+            <dt class="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">{{ field.label }}</dt>
+            <dd class="mt-1 text-sm text-foreground break-words">
+              <a
+                v-if="field.type === 'url' && typeof field.value === 'string'"
+                :href="field.value"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-primary hover:underline"
+              >
+                {{ field.value }}
+              </a>
+              <span v-else>{{ formatCustomMetadataValue(field) }}</span>
+            </dd>
+          </div>
+        </dl>
+      </div>
+
       <!-- Synopsis -->
       <div class="mt-6 pt-5 border-t border-border">
         <p class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">Synopsis</p>
@@ -1811,12 +1945,19 @@ watch(
 
   <AddToCollectionSheet
     :open="addToCollectionOpen"
-    :book-ids="[book.id]"
+    :selection-payload="{ bookIds: [book.id] }"
+    :selected-count="1"
     @update:open="addToCollectionOpen = $event"
     @done="void loadSupplemental()"
   />
 
-  <SendBookDialog v-model:open="showSendDialog" :book-ids="[book.id]" :book-title="book.title ?? undefined" :book-files="book.files" />
+  <SendBookDialog
+    v-model:open="showSendDialog"
+    :selection-payload="{ bookIds: [book.id] }"
+    :selected-count="1"
+    :book-title="book.title ?? undefined"
+    :book-files="book.files"
+  />
 
   <DeleteBookDialog :open="deleteBookId !== null" :deleting="deletingBook" @confirm="confirmDelete" @cancel="cancelDelete" />
 

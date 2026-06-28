@@ -56,6 +56,7 @@ export const bookMetadata = pgTable(
     goodreadsId: varchar('goodreads_id', { length: 50 }),
     amazonId: varchar('amazon_id', { length: 20 }),
     hardcoverId: varchar('hardcover_id', { length: 255 }),
+    hardcoverEditionId: varchar('hardcover_edition_id', { length: 50 }),
     openLibraryId: varchar('open_library_id', { length: 50 }),
     itunesId: varchar('itunes_id', { length: 50 }),
     koboId: varchar('kobo_id', { length: 255 }),
@@ -101,6 +102,28 @@ export const bookMetadata = pgTable(
     check('book_metadata_page_count_nonnegative_chk', sql`${t.pageCount} is null or ${t.pageCount} >= 0`),
     check('book_metadata_duration_seconds_nonnegative_chk', sql`${t.durationSeconds} is null or ${t.durationSeconds} >= 0`),
     check('book_metadata_cover_source_chk', sql`${t.coverSource} is null or ${t.coverSource} in ('extracted', 'custom')`),
+  ],
+);
+
+export const bookCommunityRatings = pgTable(
+  'book_community_ratings',
+  {
+    bookId: integer('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 50 }).notNull(),
+    rating: real('rating').notNull(),
+    ratingCount: integer('rating_count'),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdateFn(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.bookId, t.provider] }),
+    index('book_community_ratings_provider_idx').on(t.provider),
+    check('book_community_ratings_rating_range_chk', sql`${t.rating} >= 0 and ${t.rating} <= 5`),
+    check('book_community_ratings_count_nonnegative_chk', sql`${t.ratingCount} is null or ${t.ratingCount} >= 0`),
   ],
 );
 
@@ -217,6 +240,8 @@ export const bookTags = pgTable(
 
 export type BookMetadata = typeof bookMetadata.$inferSelect;
 export type NewBookMetadata = typeof bookMetadata.$inferInsert;
+export type BookCommunityRating = typeof bookCommunityRatings.$inferSelect;
+export type NewBookCommunityRating = typeof bookCommunityRatings.$inferInsert;
 
 export type Author = typeof authors.$inferSelect;
 export type NewAuthor = typeof authors.$inferInsert;

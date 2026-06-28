@@ -48,12 +48,13 @@ describe('BookMetadataLockService', () => {
   });
 
   it('filters automated dto updates and preserves unlocked chapters', async () => {
-    const { service } = makeService(['title', 'narrators', 'comicIssueNumber', 'googleBooksId']);
+    const { service } = makeService(['title', 'narrators', 'comicIssueNumber', 'googleBooksId', 'hardcoverEditionId']);
 
     const result = await service.filterAutomatedBookUpdate(12, {
       title: 'Locked title',
       authors: ['Allowed Author'],
       googleBooksId: 'g-id',
+      hardcoverEditionId: '1001',
       audioMetadata: {
         narrators: ['Locked Narrator'],
         chapters: [{ title: 'Chapter 1', startMs: 0 }],
@@ -73,7 +74,7 @@ describe('BookMetadataLockService', () => {
         volumeName: 'Allowed Volume',
       },
     });
-    expect(result.skippedFields).toEqual(['title', 'narrators', 'googleBooksId', 'comicIssueNumber']);
+    expect(result.skippedFields).toEqual(['title', 'narrators', 'googleBooksId', 'hardcoverEditionId', 'comicIssueNumber']);
   });
 
   it('assertFieldsUnlocked passes when none of the checked fields are locked', async () => {
@@ -124,6 +125,57 @@ describe('BookMetadataLockService', () => {
     });
   });
 
+  it('filters community rating rows as one lockable provider bundle', async () => {
+    const unlocked = makeService();
+    const communityRatings = [{ provider: MetadataProviderKey.HARDCOVER, rating: 4.25, ratingCount: 12345, updatedAt: '2026-06-25T00:00:00.000Z' }];
+
+    await expect(
+      unlocked.service.filterResolvedMetadata(
+        1,
+        {
+          communityRatings,
+        },
+        {},
+      ),
+    ).resolves.toEqual({
+      resolved: {
+        communityRatings,
+      },
+      providerIds: {},
+      skippedFields: [],
+    });
+
+    const locked = makeService(['communityRating']);
+
+    await expect(
+      locked.service.filterResolvedMetadata(
+        1,
+        {
+          communityRatings,
+        },
+        {},
+      ),
+    ).resolves.toEqual({
+      resolved: {},
+      providerIds: {},
+      skippedFields: ['communityRating'],
+    });
+  });
+
+  it('filters automated community rating dto updates as one lockable provider bundle', async () => {
+    const { service } = makeService(['communityRating']);
+
+    const result = await service.filterAutomatedBookUpdate(12, {
+      title: 'Allowed',
+      communityRatings: [{ provider: MetadataProviderKey.HARDCOVER, rating: 4.25, ratingCount: 12345 }],
+    });
+
+    expect(result).toEqual({
+      dto: { title: 'Allowed' },
+      skippedFields: ['communityRating'],
+    });
+  });
+
   it('propagates repository errors', async () => {
     const lockRepo = {
       findLockedFields: vi.fn().mockRejectedValue(new Error('db failure')),
@@ -135,13 +187,14 @@ describe('BookMetadataLockService', () => {
   });
 
   it('filters resolved metadata and provider ids for locked fields', async () => {
-    const { service } = makeService(['cover', 'authors', 'openLibraryId', 'comicVolumeName']);
+    const { service } = makeService(['cover', 'authors', 'openLibraryId', 'hardcoverEditionId', 'comicVolumeName']);
 
     const result = await service.filterResolvedMetadata(
       12,
       {
         title: 'Allowed Title',
         authors: ['Locked Author'],
+        hardcoverEditionId: '1001',
         coverUrl: 'https://example.com/cover.jpg',
         comicMetadata: {
           issueNumber: '7',
@@ -163,6 +216,6 @@ describe('BookMetadataLockService', () => {
     expect(result.providerIds).toEqual({
       [MetadataProviderKey.GOOGLE]: 'g-id',
     });
-    expect(result.skippedFields).toEqual(['authors', 'openLibraryId', 'comicVolumeName', 'cover']);
+    expect(result.skippedFields).toEqual(['authors', 'hardcoverEditionId', 'openLibraryId', 'comicVolumeName', 'cover']);
   });
 });
