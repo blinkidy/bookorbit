@@ -29,6 +29,10 @@ function makeSyncStatus(overrides: Partial<KoreaderSyncStatus> = {}): KoreaderSy
     ],
     totalSyncedBooks: 14,
     lastSyncAt: '2026-01-02T00:00:00.000Z',
+    latestPluginVersion: '0.5.0',
+    pluginUpdateAvailable: false,
+    sweeps: [],
+    pluginTotals: { matchedBooks: 0, trashedAnnotations: 0, pendingDeletes: 0, failedPositions: 0, pageStatEvents: 0, annotations: 0 },
     ...overrides,
   }
 }
@@ -40,6 +44,14 @@ function makeResponse(data: unknown, options: { ok?: boolean; status?: number } 
     status,
     json: async () => data,
   } as Response
+}
+
+function makeInvalidJsonResponse(): Response {
+  return {
+    ok: false,
+    status: 500,
+    json: async () => Promise.reject(new Error('not json')),
+  } as unknown as Response
 }
 
 describe('useKoreaderSync', () => {
@@ -120,6 +132,20 @@ describe('useKoreaderSync', () => {
     expect(apiMock).toHaveBeenCalledTimes(1)
   })
 
+  it('createCredentials uses the fallback error when the response body is not JSON', async () => {
+    const payload: CreateKoreaderCredentialsPayload = {
+      username: 'new-user',
+      password: 'bad-secret',
+    }
+    apiMock.mockResolvedValueOnce(makeInvalidJsonResponse())
+
+    const { useKoreaderSync } = await import('../useKoreaderSync')
+    const { createCredentials } = useKoreaderSync()
+
+    await expect(createCredentials(payload)).rejects.toThrow('Failed to create credentials')
+    expect(apiMock).toHaveBeenCalledTimes(1)
+  })
+
   it('updateCredentials makes PATCH with payload and refreshes status', async () => {
     const payload: UpdateKoreaderCredentialsPayload = {
       username: 'updated-user',
@@ -145,6 +171,32 @@ describe('useKoreaderSync', () => {
     expect(credentials.value).toEqual(refreshedStatus.credentials)
   })
 
+  it('updateCredentials throws error on non-ok response with message', async () => {
+    const payload: UpdateKoreaderCredentialsPayload = {
+      syncEnabled: false,
+    }
+    apiMock.mockResolvedValueOnce(makeResponse({ message: 'Username is already taken' }, { ok: false, status: 409 }))
+
+    const { useKoreaderSync } = await import('../useKoreaderSync')
+    const { updateCredentials } = useKoreaderSync()
+
+    await expect(updateCredentials(payload)).rejects.toThrow('Username is already taken')
+    expect(apiMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('updateCredentials uses the fallback error when the response body is not JSON', async () => {
+    const payload: UpdateKoreaderCredentialsPayload = {
+      syncEnabled: false,
+    }
+    apiMock.mockResolvedValueOnce(makeInvalidJsonResponse())
+
+    const { useKoreaderSync } = await import('../useKoreaderSync')
+    const { updateCredentials } = useKoreaderSync()
+
+    await expect(updateCredentials(payload)).rejects.toThrow('Failed to update credentials')
+    expect(apiMock).toHaveBeenCalledTimes(1)
+  })
+
   it('deleteCredentials makes DELETE and clears refs', async () => {
     apiMock.mockResolvedValueOnce(makeResponse({}))
 
@@ -158,6 +210,15 @@ describe('useKoreaderSync', () => {
     expect(apiMock).toHaveBeenCalledWith('/api/v1/koreader/credentials', { method: 'DELETE' })
     expect(syncStatus.value).toBeNull()
     expect(credentials.value).toBeNull()
+  })
+
+  it('deleteCredentials throws when the delete request fails', async () => {
+    apiMock.mockResolvedValueOnce(makeResponse({}, { ok: false, status: 500 }))
+
+    const { useKoreaderSync } = await import('../useKoreaderSync')
+    const { deleteCredentials } = useKoreaderSync()
+
+    await expect(deleteCredentials()).rejects.toThrow('Failed to delete credentials')
   })
 
   it('testConnection returns true on success response', async () => {
@@ -183,10 +244,57 @@ describe('useKoreaderSync', () => {
     await expect(testConnection('reader-user', 'secret')).resolves.toBe(false)
   })
 
-  it('getSyncUrl returns current origin plus koreader endpoint', async () => {
+  it('getSyncUrl returns current origin for plugin setup', async () => {
     const { useKoreaderSync } = await import('../useKoreaderSync')
     const { getSyncUrl } = useKoreaderSync()
 
-    expect(getSyncUrl()).toBe(`${window.location.origin}/api/v1/koreader`)
+    expect(getSyncUrl()).toBe(window.location.origin)
+  })
+
+  it('downloadPluginPackage requests the zip with the current origin and triggers a download', async () => {
+    const blob = new Blob(['zip'])
+    apiMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}), blob: async () => blob } as unknown as Response)
+
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    const createObjectURL = vi.fn<(obj: Blob | MediaSource) => string>(() => 'blob:plugin-zip')
+    const revokeObjectURL = vi.fn<(url: string) => void>()
+    URL.createObjectURL = createObjectURL
+    URL.revokeObjectURL = revokeObjectURL
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    try {
+      const { useKoreaderSync } = await import('../useKoreaderSync')
+      const { downloadPluginPackage } = useKoreaderSync()
+
+      await downloadPluginPackage()
+
+      expect(apiMock).toHaveBeenCalledWith(`/api/v1/koreader/plugin-package?origin=${encodeURIComponent(window.location.origin)}`)
+      expect(createObjectURL).toHaveBeenCalledWith(blob)
+      expect(clickSpy).toHaveBeenCalledTimes(1)
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:plugin-zip')
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL
+      URL.revokeObjectURL = originalRevokeObjectURL
+      clickSpy.mockRestore()
+    }
+  })
+
+  it('downloadPluginPackage throws the server message on failure', async () => {
+    apiMock.mockResolvedValueOnce(makeResponse({ message: 'Create KOReader sync credentials first' }, { ok: false, status: 404 }))
+
+    const { useKoreaderSync } = await import('../useKoreaderSync')
+    const { downloadPluginPackage } = useKoreaderSync()
+
+    await expect(downloadPluginPackage()).rejects.toThrow('Create KOReader sync credentials first')
+  })
+
+  it('downloadPluginPackage uses the fallback error when the response body is not JSON', async () => {
+    apiMock.mockResolvedValueOnce(makeInvalidJsonResponse())
+
+    const { useKoreaderSync } = await import('../useKoreaderSync')
+    const { downloadPluginPackage } = useKoreaderSync()
+
+    await expect(downloadPluginPackage()).rejects.toThrow('Failed to download the plugin')
   })
 })

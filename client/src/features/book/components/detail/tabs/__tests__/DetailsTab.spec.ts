@@ -48,7 +48,9 @@ function makeBook(overrides: Partial<BookDetail> = {}): BookDetail {
     seriesName: null,
     seriesIndex: null,
     rating: null,
+    communityRatings: [],
     coverSource: 'extracted',
+    hardcoverEditionId: null,
     providerIds: {},
     authors: [{ id: 1, name: 'Author One', sortName: null }],
     genres: [],
@@ -71,6 +73,7 @@ function makeBook(overrides: Partial<BookDetail> = {}): BookDetail {
     audioMetadata: null,
     formatPriority: [],
     comicMetadata: null,
+    customMetadata: [],
     lockedFields: [],
     collections: [],
     ...overrides,
@@ -96,8 +99,10 @@ const RouterLinkStub = defineComponent({
   template: '<a><slot /></a>',
 })
 
+let mountedWrappers: Array<{ unmount: () => void }> = []
+
 function mountDetails(book: BookDetail) {
-  return shallowMount(DetailsTab, {
+  const wrapper = shallowMount(DetailsTab, {
     props: { book },
     global: {
       stubs: {
@@ -110,6 +115,8 @@ function mountDetails(book: BookDetail) {
       },
     },
   })
+  mountedWrappers.push(wrapper)
+  return wrapper
 }
 
 async function loadCoverImages(wrapper: ReturnType<typeof mountDetails>, naturalWidth = 1000, naturalHeight = 1000) {
@@ -166,6 +173,8 @@ describe('DetailsTab cover surface', () => {
   })
 
   afterEach(() => {
+    for (const wrapper of mountedWrappers) wrapper.unmount()
+    mountedWrappers = []
     bookSpineOverlay.value = 'off'
     bookCoverDisplayMode.value = 'blurred-fit'
     vi.unstubAllGlobals()
@@ -252,6 +261,37 @@ describe('DetailsTab cover surface', () => {
       { name: 'author-detail', params: { id: 42 } },
     ])
     expect(wrapper.text()).toContain('Author One, Author Two')
+  })
+
+  it('renders community rating badges with score and tooltip per provider', async () => {
+    const wrapper = mountDetails(
+      makeBook({
+        communityRatings: [
+          { provider: 'amazon', rating: 4.8, ratingCount: 104451, updatedAt: '2026-06-25T00:00:00.000Z' },
+          { provider: 'hardcover', rating: 4.25, ratingCount: 12345, updatedAt: '2026-06-24T00:00:00.000Z' },
+        ],
+      }),
+    )
+    await flushPromises()
+
+    // Scores are visible as text in the badges
+    expect(wrapper.text()).toContain('4.8')
+    expect(wrapper.text()).toContain('4.3')
+
+    // Full detail is in the title tooltip (not in visible text)
+    const titledEls = wrapper.findAll('[title]')
+    const tooltips = titledEls.map((el) => el.attributes('title') ?? '')
+    expect(tooltips.some((t) => t.includes('4.8 / 5') && t.includes('104,451'))).toBe(true)
+    expect(tooltips.some((t) => t.includes('4.3 / 5') && t.includes('12,345'))).toBe(true)
+  })
+
+  it('places the Hardcover sync grid item with the current book id', async () => {
+    const wrapper = mountDetails(makeBook())
+    await flushPromises()
+
+    const item = wrapper.findComponent({ name: 'HardcoverBookSyncGridItem' })
+    expect(item.exists()).toBe(true)
+    expect(item.props('bookId')).toBe(12)
   })
 
   it('renders Send via Email button and opens dialog when user has email_send permission', async () => {

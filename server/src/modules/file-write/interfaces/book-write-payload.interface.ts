@@ -1,4 +1,5 @@
 import type { BookFileWriteField } from '@bookorbit/types';
+import type { CustomMetadataBookValue } from '@bookorbit/types';
 
 export interface BookWritePayload {
   title?: string | null;
@@ -20,6 +21,7 @@ export interface BookWritePayload {
   goodreadsId?: string | null;
   amazonId?: string | null;
   hardcoverId?: string | null;
+  hardcoverEditionId?: string | null;
   openLibraryId?: string | null;
   ranobedbId?: string | null;
   koboId?: string | null;
@@ -39,6 +41,7 @@ export interface BookWritePayload {
   itunesId?: string | null;
   audibleId?: string | null;
   narrators?: string[];
+  customMetadata?: CustomMetadataBookValue[];
   coverBytes?: Buffer | null;
 }
 
@@ -46,4 +49,4 @@ export type BookWritePayloadKey = BookFileWriteField;
 
 type AssertNoFieldDrift<T extends never> = T;
 export type BookWritePayloadMissingFieldCheck = AssertNoFieldDrift<Exclude<BookWritePayloadKey, keyof BookWritePayload>>;
-export type BookWritePayloadExtraFieldCheck = AssertNoFieldDrift<Exclude<keyof BookWritePayload, BookWritePayloadKey>>;
+export type BookWritePayloadExtraFieldCheck = AssertNoFieldDrift<Exclude<keyof BookWritePayload, BookWritePayloadKey | 'customMetadata'>>;

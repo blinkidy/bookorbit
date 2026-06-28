@@ -94,8 +94,12 @@ describe('FileWriteRepository', () => {
       goodreadsId: 'gr',
       amazonId: 'a',
       hardcoverId: 'h',
+      hardcoverEditionId: '8941973',
       openLibraryId: 'ol',
       ranobedbId: 'rn',
+      koboId: 'kb',
+      lubimyczytacId: 'lc',
+      aladinId: 'al',
       itunesId: 'it',
       audibleId: 'aud',
       rating: 4,
@@ -145,6 +149,35 @@ describe('FileWriteRepository', () => {
         },
       ]),
     };
+    const customMetadataChain = {
+      from: vi.fn().mockReturnThis(),
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockResolvedValue([
+        {
+          fieldId: 3,
+          key: 'mood',
+          label: 'Mood',
+          type: 'text',
+          displayOrder: 0,
+          valueText: 'Melancholy',
+          valueNumber: null,
+          valueDate: null,
+          valueBoolean: null,
+        },
+        {
+          fieldId: 4,
+          key: 'read',
+          label: 'Read',
+          type: 'boolean',
+          displayOrder: 1,
+          valueText: null,
+          valueNumber: null,
+          valueDate: null,
+          valueBoolean: false,
+        },
+      ]),
+    };
 
     const db = {
       select: vi
@@ -154,7 +187,8 @@ describe('FileWriteRepository', () => {
         .mockReturnValueOnce(narratorChain)
         .mockReturnValueOnce(genreChain)
         .mockReturnValueOnce(tagChain)
-        .mockReturnValueOnce(comicChain),
+        .mockReturnValueOnce(comicChain)
+        .mockReturnValueOnce(customMetadataChain),
     };
 
     const repo = new FileWriteRepository(db as never);
@@ -176,6 +210,24 @@ describe('FileWriteRepository', () => {
       comicTeams: ['Team A'],
       comicLocations: ['Location A'],
       comicStoryArcs: ['Arc A'],
+      customMetadata: [
+        {
+          fieldId: 3,
+          key: 'mood',
+          label: 'Mood',
+          type: 'text',
+          displayOrder: 0,
+          value: 'Melancholy',
+        },
+        {
+          fieldId: 4,
+          key: 'read',
+          label: 'Read',
+          type: 'boolean',
+          displayOrder: 1,
+          value: false,
+        },
+      ],
     });
   });
 

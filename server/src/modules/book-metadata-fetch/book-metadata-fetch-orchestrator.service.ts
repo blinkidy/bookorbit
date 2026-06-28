@@ -78,10 +78,9 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
   async triggerGlobal(): Promise<number> {
     const config = await this.configService.getGlobalConfig();
     const queued = await this.queueRepo.scheduleEligibleBooksInBatches(config, 'manual_trigger', undefined, SCHEDULE_BATCH_SIZE);
-    if (queued === 0) return 0;
+    await this.unpauseIfNeeded();
     if (queued > 0) {
       this.session.addToTotal(queued);
-      await this.unpauseIfNeeded();
       await this.emitStatus();
       void this.pollOnce();
     }
@@ -90,17 +89,14 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
 
   async triggerForLibrary(libraryId: number): Promise<number> {
     const config = await this.configService.getEffectiveConfig(libraryId);
-    if (!config.enabled) return 0;
-
     const queued = await this.queueRepo.scheduleEligibleBooksInBatches(config, 'manual_trigger', libraryId, SCHEDULE_BATCH_SIZE);
-    if (queued === 0) return 0;
+    await this.configService.recordLibraryRun(libraryId, queued);
+    await this.unpauseIfNeeded();
     if (queued > 0) {
       this.session.addToTotal(queued);
-      await this.unpauseIfNeeded();
       await this.emitStatus();
       void this.pollOnce();
     }
-    await this.configService.recordLibraryRun(libraryId, queued);
     return queued;
   }
 
@@ -180,7 +176,7 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
         return;
       }
 
-      const { book, authorRows, genreRows, narratorRows } = found;
+      const { book, authorRows, genreRows, narratorRows, communityRatingRows } = found;
       const meta = book.book_metadata;
       const libraryId = book.books.libraryId;
 
@@ -202,6 +198,7 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
         publishedYear: meta?.publishedYear,
         language: meta?.language,
         pageCount: meta?.pageCount,
+        communityRating: communityRatingRows,
         seriesName: meta?.seriesName,
         seriesIndex: meta?.seriesIndex,
         genres: genreRows.map((g) => g.name),
@@ -285,6 +282,8 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
     if (filteredProviderIds[MetadataProviderKey.GOODREADS]) scalarFields.goodreadsId = filteredProviderIds[MetadataProviderKey.GOODREADS];
     if (filteredProviderIds[MetadataProviderKey.AMAZON]) scalarFields.amazonId = filteredProviderIds[MetadataProviderKey.AMAZON];
     if (filteredProviderIds[MetadataProviderKey.HARDCOVER]) scalarFields.hardcoverId = filteredProviderIds[MetadataProviderKey.HARDCOVER];
+    const hardcoverEditionId = this.asNullableString(filteredResolved.hardcoverEditionId);
+    if (hardcoverEditionId !== undefined) scalarFields.hardcoverEditionId = hardcoverEditionId;
     if (filteredProviderIds[MetadataProviderKey.OPEN_LIBRARY]) scalarFields.openLibraryId = filteredProviderIds[MetadataProviderKey.OPEN_LIBRARY];
     if (filteredProviderIds[MetadataProviderKey.ITUNES]) scalarFields.itunesId = filteredProviderIds[MetadataProviderKey.ITUNES];
     if (filteredProviderIds[MetadataProviderKey.AUDIBLE]) scalarFields.audibleId = filteredProviderIds[MetadataProviderKey.AUDIBLE];
@@ -305,6 +304,17 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
     scalarFields.lastMetadataFetchAt = new Date();
     scalarFields.updatedAt = new Date();
     await this.bookReadService.updateMetadataFields(bookId, scalarFields);
+
+    if (filteredResolved.communityRatings !== undefined) {
+      await this.bookReadService.replaceCommunityRatings(
+        bookId,
+        filteredResolved.communityRatings.map((rating) => ({
+          provider: rating.provider,
+          rating: rating.rating,
+          ratingCount: rating.ratingCount,
+        })),
+      );
+    }
 
     const resolvedAuthors = this.asStringArray(filteredResolved.authors);
     if (resolvedAuthors !== undefined) {
@@ -348,7 +358,7 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
   private async loadEligibilityData(bookId: number) {
     const found = await this.bookReadService.findById(bookId);
     if (!found) return null;
-    const { book, authorRows, genreRows, narratorRows } = found;
+    const { book, authorRows, genreRows, narratorRows, communityRatingRows } = found;
     const meta = book.book_metadata;
     return {
       metadataScore: meta?.metadataScore ?? null,
@@ -360,6 +370,7 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
       publishedYear: meta?.publishedYear ?? null,
       language: meta?.language ?? null,
       pageCount: meta?.pageCount ?? null,
+      communityRating: communityRatingRows,
       seriesName: meta?.seriesName ?? null,
       seriesIndex: meta?.seriesIndex ?? null,
       coverSource: meta?.coverSource ?? null,
@@ -376,6 +387,7 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
     goodreadsId?: string | null;
     amazonId?: string | null;
     hardcoverId?: string | null;
+    hardcoverEditionId?: string | null;
     openLibraryId?: string | null;
     itunesId?: string | null;
     audibleId?: string | null;

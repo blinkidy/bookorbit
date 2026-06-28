@@ -2,6 +2,7 @@ import 'reflect-metadata';
 
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { MetadataProviderKey } from '@bookorbit/types';
 
 import { BulkBookIdsDto } from './bulk-book-ids.dto';
 import { BulkQuerySelectionDto } from './bulk-query-selection.dto';
@@ -42,7 +43,9 @@ describe('Book DTO validation', () => {
     expect((await errorsFor(BulkSelectionDto, { query: {} })).length).toBe(0);
     expect((await errorsFor(BulkSelectionDto, {})).length).toBeGreaterThan(0);
     expect((await errorsFor(BulkSelectionDto, { bookIds: [] })).length).toBeGreaterThan(0);
+    expect((await errorsFor(BulkSelectionDto, { bookIds: [0] })).length).toBeGreaterThan(0);
     expect((await errorsFor(BulkSelectionDto, { bookIds: ['x'] })).length).toBeGreaterThan(0);
+    expect((await errorsFor(BulkQuerySelectionDto, { libraryId: 0 })).length).toBeGreaterThan(0);
   });
 
   it('validates bulk book id DTOs in explicit and query modes', async () => {
@@ -161,11 +164,27 @@ describe('Book DTO validation', () => {
           genres: ['Sci-Fi'],
           tags: ['classic'],
           amazonId: 'B00TEST',
+          communityRatings: [{ provider: MetadataProviderKey.HARDCOVER, rating: 4.25, ratingCount: 12345 }],
         })
       ).length,
     ).toBe(0);
 
     expect((await errorsFor(UpdateBookMetadataDto, { rating: 6 })).length).toBeGreaterThan(0);
+    expect(
+      (await errorsFor(UpdateBookMetadataDto, { communityRatings: [{ provider: MetadataProviderKey.HARDCOVER, rating: -1 }] })).length,
+    ).toBeGreaterThan(0);
+    expect(
+      (await errorsFor(UpdateBookMetadataDto, { communityRatings: [{ provider: MetadataProviderKey.HARDCOVER, rating: 5.1 }] })).length,
+    ).toBeGreaterThan(0);
+    expect(
+      (await errorsFor(UpdateBookMetadataDto, { communityRatings: [{ provider: MetadataProviderKey.HARDCOVER, rating: 4, ratingCount: -1 }] }))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      (await errorsFor(UpdateBookMetadataDto, { communityRatings: [{ provider: MetadataProviderKey.HARDCOVER, rating: 4, ratingCount: 1.5 }] }))
+        .length,
+    ).toBeGreaterThan(0);
+    expect((await errorsFor(UpdateBookMetadataDto, { communityRatings: [{ provider: 'unknown', rating: 4 }] })).length).toBeGreaterThan(0);
     expect((await errorsFor(UpdateBookMetadataDto, { publishedYear: 0 })).length).toBeGreaterThan(0);
     expect((await errorsFor(UpdateBookMetadataDto, { publishedYear: 999 })).length).toBeGreaterThan(0);
     expect((await errorsFor(UpdateBookMetadataDto, { publishedYear: 2201 })).length).toBeGreaterThan(0);

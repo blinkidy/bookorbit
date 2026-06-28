@@ -1,8 +1,9 @@
-import type { MetadataFetchDiagnostics, MetadataProviderKey, MetadataSeriesMembership } from "./metadata-fetch";
+import type { BookCommunityRating, MetadataFetchDiagnostics, MetadataProviderKey, MetadataSeriesMembership } from "./metadata-fetch";
 import type { BookMetadataLockField } from "./metadata-lock";
 import type { AudiobookChapter, NarratorRef } from "./audiobook";
 import type { ComicMetadataFields } from "./metadata-fetch";
 import type { BookFileWriteField, WriteResult } from "./file-write";
+import type { CustomMetadataBookValue } from "./custom-metadata";
 
 export const BOOK_FORMATS = ["epub", "pdf", "mobi", "azw3", "cbz", "cbr", "cb7", "fb2", "m4b", "mp3", "m4a", "opus", "ogg", "flac"] as const;
 export type BookFormat = (typeof BOOK_FORMATS)[number];
@@ -69,6 +70,8 @@ export type BookCard = {
   publisher: string | null;
   pageCount: number | null;
   isbn13: string | null;
+  hardcoverId?: string | null;
+  hardcoverEditionId?: string | null;
   narrators: string[];
   tags: string[];
   collapsedSeries?: import("./series-collapse").CollapsedSeriesInfo;
@@ -130,7 +133,9 @@ export type BookDetail = {
   seriesIndex: number | null;
   seriesMemberships?: BookSeriesMembership[];
   rating: number | null;
+  communityRatings: BookCommunityRating[];
   coverSource: "extracted" | "custom" | null;
+  hardcoverEditionId: string | null;
   providerIds: ProviderIds;
   authors: { id: number; name: string; sortName: string | null }[];
   genres: string[];
@@ -142,6 +147,7 @@ export type BookDetail = {
   audioMetadata: AudioMetadata | null;
   formatPriority: string[];
   comicMetadata: ComicMetadataFields | null;
+  customMetadata: CustomMetadataBookValue[];
   lockedFields: BookMetadataLockField[];
   collections: { id: number; name: string }[];
   fileWriteStatus?: BookFileWriteStatus;
@@ -166,11 +172,13 @@ export type BookMetadataRefreshPreviewFields = {
   seriesName?: string | null;
   seriesIndex?: number | null;
   seriesMemberships?: MetadataSeriesMembership[] | null;
+  communityRatings?: BookCommunityRating[];
   coverUrl?: string;
   googleBooksId?: string | null;
   goodreadsId?: string | null;
   amazonId?: string | null;
   hardcoverId?: string | null;
+  hardcoverEditionId?: string | null;
   openLibraryId?: string | null;
   itunesId?: string | null;
   audibleId?: string | null;

@@ -3,6 +3,8 @@ import type {
   BookFileWriteStatus,
   BookSeriesMembership,
   BookMetadataLockField,
+  BookCommunityRating,
+  CustomMetadataBookValue,
   ComicMetadataFields,
   NarratorRef,
   ProviderIds,
@@ -49,7 +51,9 @@ export class BookDetailDto {
   seriesIndex: number | null;
   seriesMemberships: BookSeriesMembership[];
   rating: number | null;
+  communityRatings: BookCommunityRating[];
   coverSource: 'extracted' | 'custom' | null;
+  hardcoverEditionId: string | null;
   providerIds: ProviderIds;
   authors: { id: number; name: string; sortName: string | null }[];
   genres: string[];
@@ -61,6 +65,7 @@ export class BookDetailDto {
   audioMetadata: AudioMetadataDto | null;
   formatPriority: string[];
   comicMetadata: ComicMetadataFields | null;
+  customMetadata: CustomMetadataBookValue[];
   lockedFields: BookMetadataLockField[];
   collections: { id: number; name: string }[];
   fileWriteStatus: BookFileWriteStatus;

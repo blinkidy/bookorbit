@@ -38,8 +38,22 @@ function editionRank(edition: HardcoverEdition): number {
   return (isAudiobookEdition(edition) ? 2 : 0) + (edition.pages == null ? 1 : 0);
 }
 
+function resolveEditionPublishedYear(edition: HardcoverEdition, book: HardcoverBookWithEditions): number | undefined {
+  return parseYear(edition.release_year, edition.release_date) ?? parseYear(book.release_year, book.release_date);
+}
+
+function normalizeCommunityRating(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 5 ? value : undefined;
+}
+
+function normalizeCommunityRatingCount(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
 export function mapSearchDocument(doc: HardcoverSearchDocument): MetadataCandidate {
   const { isbn10, isbn13 } = pickIsbn(doc.isbns);
+  const communityRating = normalizeCommunityRating(doc.rating);
+  const communityRatingCount = normalizeCommunityRatingCount(doc.ratings_count);
 
   return {
     provider: MetadataProviderKey.HARDCOVER,
@@ -57,6 +71,8 @@ export function mapSearchDocument(doc: HardcoverSearchDocument): MetadataCandida
     seriesIndex: doc.featured_series?.position ?? undefined,
     coverUrl: doc.image?.url,
     sourceUrl: `https://hardcover.app/books/${doc.slug}`,
+    ...(communityRating !== undefined ? { communityRating } : {}),
+    ...(communityRatingCount !== undefined ? { communityRatingCount } : {}),
   };
 }
 
@@ -68,10 +84,13 @@ export function mapBookWithEditions(book: HardcoverBookWithEditions): MetadataCa
 function mapEdition(edition: HardcoverEdition, book: HardcoverBookWithEditions): MetadataCandidate {
   const editionAuthors = extractAuthorsFromContributors(edition.cached_contributors);
   const authors = editionAuthors.length > 0 ? editionAuthors : extractAuthorsFromContributors(book.cached_contributors);
+  const communityRating = normalizeCommunityRating(book.rating);
+  const communityRatingCount = normalizeCommunityRatingCount(book.ratings_count);
 
   return {
     provider: MetadataProviderKey.HARDCOVER,
     providerId: book.slug,
+    hardcoverEditionId: String(edition.id),
     title: edition.title ?? book.title,
     subtitle: edition.subtitle ?? book.subtitle,
     description: book.description,
@@ -79,12 +98,14 @@ function mapEdition(edition: HardcoverEdition, book: HardcoverBookWithEditions):
     publisher: edition.publisher?.name,
     language: edition.language?.code2,
     pageCount: isAudiobookEdition(edition) ? undefined : (edition.pages ?? book.pages),
-    publishedYear: parseYear(edition.release_year ?? book.release_year, edition.release_date ?? book.release_date),
+    publishedYear: resolveEditionPublishedYear(edition, book),
     isbn10: edition.isbn_10,
     isbn13: edition.isbn_13,
     seriesName: book.featured_book_series?.series?.name,
     seriesIndex: book.featured_book_series?.position ?? undefined,
     coverUrl: edition.image?.url ?? book.image?.url,
     sourceUrl: `https://hardcover.app/books/${book.slug}`,
+    ...(communityRating !== undefined ? { communityRating } : {}),
+    ...(communityRatingCount !== undefined ? { communityRatingCount } : {}),
   };
 }

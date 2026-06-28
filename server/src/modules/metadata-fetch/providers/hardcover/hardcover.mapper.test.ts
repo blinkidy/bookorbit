@@ -15,6 +15,8 @@ const baseDocument: HardcoverSearchDocument = {
   release_year: 2007,
   release_date: '2007-03-27',
   genres: ['Fantasy', 'Fiction'],
+  rating: 4.42,
+  ratings_count: 12345,
   featured_series: { series: { name: 'The Kingkiller Chronicle' }, position: 1 },
   image: { url: 'https://assets.hardcover.app/cover.jpg' },
 };
@@ -27,6 +29,8 @@ const baseBook: HardcoverBookWithEditions = {
   description: 'A story about a wizard.',
   cached_contributors: [{ author: { id: 1, name: 'Patrick Rothfuss' }, contribution: null }],
   featured_book_series: { series: { name: 'The Kingkiller Chronicle', books_count: 3 }, position: 1 },
+  rating: 4.42,
+  ratings_count: 12345,
   pages: 662,
   release_year: 2007,
   release_date: '2007-03-27',
@@ -69,7 +73,10 @@ describe('mapSearchDocument', () => {
       seriesIndex: 1,
       coverUrl: 'https://assets.hardcover.app/cover.jpg',
       sourceUrl: 'https://hardcover.app/books/the-name-of-the-wind',
+      communityRating: 4.42,
+      communityRatingCount: 12345,
     });
+    expect(result.hardcoverEditionId).toBeUndefined();
   });
 
   it('prefers release_year over release_date for publishedYear', () => {
@@ -144,6 +151,7 @@ describe('mapBookWithEditions', () => {
     expect(result).toEqual({
       provider: MetadataProviderKey.HARDCOVER,
       providerId: 'the-name-of-the-wind',
+      hardcoverEditionId: '1001',
       title: 'The Name of the Wind',
       subtitle: 'Edition Subtitle',
       description: 'A story about a wizard.',
@@ -156,6 +164,8 @@ describe('mapBookWithEditions', () => {
       isbn13: '9780756404079',
       seriesName: 'The Kingkiller Chronicle',
       seriesIndex: 1,
+      communityRating: 4.42,
+      communityRatingCount: 12345,
       coverUrl: 'https://assets.hardcover.app/edition-cover.jpg',
       sourceUrl: 'https://hardcover.app/books/the-name-of-the-wind',
     });
@@ -182,7 +192,9 @@ describe('mapBookWithEditions', () => {
     const results = mapBookWithEditions(book);
     expect(results).toHaveLength(2);
     expect(results[0].isbn13).toBe('9780000000001');
+    expect(results[0].hardcoverEditionId).toBe('1001');
     expect(results[1].isbn13).toBe('9780000000002');
+    expect(results[1].hardcoverEditionId).toBe('1002');
   });
 
   it('uses edition authors when present', () => {
@@ -230,6 +242,49 @@ describe('mapBookWithEditions', () => {
       editions: [{ ...baseBook.editions![0], image: undefined }],
     };
     expect(mapBookWithEditions(book)[0].coverUrl).toBe('https://assets.hardcover.app/book-cover.jpg');
+  });
+
+  it('uses edition release_date before book release_year when edition release_year is absent', () => {
+    const book: HardcoverBookWithEditions = {
+      ...baseBook,
+      release_year: 1962,
+      release_date: '1962-01-01',
+      editions: [
+        {
+          ...baseBook.editions![0],
+          title: 'Det osynliga barnet och andra berättelser',
+          release_year: undefined,
+          release_date: '2019-08-08',
+          publisher: { name: 'Förlaget M' },
+          language: { code2: 'sv' },
+          pages: 150,
+          isbn_10: '9523331647',
+          isbn_13: '9789523331648',
+        },
+      ],
+    };
+
+    const [result] = mapBookWithEditions(book);
+
+    expect(result).toMatchObject({
+      publisher: 'Förlaget M',
+      language: 'sv',
+      pageCount: 150,
+      publishedYear: 2019,
+      isbn10: '9523331647',
+      isbn13: '9789523331648',
+    });
+  });
+
+  it('prefers edition release_year over edition release_date and book release_year', () => {
+    const book: HardcoverBookWithEditions = {
+      ...baseBook,
+      release_year: 1962,
+      release_date: '1962-01-01',
+      editions: [{ ...baseBook.editions![0], release_year: 2020, release_date: '2019-08-08' }],
+    };
+
+    expect(mapBookWithEditions(book)[0].publishedYear).toBe(2020);
   });
 
   it('falls back to book publishedYear when edition has no date fields', () => {
