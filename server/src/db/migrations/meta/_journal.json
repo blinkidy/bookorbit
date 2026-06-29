@@ -239,6 +239,13 @@
                         "when":  1782421105734,
                         "tag":  "0033_reading-session-book-id-not-null",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  34,
+                        "version":  "7",
+                        "when":  1782421105735,
+                        "tag":  "0034_add_storygraph_sync_controls",
+                        "breakpoints":  true
                     }
                 ]
 }

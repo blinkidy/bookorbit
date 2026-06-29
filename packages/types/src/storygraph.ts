@@ -30,6 +30,35 @@ export interface StorygraphSyncPendingSummary {
   pendingBooks: number;
 }
 
+export type StorygraphBookSyncOverride = "included" | "excluded" | null;
+
+export type StorygraphBookSyncEffectiveReason =
+  | StorygraphSyncDisabledReason
+  | "global_disabled"
+  | "excluded"
+  | "unread"
+  | "unsupported_status"
+  | "pre_existing_finished";
+
+export interface StorygraphBookSyncState {
+  bookId: number;
+  syncOverride: StorygraphBookSyncOverride;
+  syncEnabled: boolean;
+  canSyncNow: boolean;
+  effectiveReason: StorygraphBookSyncEffectiveReason | null;
+  lastSyncedAt: string | null;
+  syncError: string | null;
+}
+
+export interface UpdateStorygraphBookSyncPayload {
+  syncEnabled: boolean;
+}
+
+export interface StorygraphBookSyncNowResult {
+  result: "synced" | "skipped" | "failed";
+  state: StorygraphBookSyncState;
+}
+
 export interface StorygraphActiveSyncStatus {
   runId: number;
   syncedBooks: number;

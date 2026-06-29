@@ -42,6 +42,7 @@ export const storygraphBookState = pgTable(
     lastSyncedStatus: varchar('last_synced_status', { length: 20 }),
     lastSyncedProgress: real('last_synced_progress'),
     syncError: text('sync_error'),
+    syncOverride: varchar('sync_override', { length: 20 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()

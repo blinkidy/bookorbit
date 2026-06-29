@@ -49,3 +49,8 @@ export class SetStorygraphEditionDto {
   @MaxLength(64)
   editionId!: string;
 }
+
+export class UpdateStorygraphBookSyncDto {
+  @IsBoolean()
+  syncEnabled!: boolean;
+}

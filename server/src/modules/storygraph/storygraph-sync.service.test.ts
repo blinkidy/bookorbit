@@ -10,8 +10,10 @@ const mockRepo = {
   updateLastSyncedAt: vi.fn(),
   findSyncableBooks: vi.fn(),
   findSyncableBook: vi.fn(),
+  findBookSyncData: vi.fn(),
   clearBookMatch: vi.fn(),
   findSettings: vi.fn(),
+  setBookSyncOverride: vi.fn(),
 };
 
 const mockClient = {
@@ -29,6 +31,7 @@ const mockMatchService = {
 
 const mockSettingsService = {
   getCookiesForUser: vi.fn(),
+  getSettings: vi.fn(),
 };
 
 function makeService() {
@@ -55,10 +58,22 @@ describe('StorygraphSyncService', () => {
     mockRepo.findBookStatesByBookIds.mockResolvedValue([]);
     mockRepo.findSyncableBooks.mockResolvedValue([]);
     mockRepo.findSyncableBook.mockResolvedValue(null);
+    mockRepo.findBookSyncData.mockImplementation((userId: number, bookId: number) => mockRepo.findSyncableBook(userId, bookId));
     mockRepo.upsertBookState.mockResolvedValue({});
     mockRepo.updateLastSyncedAt.mockResolvedValue(undefined);
     mockRepo.clearBookMatch.mockResolvedValue(undefined);
+    mockRepo.setBookSyncOverride.mockResolvedValue({});
     mockRepo.findSettings.mockResolvedValue({ connectedAt: null });
+    mockSettingsService.getSettings.mockResolvedValue({
+      cookiesConfigured: true,
+      enabled: true,
+      effectiveEnabled: true,
+      disabledReason: null,
+      autoSyncOnStatusChange: true,
+      autoSyncOnProgressUpdate: true,
+      lastSyncedAt: null,
+      connectedAt: null,
+    });
     mockClient.extractCsrfToken.mockReturnValue('csrf-token');
     mockClient.get.mockResolvedValue({ status: 200, html: '<html></html>', redirectedToSignIn: false });
     mockClient.post.mockResolvedValue({ status: 302, html: '', redirectedToSignIn: false });
