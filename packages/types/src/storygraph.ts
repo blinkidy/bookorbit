@@ -1,10 +1,12 @@
 export type StorygraphSyncDisabledReason = "permission_denied" | "missing_cookies" | "user_disabled";
+export type StorygraphBookSyncMode = "all_eligible" | "selected_only";
 
 export interface StorygraphSettings {
   cookiesConfigured: boolean;
   enabled: boolean;
   effectiveEnabled: boolean;
   disabledReason: StorygraphSyncDisabledReason | null;
+  bookSyncMode: StorygraphBookSyncMode;
   autoSyncOnStatusChange: boolean;
   autoSyncOnProgressUpdate: boolean;
   lastSyncedAt: string | null;
@@ -15,6 +17,7 @@ export interface UpsertStorygraphSettingsPayload {
   sessionCookie?: string;
   rememberToken?: string;
   enabled?: boolean;
+  bookSyncMode?: StorygraphBookSyncMode;
   autoSyncOnStatusChange?: boolean;
   autoSyncOnProgressUpdate?: boolean;
 }
@@ -35,6 +38,7 @@ export type StorygraphBookSyncOverride = "included" | "excluded" | null;
 export type StorygraphBookSyncEffectiveReason =
   | StorygraphSyncDisabledReason
   | "global_disabled"
+  | "not_selected"
   | "excluded"
   | "unread"
   | "unsupported_status"

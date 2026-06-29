@@ -12,6 +12,8 @@ function resolveReasonLabel(reason: StorygraphBookSyncEffectiveReason | null | u
   switch (reason) {
     case 'excluded':
       return 'Excluded'
+    case 'not_selected':
+      return 'Not selected'
     case 'pre_existing_finished':
       return 'Skipped as already tracked'
     case 'unread':
@@ -46,7 +48,10 @@ export function useStorygraphBookSyncState(bookId: Ref<number>) {
   const visible = computed(() => canUseStorygraphSync.value && settingsLoaded.value && settings.value?.effectiveEnabled === true)
   const syncEnabled = computed(() => {
     if (state.value?.syncEnabled) return true
-    if (state.value?.effectiveReason === 'unread') return state.value.syncOverride !== 'excluded'
+    if (state.value?.effectiveReason === 'unread') {
+      const bookSyncMode = settings.value?.bookSyncMode ?? 'all_eligible'
+      return bookSyncMode === 'all_eligible' ? state.value.syncOverride !== 'excluded' : state.value.syncOverride === 'included'
+    }
     return false
   })
   const canSyncNow = computed(() => state.value?.canSyncNow === true)
@@ -108,12 +113,14 @@ export function useStorygraphBookSyncState(bookId: Ref<number>) {
 
     const targetBookId = bookId.value
     const previous = state.value
+    const bookSyncMode = settings.value?.bookSyncMode ?? 'all_eligible'
+    const effectiveReason = syncEnabledValue ? null : bookSyncMode === 'selected_only' ? 'not_selected' : 'excluded'
     state.value = {
       bookId: targetBookId,
-      syncOverride: syncEnabledValue ? 'included' : 'excluded',
+      syncOverride: syncEnabledValue ? (bookSyncMode === 'selected_only' ? 'included' : null) : bookSyncMode === 'selected_only' ? null : 'excluded',
       syncEnabled: syncEnabledValue,
       canSyncNow: syncEnabledValue,
-      effectiveReason: syncEnabledValue ? null : 'excluded',
+      effectiveReason,
       lastSyncedAt: previous?.lastSyncedAt ?? null,
       syncError: previous?.syncError ?? null,
     }

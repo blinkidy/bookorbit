@@ -69,6 +69,7 @@ describe('StorygraphSyncService', () => {
       enabled: true,
       effectiveEnabled: true,
       disabledReason: null,
+      bookSyncMode: 'all_eligible',
       autoSyncOnStatusChange: true,
       autoSyncOnProgressUpdate: true,
       lastSyncedAt: null,
@@ -213,6 +214,46 @@ describe('StorygraphSyncService', () => {
 
       await expect(makeService().syncBook(1, 1)).resolves.toBe('skipped');
       expect(mockMatchService.matchBook).not.toHaveBeenCalled();
+    });
+
+    it('skips unselected books when sync mode is selected-only', async () => {
+      mockSettingsService.getCookiesForUser.mockResolvedValue(cookies);
+      mockSettingsService.getSettings.mockResolvedValue({
+        cookiesConfigured: true,
+        enabled: true,
+        effectiveEnabled: true,
+        disabledReason: null,
+        bookSyncMode: 'selected_only',
+        autoSyncOnStatusChange: true,
+        autoSyncOnProgressUpdate: true,
+        lastSyncedAt: null,
+        connectedAt: null,
+      });
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('skipped');
+      expect(mockMatchService.matchBook).not.toHaveBeenCalled();
+    });
+
+    it('syncs selected books when sync mode is selected-only', async () => {
+      mockSettingsService.getCookiesForUser.mockResolvedValue(cookies);
+      mockSettingsService.getSettings.mockResolvedValue({
+        cookiesConfigured: true,
+        enabled: true,
+        effectiveEnabled: true,
+        disabledReason: null,
+        bookSyncMode: 'selected_only',
+        autoSyncOnStatusChange: true,
+        autoSyncOnProgressUpdate: true,
+        lastSyncedAt: null,
+        connectedAt: null,
+      });
+      mockRepo.findBookState.mockResolvedValue({ syncOverride: 'included' });
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+      mockMatchService.matchBook.mockResolvedValue({ storygraphBookId: 'abc-123', matchMethod: 'isbn' });
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('synced');
+      expect(mockMatchService.matchBook).toHaveBeenCalled();
     });
 
     it('syncs a finished book whose finish date is after the connection date', async () => {

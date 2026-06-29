@@ -32,6 +32,7 @@ describe('StorygraphSettingsService', () => {
       expect(result.enabled).toBe(false);
       expect(result.effectiveEnabled).toBe(false);
       expect(result.disabledReason).toBe('missing_cookies');
+      expect(result.bookSyncMode).toBe('all_eligible');
     });
 
     it('returns settings without cookies when row exists', async () => {
@@ -41,6 +42,7 @@ describe('StorygraphSettingsService', () => {
         enabled: true,
         autoSyncOnStatusChange: true,
         autoSyncOnProgressUpdate: false,
+        bookSyncMode: 'selected_only',
         lastSyncedAt: null,
       });
       const result = await makeService().getSettings(1);
@@ -48,6 +50,7 @@ describe('StorygraphSettingsService', () => {
       expect(result.enabled).toBe(true);
       expect(result.effectiveEnabled).toBe(true);
       expect(result.disabledReason).toBeNull();
+      expect(result.bookSyncMode).toBe('selected_only');
       expect(result.autoSyncOnProgressUpdate).toBe(false);
       expect((result as any).sessionCookie).toBeUndefined();
       expect((result as any).rememberToken).toBeUndefined();
@@ -177,6 +180,33 @@ describe('StorygraphSettingsService', () => {
         rememberToken: 'saved-remember',
         enabled: false,
       });
+    });
+
+    it('saves a valid bookSyncMode', async () => {
+      const existing = {
+        sessionCookie: 'saved-sess',
+        rememberToken: 'saved-remember',
+        enabled: true,
+        autoSyncOnStatusChange: true,
+        autoSyncOnProgressUpdate: true,
+      };
+      mockRepo.findSettings.mockResolvedValue(existing);
+      mockRepo.upsertSettings.mockResolvedValue({});
+      await makeService().upsertSettings(1, { bookSyncMode: 'selected_only' });
+      expect(mockRepo.upsertSettings).toHaveBeenCalledWith(1, {
+        sessionCookie: 'saved-sess',
+        rememberToken: 'saved-remember',
+        bookSyncMode: 'selected_only',
+      });
+    });
+
+    it('throws BadRequestException for invalid bookSyncMode', async () => {
+      mockRepo.findSettings.mockResolvedValue({
+        sessionCookie: 'saved-sess',
+        rememberToken: 'saved-remember',
+        enabled: true,
+      });
+      await expect(makeService().upsertSettings(1, { bookSyncMode: 'invalid' as never })).rejects.toThrow(BadRequestException);
     });
   });
 
