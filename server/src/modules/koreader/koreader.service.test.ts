@@ -458,6 +458,7 @@ describe('KoreaderService', () => {
         deviceId: 'abs-kosync-bedroom',
         progress: 37.5,
       });
+      expect(mockAchievementEvents.emit).not.toHaveBeenCalledWith(ACHIEVEMENT_EVENT_BOOK_PROGRESS_CHANGED, expect.anything());
     });
   });
 

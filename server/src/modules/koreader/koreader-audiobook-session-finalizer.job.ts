@@ -14,6 +14,7 @@ export class KoreaderAudiobookSessionFinalizerJob {
   async run(): Promise<void> {
     try {
       await this.audiobookSessions.finalizeDueSessions();
+      await this.audiobookSessions.flushLateNightExternalSyncs();
     } catch (error) {
       const message = sanitizeLogValue(error instanceof Error ? error.message : 'unknown error');
       this.logger.warn(`[koreader.audiobook_session] [fail] error="${message}" - audiobook session finalizer failed`);

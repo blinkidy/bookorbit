@@ -260,6 +260,13 @@
                         "when":  1782421105737,
                         "tag":  "0036_audiobook_kosync_sessions",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  37,
+                        "version":  "7",
+                        "when":  1782421105738,
+                        "tag":  "0037_audiobook_external_sync_debounce",
+                        "breakpoints":  true
                     }
                 ]
 }
