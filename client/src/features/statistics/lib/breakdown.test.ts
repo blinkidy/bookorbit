@@ -8,10 +8,10 @@ vi.mock('@/lib/echarts', () => ({
 import { getBreakdownColor, getBreakdownSeries } from './breakdown'
 
 describe('breakdown', () => {
-  it('returns the three source buckets for the source dimension', () => {
+  it('returns the source buckets for the source dimension', () => {
     const series = getBreakdownSeries('source', 'theme:violet', [])
-    expect(series.map((s) => s.key)).toEqual(['bookorbit', 'koreader', 'kobo'])
-    expect(series.map((s) => s.label)).toEqual(['BookOrbit', 'KOReader', 'Kobo'])
+    expect(series.map((s) => s.key)).toEqual(['bookorbit', 'koreader', 'kobo', 'audiobook'])
+    expect(series.map((s) => s.label)).toEqual(['BookOrbit', 'KOReader', 'Kobo', 'Audiobook'])
   })
 
   it('returns one series per format key for the format dimension', () => {

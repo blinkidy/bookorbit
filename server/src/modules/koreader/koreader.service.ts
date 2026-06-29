@@ -12,6 +12,7 @@ import { KoreaderPluginRepository } from './koreader-plugin.repository';
 import { BookService } from '../book/book.service';
 import { PositionConverterService } from '../position-converter/position-converter.service';
 import { AchievementEventsService, ACHIEVEMENT_EVENT_BOOK_PROGRESS_CHANGED } from '../achievement/achievement-events.service';
+import { KoreaderAudiobookSessionService } from './koreader-audiobook-session.service';
 
 const BCRYPT_ROUNDS = 12;
 const SYNC_EVENT = 'koreader.sync';
@@ -31,6 +32,7 @@ export class KoreaderService {
     private readonly positionConverter: PositionConverterService,
     private readonly bookService: BookService,
     private readonly packageService: KoreaderPackageService,
+    private readonly audiobookSessions: KoreaderAudiobookSessionService,
   ) {}
 
   async createCredentials(userId: number, username: string, password: string) {
@@ -107,7 +109,7 @@ export class KoreaderService {
 
   async saveProgress(
     userId: number,
-    data: { document: string; percentage: number; progress?: string; device?: string; device_id?: string; timestamp?: number },
+    data: { document: string; percentage: number; progress?: string; device?: string; device_id?: string; timestamp?: number; source?: string },
   ) {
     const startedAt = Date.now();
     const device = data.device || DEFAULT_DEVICE;
@@ -125,13 +127,18 @@ export class KoreaderService {
       throw new NotFoundException('Book not found for the given document hash');
     }
 
-    await this.applyProgressForResolvedFile(userId, bookFile, {
-      percentage: data.percentage,
-      progress: data.progress,
-      device,
-      deviceId,
-      timestamp: data.timestamp,
-    });
+    await this.applyProgressForResolvedFile(
+      userId,
+      bookFile,
+      {
+        percentage: data.percentage,
+        progress: data.progress,
+        device,
+        deviceId,
+        timestamp: data.timestamp,
+      },
+      { trackAudiobookSession: isAudiobookKosyncWrite(data) },
+    );
 
     this.logger.log(
       `[${SYNC_EVENT}] [end] userId=${userId} bookFileId=${bookFile.id} device=${device} durationMs=${Date.now() - startedAt} percentage=${data.percentage} - save progress completed`,
@@ -144,7 +151,7 @@ export class KoreaderService {
     userId: number,
     bookFile: { id: number; bookId: number; libraryId: number },
     data: { percentage: number; progress?: string; device: string; deviceId: string; timestamp?: number },
-    options?: { skipSharedProgress?: boolean },
+    options?: { skipSharedProgress?: boolean; trackAudiobookSession?: boolean },
   ) {
     const chapterIndex = this.chapterService.parseChapterIndexFromProgress(data.progress ?? null);
 
@@ -168,6 +175,20 @@ export class KoreaderService {
     await this.repo.upsertReadingProgress(bookFile.id, userId, bookorbitPercentage, cfi, data.progress ?? null);
     await this.bookService.syncKoboReadingStateForExternalProgress(userId, bookFile.id, bookorbitPercentage).catch(() => undefined);
     await this.bookService.autoUpdateReadStatusForProgress(userId, bookFile, bookorbitPercentage);
+
+    if (options?.trackAudiobookSession) {
+      await this.audiobookSessions.recordProgress({
+        userId,
+        bookFileId: bookFile.id,
+        bookId: bookFile.bookId,
+        libraryId: bookFile.libraryId,
+        device: data.device,
+        deviceId: data.deviceId,
+        progress: bookorbitPercentage,
+      });
+      return;
+    }
+
     this.achievementEvents.emit(ACHIEVEMENT_EVENT_BOOK_PROGRESS_CHANGED, {
       userId,
       bookId: bookFile.bookId,
@@ -324,4 +345,12 @@ function toBookorbitPercentage(koreaderPct: number): number {
 
 function toKoreaderPercentage(bookorbitPct: number): number {
   return Math.round(bookorbitPct * 100) / 10000;
+}
+
+export function isAudiobookKosyncWrite(data: { source?: string; device?: string; device_id?: string }): boolean {
+  const source = data.source?.trim().toLowerCase();
+  if (source === 'audiobook' || source === 'audio' || source === 'abs' || source === 'abs-kosync') return true;
+
+  const identity = `${data.device ?? ''} ${data.device_id ?? ''}`.toLowerCase();
+  return /(^|[^a-z0-9])(abs-kosync|audiobookshelf|audiobook|abs)([^a-z0-9]|$)/.test(identity);
 }

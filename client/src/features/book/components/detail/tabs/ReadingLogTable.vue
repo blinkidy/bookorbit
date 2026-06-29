@@ -86,6 +86,7 @@ const SESSION_SOURCE_PILLS: Record<ReadingSessionSource, { label: string; class:
   web: { label: 'Web', class: 'border-[var(--pill-web)]/40 bg-[var(--pill-web)]/10 text-[var(--pill-web)]' },
   koreader: { label: 'KOReader', class: 'border-[var(--pill-koreader)]/40 bg-[var(--pill-koreader)]/10 text-[var(--pill-koreader)]' },
   kobo: { label: 'Kobo', class: 'border-[var(--pill-kobo)]/40 bg-[var(--pill-kobo)]/10 text-[var(--pill-kobo)]' },
+  audiobook: { label: 'Audiobook', class: 'border-[var(--pill-audiobook)]/40 bg-[var(--pill-audiobook)]/10 text-[var(--pill-audiobook)]' },
   manual: { label: 'Manual', class: 'border-border bg-muted text-muted-foreground' },
 }
 
