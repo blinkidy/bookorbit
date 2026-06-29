@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import type {
+  StorygraphBookSyncMode,
   StorygraphCookieValidationResult,
   StorygraphSettings,
   StorygraphSyncDisabledReason,
@@ -10,6 +11,8 @@ import type {
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { StorygraphClientService, type StorygraphCookies } from './storygraph-client.service';
 import { StorygraphRepository } from './storygraph.repository';
+
+const VALID_BOOK_SYNC_MODES: StorygraphBookSyncMode[] = ['all_eligible', 'selected_only'];
 
 @Injectable()
 export class StorygraphSettingsService {
@@ -30,6 +33,7 @@ export class StorygraphSettingsService {
       enabled,
       effectiveEnabled: hasSyncPermission && cookiesConfigured && enabled,
       disabledReason: this.resolveDisabledReason({ hasSyncPermission, cookiesConfigured, enabled }),
+      bookSyncMode: (row?.bookSyncMode ?? 'all_eligible') as StorygraphBookSyncMode,
       autoSyncOnStatusChange: row?.autoSyncOnStatusChange ?? true,
       autoSyncOnProgressUpdate: row?.autoSyncOnProgressUpdate ?? true,
       lastSyncedAt: row?.lastSyncedAt?.toISOString() ?? null,
@@ -46,6 +50,9 @@ export class StorygraphSettingsService {
     if (!existing && (!sessionCookie || !rememberToken)) {
       throw new BadRequestException('Both the session cookie and remember token are required to connect StoryGraph');
     }
+    if (payload.bookSyncMode !== undefined && !VALID_BOOK_SYNC_MODES.includes(payload.bookSyncMode)) {
+      throw new BadRequestException(`Invalid bookSyncMode: ${payload.bookSyncMode}`);
+    }
 
     const data: Parameters<typeof this.repo.upsertSettings>[1] = {};
     // Always carry both cookie values into the INSERT side so the NOT NULL constraints are satisfied.
@@ -57,6 +64,7 @@ export class StorygraphSettingsService {
     // automatic/bulk sync — only set once, on the connection that creates the settings row.
     if (!existing) data.connectedAt = new Date();
     if (payload.enabled !== undefined) data.enabled = payload.enabled;
+    if (payload.bookSyncMode !== undefined) data.bookSyncMode = payload.bookSyncMode;
     if (payload.autoSyncOnStatusChange !== undefined) data.autoSyncOnStatusChange = payload.autoSyncOnStatusChange;
     if (payload.autoSyncOnProgressUpdate !== undefined) data.autoSyncOnProgressUpdate = payload.autoSyncOnProgressUpdate;
 
