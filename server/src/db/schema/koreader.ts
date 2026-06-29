@@ -264,6 +264,8 @@ export const kosyncAudiobookSessions = pgTable(
     lastProgressAt: timestamp('last_progress_at', { withTimezone: true }).notNull(),
     startProgress: real('start_progress').notNull(),
     latestProgress: real('latest_progress').notNull(),
+    lastExternalSyncAt: timestamp('last_external_sync_at', { withTimezone: true }),
+    lastExternalSyncProgress: real('last_external_sync_progress'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -276,6 +278,10 @@ export const kosyncAudiobookSessions = pgTable(
     index('kas_user_id_idx').on(t.userId),
     check('kas_start_progress_range_chk', sql`${t.startProgress} >= 0 and ${t.startProgress} <= 100`),
     check('kas_latest_progress_range_chk', sql`${t.latestProgress} >= 0 and ${t.latestProgress} <= 100`),
+    check(
+      'kas_last_external_sync_progress_range_chk',
+      sql`${t.lastExternalSyncProgress} is null or (${t.lastExternalSyncProgress} >= 0 and ${t.lastExternalSyncProgress} <= 100)`,
+    ),
     check('kas_last_after_started_chk', sql`${t.lastProgressAt} >= ${t.startedAt}`),
   ],
 );

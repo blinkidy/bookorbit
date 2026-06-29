@@ -4,17 +4,35 @@ import { and, asc, eq, lte, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 import { splitReadingSessionByDay, type ReadingDailyStatsSegment } from '../../common/utils/reading-daily-stats.utils';
-import { resolveTimeZone } from '../../common/utils/timezone.utils';
+import { resolveTimeZone, toDateKeyInTimeZone } from '../../common/utils/timezone.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 
 type Db = NodePgDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type PendingAudiobookSession = typeof schema.kosyncAudiobookSessions.$inferSelect;
+interface FinalizedAudiobookSession {
+  syncTarget: AudiobookExternalSyncTarget | null;
+}
 
 const MIN_SESSION_SECONDS = 10;
 export const KOSYNC_AUDIOBOOK_IDLE_MS = 10 * 60 * 1000;
 const FINALIZE_LIMIT = 100;
+const LATE_NIGHT_FLUSH_HOUR = 23;
+const LATE_NIGHT_FLUSH_MINUTE = 59;
+
+export interface AudiobookExternalSyncTarget {
+  userId: number;
+  bookId: number;
+  bookFileId: number;
+  progress: number;
+}
+
+export interface FinalizeAudiobookSessionsResult {
+  finalized: number;
+  skipped: number;
+  syncTargets: AudiobookExternalSyncTarget[];
+}
 
 @Injectable()
 export class KoreaderAudiobookSessionRepository {
@@ -29,14 +47,16 @@ export class KoreaderAudiobookSessionRepository {
     deviceId: string;
     progress: number;
     observedAt?: Date;
-  }): Promise<void> {
+  }): Promise<AudiobookExternalSyncTarget[]> {
     const observedAt = params.observedAt ?? new Date();
 
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       let pending = await this.findPendingForKey(tx, params.userId, params.bookFileId, params.deviceId);
+      const syncTargets: AudiobookExternalSyncTarget[] = [];
 
       if (pending && observedAt.getTime() - pending.lastProgressAt.getTime() >= KOSYNC_AUDIOBOOK_IDLE_MS) {
-        await this.finalizePending(tx, pending);
+        const finalizedSession = await this.finalizePending(tx, pending);
+        if (finalizedSession?.syncTarget) syncTargets.push(finalizedSession.syncTarget);
         await this.deletePending(tx, pending.id);
         pending = null;
       }
@@ -53,7 +73,7 @@ export class KoreaderAudiobookSessionRepository {
             updatedAt: observedAt,
           })
           .where(eq(schema.kosyncAudiobookSessions.id, pending.id));
-        return;
+        return syncTargets;
       }
 
       await tx.insert(schema.kosyncAudiobookSessions).values({
@@ -70,10 +90,12 @@ export class KoreaderAudiobookSessionRepository {
         createdAt: observedAt,
         updatedAt: observedAt,
       });
+
+      return syncTargets;
     });
   }
 
-  async finalizeDueSessions(now = new Date()): Promise<{ finalized: number; skipped: number }> {
+  async finalizeDueSessions(now = new Date()): Promise<FinalizeAudiobookSessionsResult> {
     const cutoff = new Date(now.getTime() - KOSYNC_AUDIOBOOK_IDLE_MS);
 
     return this.db.transaction(async (tx) => {
@@ -86,17 +108,55 @@ export class KoreaderAudiobookSessionRepository {
 
       let finalized = 0;
       let skipped = 0;
+      const syncTargets: AudiobookExternalSyncTarget[] = [];
       for (const pending of due) {
-        const saved = await this.finalizePending(tx, pending);
+        const finalizedSession = await this.finalizePending(tx, pending);
         await this.deletePending(tx, pending.id);
-        if (saved) {
+        if (finalizedSession) {
           finalized += 1;
+          if (finalizedSession.syncTarget) syncTargets.push(finalizedSession.syncTarget);
         } else {
           skipped += 1;
         }
       }
 
-      return { finalized, skipped };
+      return { finalized, skipped, syncTargets };
+    });
+  }
+
+  async flushLateNightExternalSyncs(now = new Date()): Promise<AudiobookExternalSyncTarget[]> {
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .select({
+          session: schema.kosyncAudiobookSessions,
+          settings: schema.users.settings,
+        })
+        .from(schema.kosyncAudiobookSessions)
+        .innerJoin(schema.users, eq(schema.kosyncAudiobookSessions.userId, schema.users.id))
+        .orderBy(asc(schema.kosyncAudiobookSessions.lastProgressAt), asc(schema.kosyncAudiobookSessions.id))
+        .limit(FINALIZE_LIMIT);
+
+      const syncTargets: AudiobookExternalSyncTarget[] = [];
+
+      for (const row of rows) {
+        const pending = row.session;
+        const timeZone = resolveTimeZone((row.settings as unknown as UserSettings | undefined)?.timezone, 'UTC');
+        if (!isLateNightFlushWindow(now, timeZone)) continue;
+        if (hasExternalSyncForCurrentProgress(pending, timeZone, now)) continue;
+
+        await tx
+          .update(schema.kosyncAudiobookSessions)
+          .set({
+            lastExternalSyncAt: now,
+            lastExternalSyncProgress: pending.latestProgress,
+            updatedAt: now,
+          })
+          .where(eq(schema.kosyncAudiobookSessions.id, pending.id));
+
+        syncTargets.push(toExternalSyncTarget(pending));
+      }
+
+      return syncTargets;
     });
   }
 
@@ -119,9 +179,9 @@ export class KoreaderAudiobookSessionRepository {
     await tx.delete(schema.kosyncAudiobookSessions).where(eq(schema.kosyncAudiobookSessions.id, id));
   }
 
-  private async finalizePending(tx: Tx, pending: PendingAudiobookSession): Promise<boolean> {
+  private async finalizePending(tx: Tx, pending: PendingAudiobookSession): Promise<FinalizedAudiobookSession | null> {
     const durationSeconds = Math.floor((pending.lastProgressAt.getTime() - pending.startedAt.getTime()) / 1000);
-    if (durationSeconds < MIN_SESSION_SECONDS) return false;
+    if (durationSeconds < MIN_SESSION_SECONDS) return null;
 
     const progressDelta = round2(Math.max(-100, Math.min(100, pending.latestProgress - pending.startProgress)));
     const sessionId = this.buildSessionId(pending);
@@ -142,7 +202,7 @@ export class KoreaderAudiobookSessionRepository {
       .onConflictDoNothing({ target: [schema.readingSessions.userId, schema.readingSessions.sessionId] })
       .returning({ id: schema.readingSessions.id });
 
-    if (!inserted) return false;
+    if (!inserted) return null;
 
     const timeZone = await this.resolveUserTimeZone(tx, pending.userId);
     await this.upsertDailyStats(tx, {
@@ -154,7 +214,10 @@ export class KoreaderAudiobookSessionRepository {
       progressDelta,
       timeZone,
     });
-    return true;
+
+    return {
+      syncTarget: progressMatches(pending.lastExternalSyncProgress, pending.latestProgress) ? null : toExternalSyncTarget(pending),
+    };
   }
 
   private buildSessionId(pending: PendingAudiobookSession): string {
@@ -216,4 +279,35 @@ export class KoreaderAudiobookSessionRepository {
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function toExternalSyncTarget(pending: PendingAudiobookSession): AudiobookExternalSyncTarget {
+  return {
+    userId: pending.userId,
+    bookId: pending.bookId,
+    bookFileId: pending.bookFileId,
+    progress: pending.latestProgress,
+  };
+}
+
+function hasExternalSyncForCurrentProgress(pending: PendingAudiobookSession, timeZone: string, now: Date): boolean {
+  if (!pending.lastExternalSyncAt) return false;
+  if (!progressMatches(pending.lastExternalSyncProgress, pending.latestProgress)) return false;
+  return toDateKeyInTimeZone(pending.lastExternalSyncAt, timeZone) === toDateKeyInTimeZone(now, timeZone);
+}
+
+function progressMatches(left: number | null, right: number): boolean {
+  return left !== null && Math.abs(left - right) < 0.005;
+}
+
+export function isLateNightFlushWindow(date: Date, timeZone: string): boolean {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+  return hour === LATE_NIGHT_FLUSH_HOUR && minute === LATE_NIGHT_FLUSH_MINUTE;
 }

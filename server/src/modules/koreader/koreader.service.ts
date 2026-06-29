@@ -176,13 +176,6 @@ export class KoreaderService {
     await this.repo.upsertReadingProgress(bookFile.id, userId, bookorbitPercentage, cfi, data.progress ?? null);
     await this.bookService.syncKoboReadingStateForExternalProgress(userId, bookFile.id, bookorbitPercentage).catch(() => undefined);
     await this.bookService.autoUpdateReadStatusForProgress(userId, bookFile, bookorbitPercentage);
-    this.achievementEvents.emit(ACHIEVEMENT_EVENT_BOOK_PROGRESS_CHANGED, {
-      userId,
-      bookId: bookFile.bookId,
-      bookFileId: bookFile.id,
-      progress: bookorbitPercentage,
-      source: 'koreader',
-    });
 
     if (options?.trackAudiobookSession) {
       await this.audiobookSessions.recordProgress({
@@ -194,7 +187,16 @@ export class KoreaderService {
         deviceId: data.deviceId,
         progress: bookorbitPercentage,
       });
+      return;
     }
+
+    this.achievementEvents.emit(ACHIEVEMENT_EVENT_BOOK_PROGRESS_CHANGED, {
+      userId,
+      bookId: bookFile.bookId,
+      bookFileId: bookFile.id,
+      progress: bookorbitPercentage,
+      source: 'koreader',
+    });
   }
 
   private async convertProgressToCfi(bookFileId: number, xpointer: string): Promise<string | null> {
