@@ -22,7 +22,7 @@ import { KoreaderChapterService } from './koreader-chapter.service';
 import type { KoreaderPackageService } from './koreader-package.service';
 import { KoreaderPluginRepository } from './koreader-plugin.repository';
 import { KoreaderRepository } from './koreader.repository';
-import { KoreaderService } from './koreader.service';
+import { isAudiobookKosyncWrite, KoreaderService } from './koreader.service';
 
 function md5Hex(value: string): string {
   return `md5:${value}:hex:0123456789abcdef0123456789abcdef`;
@@ -90,6 +90,9 @@ describe('KoreaderService', () => {
   let mockPackageService: {
     getVersionInfo: ReturnType<typeof vi.fn>;
   };
+  let mockAudiobookSessions: {
+    recordProgress: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -154,6 +157,9 @@ describe('KoreaderService', () => {
     mockPackageService = {
       getVersionInfo: vi.fn().mockResolvedValue({ pluginVersion: 'unknown', serverVersion: '1.0.0' }),
     };
+    mockAudiobookSessions = {
+      recordProgress: vi.fn().mockResolvedValue(undefined),
+    };
 
     mockPluginRepo = {
       listSweeps: vi.fn().mockResolvedValue([]),
@@ -189,6 +195,7 @@ describe('KoreaderService', () => {
       mockPositionConverter as never,
       mockBookService as never,
       mockPackageService as unknown as KoreaderPackageService,
+      mockAudiobookSessions as never,
     );
   });
 
@@ -374,6 +381,7 @@ describe('KoreaderService', () => {
         progress: 50,
         source: 'koreader',
       });
+      expect(mockAudiobookSessions.recordProgress).not.toHaveBeenCalled();
       expect(mockAchievementEvents.emit.mock.invocationCallOrder[0]!).toBeGreaterThan(
         mockBookService.autoUpdateReadStatusForProgress.mock.invocationCallOrder[0]!,
       );
@@ -431,6 +439,44 @@ describe('KoreaderService', () => {
           syncTimestamp: null,
         }),
       );
+    });
+
+    it('records audiobook listening sessions for ABS-Kosync marked progress writes', async () => {
+      mockRepo.resolveBookFileByHash.mockResolvedValue({ id: 44, bookId: 55, libraryId: 3 });
+
+      await service.saveProgress(12, {
+        document: 'abcdef1234567890fedcba',
+        percentage: 0.375,
+        device: 'ABS-Kosync',
+        device_id: 'abs-kosync-bedroom',
+        source: 'audiobook',
+      });
+
+      expect(mockAudiobookSessions.recordProgress).toHaveBeenCalledWith({
+        userId: 12,
+        bookFileId: 44,
+        bookId: 55,
+        libraryId: 3,
+        device: 'ABS-Kosync',
+        deviceId: 'abs-kosync-bedroom',
+        progress: 37.5,
+      });
+    });
+  });
+
+  describe('isAudiobookKosyncWrite', () => {
+    it('detects explicit audiobook source markers', () => {
+      expect(isAudiobookKosyncWrite({ source: 'audiobook' })).toBe(true);
+      expect(isAudiobookKosyncWrite({ source: 'ABS-Kosync' })).toBe(true);
+    });
+
+    it('detects ABS-Kosync identity markers without source', () => {
+      expect(isAudiobookKosyncWrite({ device: 'Audiobookshelf ABS-Kosync', device_id: 'living-room' })).toBe(true);
+    });
+
+    it('does not treat normal KOReader devices as audiobook listening', () => {
+      expect(isAudiobookKosyncWrite({ device: 'Kobo Sage', device_id: 'device-12' })).toBe(false);
+      expect(isAudiobookKosyncWrite({})).toBe(false);
     });
   });
 

@@ -16,7 +16,8 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
-import { bookFiles } from './books';
+import { bookFiles, books } from './books';
+import { libraries } from './libraries';
 import { users } from './auth';
 
 export const koreaderUsers = pgTable(
@@ -240,6 +241,47 @@ export const koreaderPageStats = pgTable(
 
 export type KoreaderPageStat = typeof koreaderPageStats.$inferSelect;
 export type NewKoreaderPageStat = typeof koreaderPageStats.$inferInsert;
+
+export const kosyncAudiobookSessions = pgTable(
+  'kosync_audiobook_sessions',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    bookFileId: integer('book_file_id')
+      .notNull()
+      .references(() => bookFiles.id, { onDelete: 'cascade' }),
+    bookId: integer('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+    libraryId: integer('library_id')
+      .notNull()
+      .references(() => libraries.id, { onDelete: 'cascade' }),
+    device: varchar('device', { length: 100 }).notNull(),
+    deviceId: varchar('device_id', { length: 100 }).notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    lastProgressAt: timestamp('last_progress_at', { withTimezone: true }).notNull(),
+    startProgress: real('start_progress').notNull(),
+    latestProgress: real('latest_progress').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdateFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex('kas_user_file_device_uidx').on(t.userId, t.bookFileId, t.deviceId),
+    index('kas_last_progress_at_idx').on(t.lastProgressAt),
+    index('kas_user_id_idx').on(t.userId),
+    check('kas_start_progress_range_chk', sql`${t.startProgress} >= 0 and ${t.startProgress} <= 100`),
+    check('kas_latest_progress_range_chk', sql`${t.latestProgress} >= 0 and ${t.latestProgress} <= 100`),
+    check('kas_last_after_started_chk', sql`${t.lastProgressAt} >= ${t.startedAt}`),
+  ],
+);
+
+export type KosyncAudiobookSession = typeof kosyncAudiobookSessions.$inferSelect;
+export type NewKosyncAudiobookSession = typeof kosyncAudiobookSessions.$inferInsert;
 
 export const koreaderDeviceSweeps = pgTable(
   'koreader_device_sweeps',

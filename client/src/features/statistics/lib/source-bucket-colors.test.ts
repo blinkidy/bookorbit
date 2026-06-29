@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
           '--pill-web': 'oklch(0.72 0.14 245)',
           '--pill-koreader': 'oklch(0.72 0.17 295)',
           '--pill-kobo': 'oklch(0.74 0.1 195)',
+          '--pill-audiobook': 'oklch(0.74 0.14 145)',
         }) as Record<string, string>
       )[varName] ?? 'oklch(0.5 0.1 0)',
   ),
@@ -28,17 +29,19 @@ describe('source-bucket-colors', () => {
       bookorbit: '--pill-web',
       koreader: '--pill-koreader',
       kobo: '--pill-kobo',
+      audiobook: '--pill-audiobook',
     })
   })
 
   it('converts oklch tokens to a zrender-parseable hex so bars do not vanish on hover', () => {
     const colors = resolveSourceBucketColors('dark:violet')
 
-    expect(colors).toEqual({ bookorbit: '#abcdef', koreader: '#abcdef', kobo: '#abcdef' })
+    expect(colors).toEqual({ bookorbit: '#abcdef', koreader: '#abcdef', kobo: '#abcdef', audiobook: '#abcdef' })
     expect(mocks.readCssColor).toHaveBeenCalledWith('--pill-web')
     expect(mocks.readCssColor).toHaveBeenCalledWith('--pill-koreader')
     expect(mocks.readCssColor).toHaveBeenCalledWith('--pill-kobo')
-    expect(mocks.oklchToHex).toHaveBeenCalledTimes(3)
+    expect(mocks.readCssColor).toHaveBeenCalledWith('--pill-audiobook')
+    expect(mocks.oklchToHex).toHaveBeenCalledTimes(4)
   })
 
   it('passes through values that are already rgb/hex', () => {

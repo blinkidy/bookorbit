@@ -12,6 +12,9 @@ import { UserModule } from '../user/user.module';
 import { UserBookNoteModule } from '../user-book-note/user-book-note.module';
 import { UserBookStatusModule } from '../user-book-status/user-book-status.module';
 import { KoreaderAnnotationExchangeService } from './koreader-annotation-exchange.service';
+import { KoreaderAudiobookSessionFinalizerJob } from './koreader-audiobook-session-finalizer.job';
+import { KoreaderAudiobookSessionRepository } from './koreader-audiobook-session.repository';
+import { KoreaderAudiobookSessionService } from './koreader-audiobook-session.service';
 import { KoreaderAuthGuard } from './koreader-auth.guard';
 import { KoreaderCatalogController } from './koreader-catalog.controller';
 import { KoreaderCatalogService } from './koreader-catalog.service';
@@ -47,6 +50,9 @@ import { KoreaderStatsService } from './koreader-stats.service';
     KoreaderService,
     KoreaderHashLinkService,
     KoreaderRepository,
+    KoreaderAudiobookSessionService,
+    KoreaderAudiobookSessionRepository,
+    KoreaderAudiobookSessionFinalizerJob,
     KoreaderAuthGuard,
     KoreaderCatalogService,
     KoreaderPackageService,

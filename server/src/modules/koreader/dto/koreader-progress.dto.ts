@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class KoreaderSaveProgressDto {
   @IsString()
@@ -28,4 +28,9 @@ export class KoreaderSaveProgressDto {
   @IsNumber()
   @IsOptional()
   timestamp?: number;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(30)
+  source?: string;
 }
