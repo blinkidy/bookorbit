@@ -1,19 +1,12 @@
 name: Release
-run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && format('Release - {0}', github.ref_name) || github.event_name == 'workflow_run' && format('Release - {0}', github.event.workflow_run.head_branch) || format('Release checks - PR #{0}', github.event.pull_request.number) }}
+run-name: Release - ${{ github.ref_name }}
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Container Image"]
-    types: [completed]
-    branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && 'release' || github.event_name == 'workflow_run' && format('run-{0}', github.event.workflow_run.id) || format('pr-{0}', github.event.pull_request.number) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-release
+  cancel-in-progress: false
 
 permissions: read-all
 
@@ -23,135 +16,8 @@ env:
   PNPM_VERSION: "10"
 
 jobs:
-  commitlint:
-    name: Lint PR Conventions
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node.js and pnpm
-        uses: ./.github/actions/setup-node-pnpm
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-
-      - name: Lint PR title
-        shell: bash
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: printf '%s\n' "$PR_TITLE" | pnpm exec commitlint --config commitlint.config.cjs
-
-      - name: Lint PR commit headers
-        shell: bash
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: pnpm exec commitlint --config commitlint.config.cjs --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
-
-      - name: Validate referenced issues exist
-        if: github.event.pull_request.user.login != 'dependabot[bot]' && vars.ENABLE_ISSUE_PR_CONVENTIONS == 'true'
-        shell: bash
-        env:
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
-          PR_BRANCH: ${{ github.head_ref }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          set -euo pipefail
-
-          validate_issue_exists() {
-            local issue_repo="$1"
-            local issue_number="$2"
-            local reference_context="$3"
-            local response_file
-            local http_code
-            local api_url
-            local state
-            local reference_label
-
-            response_file="$(mktemp)"
-            api_url="https://api.github.com/repos/${issue_repo}/issues/${issue_number}"
-            http_code="$(curl -sS -o "${response_file}" -w "%{http_code}" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              "${api_url}")"
-
-            if [[ "${issue_repo}" == "${GH_REPO}" ]]; then
-              reference_label="#${issue_number}"
-            else
-              reference_label="${issue_repo}#${issue_number}"
-            fi
-
-            if [[ "${http_code}" != "200" ]]; then
-              echo "::error::${reference_context} references ${reference_label}, but it does not exist or is not accessible."
-              rm -f "${response_file}"
-              return 1
-            fi
-
-            if jq -e '.pull_request != null' "${response_file}" > /dev/null; then
-              echo "::error::${reference_context} references ${reference_label}, but that number is a pull request, not an issue."
-              rm -f "${response_file}"
-              return 1
-            fi
-
-            state="$(jq -r '.state // "unknown"' "${response_file}")"
-            echo "${reference_context}: issue ${reference_label} exists (state=${state})."
-            rm -f "${response_file}"
-          }
-
-          if [[ "${PR_BRANCH}" =~ ^BO-([0-9]+)- ]]; then
-            branch_issue_number="${BASH_REMATCH[1]}"
-          else
-            echo "::error::Unable to extract issue number from branch '${PR_BRANCH}'."
-            exit 1
-          fi
-
-          validate_issue_exists "${GH_REPO}" "${branch_issue_number}" "Branch name"
-
-          closing_keyword_pattern='(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)'
-          issue_reference_pattern="(^|[^[:alnum:]_])${closing_keyword_pattern}([[:space:]]*:[[:space:]]*|[[:space:]]+)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[1-9][0-9]*"
-          issue_matches="$(printf '%s\n' "${PR_BODY}" | grep -Eio "${issue_reference_pattern}" || true)"
-          if [[ -z "${issue_matches}" ]]; then
-            echo "::error::PR description must include at least one GitHub closing-keyword issue reference (for example: 'Closes #123', 'Fixes: #123', or 'RESOLVED owner/repo#123')."
-            exit 1
-          fi
-
-          issue_refs="$(printf '%s\n' "${issue_matches}" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed -E 's/^[^a-z0-9_]*//' \
-            | sed -E "s/^${closing_keyword_pattern}([[:space:]]*:[[:space:]]*|[[:space:]]+)//" \
-            | sort -u)"
-          while IFS= read -r issue_ref; do
-            [[ -z "${issue_ref}" ]] && continue
-
-            if [[ "${issue_ref}" =~ ^([a-z0-9_.-]+/[a-z0-9_.-]+)#([1-9][0-9]*)$ ]]; then
-              issue_repo="${BASH_REMATCH[1]}"
-              issue_number="${BASH_REMATCH[2]}"
-            elif [[ "${issue_ref}" =~ ^#([1-9][0-9]*)$ ]]; then
-              issue_repo="${GH_REPO}"
-              issue_number="${BASH_REMATCH[1]}"
-            else
-              echo "::error::Unable to parse issue reference '${issue_ref}' in PR description."
-              exit 1
-            fi
-
-            validate_issue_exists "${issue_repo}" "${issue_number}" "PR description"
-          done <<< "${issue_refs}"
-
   release-candidate:
     name: Release Candidate Checks
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -168,19 +34,11 @@ jobs:
         id: resolve
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           GH_SHA: ${{ github.sha }}
           GH_REF: ${{ github.ref }}
         run: |
-          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
-            SHA="$WORKFLOW_RUN_HEAD_SHA"
-            BRANCH="$WORKFLOW_RUN_HEAD_BRANCH"
-          else
-            SHA="$GH_SHA"
-            BRANCH="${GH_REF#refs/heads/}"
-          fi
+          SHA="$GH_SHA"
+          BRANCH="${GH_REF#refs/heads/}"
           if [[ "$BRANCH" != "main" ]]; then
             echo "::error::Release workflow must run from main. Resolved branch: $BRANCH"
             exit 1

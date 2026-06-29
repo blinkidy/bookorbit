@@ -1,0 +1,251 @@
+name: Release Checks
+run-name: >-
+  ${{ github.event_name == 'workflow_run' && format('Release candidate - {0}', github.event.workflow_run.head_branch) || format('Release checks - PR #{0}', github.event.pull_request.number) }}
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_run:
+    workflows: ["Container Image"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_run' && format('run-{0}', github.event.workflow_run.id) || format('pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: read-all
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  NODE_VERSION: "24"
+  PNPM_VERSION: "10"
+
+jobs:
+  commitlint:
+    name: Lint PR Conventions
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+
+      - name: Lint PR title
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | pnpm exec commitlint --config commitlint.config.cjs
+
+      - name: Lint PR commit headers
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: pnpm exec commitlint --config commitlint.config.cjs --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
+
+      - name: Validate referenced issues exist
+        if: github.event.pull_request.user.login != 'dependabot[bot]' && vars.ENABLE_ISSUE_PR_CONVENTIONS == 'true'
+        shell: bash
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          validate_issue_exists() {
+            local issue_repo="$1"
+            local issue_number="$2"
+            local reference_context="$3"
+            local response_file
+            local http_code
+            local api_url
+            local state
+            local reference_label
+
+            response_file="$(mktemp)"
+            api_url="https://api.github.com/repos/${issue_repo}/issues/${issue_number}"
+            http_code="$(curl -sS -o "${response_file}" -w "%{http_code}" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${api_url}")"
+
+            if [[ "${issue_repo}" == "${GH_REPO}" ]]; then
+              reference_label="#${issue_number}"
+            else
+              reference_label="${issue_repo}#${issue_number}"
+            fi
+
+            if [[ "${http_code}" != "200" ]]; then
+              echo "::error::${reference_context} references ${reference_label}, but it does not exist or is not accessible."
+              rm -f "${response_file}"
+              return 1
+            fi
+
+            if jq -e '.pull_request != null' "${response_file}" > /dev/null; then
+              echo "::error::${reference_context} references ${reference_label}, but that number is a pull request, not an issue."
+              rm -f "${response_file}"
+              return 1
+            fi
+
+            state="$(jq -r '.state // "unknown"' "${response_file}")"
+            echo "${reference_context}: issue ${reference_label} exists (state=${state})."
+            rm -f "${response_file}"
+          }
+
+          if [[ "${PR_BRANCH}" =~ ^BO-([0-9]+)- ]]; then
+            branch_issue_number="${BASH_REMATCH[1]}"
+          else
+            echo "::error::Unable to extract issue number from branch '${PR_BRANCH}'."
+            exit 1
+          fi
+
+          validate_issue_exists "${GH_REPO}" "${branch_issue_number}" "Branch name"
+
+          closing_keyword_pattern='(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)'
+          issue_reference_pattern="(^|[^[:alnum:]_])${closing_keyword_pattern}([[:space:]]*:[[:space:]]*|[[:space:]]+)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[1-9][0-9]*"
+          issue_matches="$(printf '%s\n' "${PR_BODY}" | grep -Eio "${issue_reference_pattern}" || true)"
+          if [[ -z "${issue_matches}" ]]; then
+            echo "::error::PR description must include at least one GitHub closing-keyword issue reference (for example: 'Closes #123', 'Fixes: #123', or 'RESOLVED owner/repo#123')."
+            exit 1
+          fi
+
+          issue_refs="$(printf '%s\n' "${issue_matches}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/^[^a-z0-9_]*//' \
+            | sed -E "s/^${closing_keyword_pattern}([[:space:]]*:[[:space:]]*|[[:space:]]+)//" \
+            | sort -u)"
+          while IFS= read -r issue_ref; do
+            [[ -z "${issue_ref}" ]] && continue
+
+            if [[ "${issue_ref}" =~ ^([a-z0-9_.-]+/[a-z0-9_.-]+)#([1-9][0-9]*)$ ]]; then
+              issue_repo="${BASH_REMATCH[1]}"
+              issue_number="${BASH_REMATCH[2]}"
+            elif [[ "${issue_ref}" =~ ^#([1-9][0-9]*)$ ]]; then
+              issue_repo="${GH_REPO}"
+              issue_number="${BASH_REMATCH[1]}"
+            else
+              echo "::error::Unable to parse issue reference '${issue_ref}' in PR description."
+              exit 1
+            fi
+
+            validate_issue_exists "${issue_repo}" "${issue_number}" "PR description"
+          done <<< "${issue_refs}"
+
+  release-candidate:
+    name: Release Candidate Checks
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      sha_short: ${{ steps.resolve.outputs.sha_short }}
+      version: ${{ steps.tag.outputs.release_version }}
+      tag: ${{ steps.tag.outputs.release_git_tag }}
+      existing_tag: ${{ steps.tag.outputs.existing_release_git_tag }}
+    steps:
+      - name: Resolve release commit
+        id: resolve
+        shell: bash
+        env:
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          SHA="$WORKFLOW_RUN_HEAD_SHA"
+          BRANCH="$WORKFLOW_RUN_HEAD_BRANCH"
+          if [[ "$BRANCH" != "main" ]]; then
+            echo "::error::Release candidate checks must run from main. Resolved branch: $BRANCH"
+            exit 1
+          fi
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=${SHA:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify SHA image exists in GHCR
+        shell: bash
+        env:
+          SHA_SHORT: ${{ steps.resolve.outputs.sha_short }}
+          IMAGE_NAME: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          SOURCE_TAG="ghcr.io/${IMAGE_NAME}:sha-${SHA_SHORT}"
+          if ! docker buildx imagetools inspect "${SOURCE_TAG}" > /dev/null 2>&1; then
+            echo "::error::Image sha-${SHA_SHORT} not found in GHCR. Wait for the Container Image workflow to complete for this commit before releasing."
+            exit 1
+          fi
+          echo "Image sha-${SHA_SHORT} verified in GHCR."
+
+      - name: Resolve next personal release tag
+        id: tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          EXISTING_TAG="$(gh api "repos/${GH_REPO}/releases" --paginate --jq ".[] | select(.target_commitish == \"${TARGET_SHA}\") | .tag_name" \
+            | grep -E '^v2\.0\.[0-9]+-personal$' \
+            | head -n1 || true)"
+          if [[ -n "$EXISTING_TAG" ]]; then
+            echo "Release ${EXISTING_TAG} already exists for ${TARGET_SHA}."
+            echo "existing_release_git_tag=${EXISTING_TAG}" >> "$GITHUB_OUTPUT"
+            echo "release_version=${EXISTING_TAG#v}" >> "$GITHUB_OUTPUT"
+            echo "release_git_tag=${EXISTING_TAG}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LATEST_PATCH="$(gh api "repos/${GH_REPO}/releases" --paginate --jq '.[].tag_name' \
+            | sed -nE 's/^v2\.0\.([0-9]+)-personal$/\1/p' \
+            | sort -n \
+            | tail -n1)"
+          NEXT_PATCH="$(( ${LATEST_PATCH:-0} + 1 ))"
+          VERSION="2.0.${NEXT_PATCH}-personal"
+          TAG="v${VERSION}"
+          echo "release_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release_git_tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Release candidate summary
+        shell: bash
+        env:
+          VERSION: ${{ steps.tag.outputs.release_version }}
+          TAG: ${{ steps.tag.outputs.release_git_tag }}
+          SHA_SHORT: ${{ steps.resolve.outputs.sha_short }}
+          EXISTING_TAG: ${{ steps.tag.outputs.existing_release_git_tag }}
+        run: |
+          echo "## Release Candidate Ready" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Source SHA tag:** \`sha-${SHA_SHORT}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [[ -n "${EXISTING_TAG}" ]]; then
+            echo "- **Existing release:** \`${EXISTING_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- **Next release:** \`${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Status:** checks passed; no release was published automatically." >> "$GITHUB_STEP_SUMMARY"
+          fi
