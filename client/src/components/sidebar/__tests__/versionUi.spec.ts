@@ -26,10 +26,10 @@ describe('buildSidebarVersionUi', () => {
   })
 
   it('treats personal release versions as release tags', () => {
-    const ui = buildSidebarVersionUi('v1.0.13-personal', false, null)
+    const ui = buildSidebarVersionUi('v2.0.1-personal', false, null)
 
-    expect(ui.currentLabel).toBe('v1.0.13-personal')
-    expect(ui.currentHref).toBe('https://github.com/blinkidy/bookorbit/releases/tag/v1.0.13-personal')
+    expect(ui.currentLabel).toBe('v2.0.1-personal')
+    expect(ui.currentHref).toBe('https://github.com/blinkidy/bookorbit/releases/tag/v2.0.1-personal')
     expect(ui.showLatest).toBe(false)
   })
 
