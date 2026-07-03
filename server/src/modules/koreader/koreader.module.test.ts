@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { KoreaderAnnotationExchangeService } from './koreader-annotation-exchange.service';
+import { KoreaderAudiobookSessionFinalizerJob } from './koreader-audiobook-session-finalizer.job';
+import { KoreaderAudiobookSessionRepository } from './koreader-audiobook-session.repository';
+import { KoreaderAudiobookSessionService } from './koreader-audiobook-session.service';
 import { KoreaderAuthGuard } from './koreader-auth.guard';
 import { KoreaderCatalogController } from './koreader-catalog.controller';
 import { KoreaderCatalogService } from './koreader-catalog.service';
@@ -25,6 +28,9 @@ describe('KoreaderModule', () => {
       KoreaderService,
       KoreaderHashLinkService,
       KoreaderRepository,
+      KoreaderAudiobookSessionService,
+      KoreaderAudiobookSessionRepository,
+      KoreaderAudiobookSessionFinalizerJob,
       KoreaderAuthGuard,
       KoreaderCatalogService,
       KoreaderPackageService,
