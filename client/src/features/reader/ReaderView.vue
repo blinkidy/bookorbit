@@ -16,6 +16,7 @@ import { useAnnotations } from './epub/composables/useAnnotations'
 import { useToc } from './epub/composables/useToc'
 import { useSearch, type FoliateView } from './epub/composables/useSearch'
 import { useReaderSelection } from './epub/composables/useReaderSelection'
+import { useReaderSidebarPin } from './epub/composables/useReaderSidebarPin'
 import { useReaderKeyboardShortcuts } from './epub/composables/useReaderKeyboardShortcuts'
 import ReaderHeader from './epub/components/ReaderHeader.vue'
 import ReaderFooter from './epub/components/ReaderFooter.vue'
@@ -84,6 +85,7 @@ const {
   setIsDark,
   setThemeName,
   setFlow,
+  setFixedLayoutSpread,
   setFontFaceCSS,
 } = readerState
 
@@ -117,6 +119,7 @@ const search = useSearch()
 const { results: searchResults, isSearching, search: doSearch, clear: clearSearch } = search
 
 const selection = useReaderSelection()
+const { isSidebarPinned, toggleSidebarPinned, shouldCloseAfterNavigation } = useReaderSidebarPin(fileId)
 
 function closeAnyPanel() {
   if (showSearch.value) {
@@ -216,7 +219,7 @@ function onRelocateHandler(detail: RelocateDetail) {
 
 function onApplyStylesHandler(renderer: FoliateRenderer) {
   if (shouldApplyStyles.value) {
-    applyToRenderer(renderer)
+    applyToRenderer(renderer, isFixedLayout.value ? { flow: 'paginated' } : undefined)
   }
 }
 
@@ -242,6 +245,7 @@ const {
   setAnnotationClickHandler,
   view: foliateView,
   bookLanguage,
+  isFixedLayout,
 } = useFoliate(() => containerRef.value, onRelocateHandler, onApplyStylesHandler, onMiddleTapHandler)
 
 function handleTextSelected(detail: SelectionDetail) {
@@ -290,7 +294,9 @@ onMounted(async () => {
   }
 
   const hadProgress = progress.percentage.value > 0
-  await open(bookId, fileId, fileFormat, progress.cfi.value, hadProgress ? progress.percentage.value / 100 : undefined)
+  await open(bookId, fileId, fileFormat, progress.cfi.value, hadProgress ? progress.percentage.value / 100 : undefined, {
+    fixedLayoutSpread: state.value.fixedLayoutSpread,
+  })
   setChapters(getChapters())
   sectionFractions.value = getSectionFractions()
   await bookmarks.load(bookId)
@@ -330,6 +336,7 @@ const epubSetters: Record<string, (v: unknown) => void> = {
   isDark: (v) => setIsDark(v as boolean),
   themeName: (v) => setThemeName(v as string),
   flow: (v) => setFlow(v as 'paginated' | 'scrolled'),
+  fixedLayoutSpread: (v) => setFixedLayoutSpread(v as EpubReaderSettings['fixedLayoutSpread']),
 }
 
 // Applies settings to reactive refs (and renderer if open) without touching the delta.
@@ -339,15 +346,28 @@ function seedState(partial: Partial<ReaderState>) {
     epubSetters[key]?.(value)
   }
   const renderer = getRenderer()
-  if (renderer) applyToRenderer(renderer)
+  if (renderer) applyToRenderer(renderer, isFixedLayout.value ? { flow: 'paginated' } : undefined)
+}
+
+async function reopenEpubAtCurrentLocation() {
+  const fallbackFraction = fraction.value > 0 ? fraction.value : progress.percentage.value > 0 ? progress.percentage.value / 100 : undefined
+  await open(bookId, fileId, fileFormat, null, fallbackFraction, {
+    fixedLayoutSpread: state.value.fixedLayoutSpread,
+  })
+  setChapters(getChapters())
+  sectionFractions.value = getSectionFractions()
 }
 
 // Applies a user-initiated change: updates reactive refs AND saves the changed field to delta.
 // Also enables style injection from this point forward (user has opted in by changing something).
-function applyUpdate(partial: Partial<ReaderState>) {
+async function applyUpdate(partial: Partial<ReaderState>) {
+  const shouldReopenForSpread = partial.fixedLayoutSpread !== undefined && partial.fixedLayoutSpread !== state.value.fixedLayoutSpread
   shouldApplyStyles.value = true
   seedState(partial)
   bookSettings.updateBookSettings(partial)
+  if (shouldReopenForSpread) {
+    await reopenEpubAtCurrentLocation()
+  }
 }
 
 function toggleFullscreen() {
@@ -382,7 +402,7 @@ watch(
   () => {
     setFontFaceCSS(customFonts.generateFontFaceCSS())
     const renderer = getRenderer()
-    if (renderer && shouldApplyStyles.value) applyToRenderer(renderer)
+    if (renderer && shouldApplyStyles.value) applyToRenderer(renderer, isFixedLayout.value ? { flow: 'paginated' } : undefined)
   },
 )
 
@@ -505,6 +525,12 @@ function navigateSearch(cfiTarget: string) {
   goTo(cfiTarget)
 }
 
+function closeSidebarAfterNavigation() {
+  if (shouldCloseAfterNavigation()) {
+    showSidebar.value = false
+  }
+}
+
 async function navigateFromSidebar(cfiTarget: string) {
   const goToPromise = goTo(cfiTarget)
   if (!goToPromise) return
@@ -512,7 +538,7 @@ async function navigateFromSidebar(cfiTarget: string) {
     .then(() => true)
     .catch(() => false)
   if (!navigated) return
-  showSidebar.value = false
+  closeSidebarAfterNavigation()
 }
 
 function navigateAnnotationChapterFromSidebar(chapterIndex: number) {
@@ -520,14 +546,14 @@ function navigateAnnotationChapterFromSidebar(chapterIndex: number) {
   if (!goToPromise) return
   void Promise.resolve(goToPromise)
     .then(() => {
-      showSidebar.value = false
+      closeSidebarAfterNavigation()
     })
     .catch(() => undefined)
 }
 
 function navigateChapterFromSidebar(href: string) {
   goTo(href)
-  showSidebar.value = false
+  closeSidebarAfterNavigation()
 }
 
 function closeSearch() {
@@ -582,7 +608,7 @@ watch(
       @startReading="startTrackedReading"
     >
       <template #settingsPanel>
-        <ReaderSettingsPanel :state="state" :customFonts="customFonts" @update="applyUpdate" />
+        <ReaderSettingsPanel :state="state" :customFonts="customFonts" :is-fixed-layout="isFixedLayout" @update="applyUpdate" />
       </template>
     </ReaderHeader>
 
@@ -634,7 +660,9 @@ watch(
       :locationMetaByCfi="sidebarLocationMetaByCfi"
       :activeHref="activeHref"
       :expandedHrefs="expandedHrefs"
+      :pinned="isSidebarPinned"
       @close="showSidebar = false"
+      @togglePinned="toggleSidebarPinned"
       @navigateChapter="navigateChapterFromSidebar"
       @navigateBookmark="navigateFromSidebar"
       @navigateAnnotation="navigateFromSidebar"

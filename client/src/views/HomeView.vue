@@ -556,6 +556,7 @@ defineOptions({ name: 'HomeView' })
       <ViewHeader
         :title="title"
         :icon="libraryIcon"
+        fallback-icon="BookOpen"
         :total="total"
         v-model:coverSize="coverSize"
         v-model:gridGap="gridGap"
@@ -928,6 +929,7 @@ defineOptions({ name: 'HomeView' })
             :loading="loading"
             :total="total"
             view-type="library"
+            :library-id="libraryId ?? undefined"
             :selection-mode="selectionMode"
             :is-selected="isSelected"
             :selected-count="selectedCount"

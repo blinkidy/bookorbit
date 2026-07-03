@@ -32,6 +32,15 @@ local BookOrbitBookSync = {
     running = false,
 }
 
+local function titleFromFile(file)
+    if not file or file == "" then return nil end
+    local name = file:gsub(".*/", "")
+    if name == "" then return nil end
+    local title = name:gsub("%.[^%.]+$", "")
+    if title == "" then return name end
+    return title
+end
+
 function BookOrbitBookSync.isRunning()
     return BookOrbitBookSync.running
 end
@@ -55,9 +64,17 @@ function BookOrbitBookSync.capture(plugin)
     end
 
     local file = ui.document.file
+    local ts = os.time()
+    local metadata = BookOrbitStatsReader.getBook(digest) or {}
+    local stats_ambiguous = metadata.metadata_ambiguous == true
     return {
         digest = digest,
         file = file,
+        title = stats_ambiguous and titleFromFile(file) or (metadata.title or titleFromFile(file)),
+        authors = stats_ambiguous and nil or metadata.authors,
+        last_open = metadata.last_open or ts,
+        metadata_ambiguous = false,
+        stats_metadata_ambiguous = stats_ambiguous,
         percentage = plugin:getLastPercent(),
         progress = plugin:getLastProgress(),
         status = summary.status,
@@ -67,7 +84,7 @@ function BookOrbitBookSync.capture(plugin)
         ann_count = #annotations,
         ann_max_datetime = ann_max,
         mtime_at_capture = file and BookOrbitSidecar.sidecarMtime(file) or nil,
-        ts = os.time(),
+        ts = ts,
     }
 end
 
@@ -80,6 +97,15 @@ end
 -- timeouts, which the synchronous suspend path cannot afford.
 local function isTransportError(err)
     return type(err) ~= "number"
+end
+
+local function applyLibraryVersion(ctx, version)
+    if not version then return end
+    local known = ctx.state.global.libraryVersion
+    if known and version ~= known then
+        ctx.state.global.needsFullRecheck = true
+    end
+    ctx.state.global.libraryVersion = version
 end
 
 local function isUnmatched(body, md5)
@@ -125,6 +151,9 @@ local function finish(ctx, err)
         if ctx.interactive then
             local text = T(_("BookOrbit: book synced. %1 reading events, %2 highlights up, %3 applied."),
                 ctx.counts.page_stats, ctx.counts.annotations, ctx.counts.ann_applied or 0)
+            if ctx.skip_progress then
+                text = text .. "\n" .. _("Progress was not changed.")
+            end
             if ctx.had_errors then
                 text = text .. "\n" .. _("Some uploads failed and will retry on the next sync.")
             end
@@ -161,14 +190,19 @@ local stepMatch, stepStats, stepAnnotations, stepAnnotationsLegacy, stepState, s
 
 stepMatch = function(ctx)
     local book = ctx.state:getBook(ctx.snap.digest)
-    if book then
-        if ctx.snap.file and not book.file then
-            book.file = ctx.snap.file
-        end
-        return step(ctx, stepStats)
+    if book and ctx.snap.file and not book.file then
+        book.file = ctx.snap.file
     end
 
-    local body, err = ctx.client:matchCheck({ ctx.snap.digest })
+    local body, err = ctx.client:matchCheck({ ctx.snap.digest }, {
+        [ctx.snap.digest] = {
+            title = ctx.snap.title,
+            authors = ctx.snap.authors,
+            last_open = ctx.snap.last_open,
+            source = "current_file",
+            metadata_ambiguous = ctx.snap.metadata_ambiguous,
+        },
+    })
     if not body then
         if isAuthError(err) then return finish(ctx, "auth") end
         return finish(ctx, "network")
@@ -177,9 +211,12 @@ stepMatch = function(ctx)
     for _, match in ipairs(body.matches or {}) do
         if match.hash == ctx.snap.digest then
             ctx.state:setMatched(match.hash, match.bookFileId, match.bookId, ctx.snap.file)
+            applyLibraryVersion(ctx, body.libraryVersion)
             return step(ctx, stepStats)
         end
     end
+
+    applyLibraryVersion(ctx, body.libraryVersion)
 
     ctx.state:setUnmatched(ctx.snap.digest)
     return finish(ctx, "unmatched")
@@ -188,6 +225,10 @@ end
 stepStats = function(ctx)
     local book = ctx.state:getBook(ctx.snap.digest)
     if not book then return finish(ctx, "unmatched") end
+
+    if ctx.snap.stats_metadata_ambiguous then
+        return step(ctx, stepAnnotations)
+    end
 
     if ctx.stat_ids == nil then
         ctx.stat_ids = BookOrbitStatsReader.getBookIds(ctx.snap.digest)
@@ -365,6 +406,10 @@ stepProgress = function(ctx)
     local book = ctx.state:getBook(ctx.snap.digest)
     if not book then return finish(ctx, "unmatched") end
 
+    if ctx.skip_progress then
+        return finish(ctx)
+    end
+
     local pct = ctx.snap.percentage
     if type(pct) ~= "number" then
         return finish(ctx)
@@ -425,6 +470,7 @@ function BookOrbitBookSync.run(opts)
         on_finish = opts.on_finish,
         counts = { page_stats = 0, annotations = 0, ann_applied = 0 },
         had_errors = false,
+        skip_progress = opts.skip_progress == true,
     }
 
     ctx.state:rememberFile(snap.file, snap.digest)

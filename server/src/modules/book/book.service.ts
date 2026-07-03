@@ -1024,6 +1024,7 @@ export class BookService {
           offset: page * size,
           userId,
         });
+      // Collapsed rows render BookTableCollapsedSeriesCell which does not display custom metadata.
       const result = {
         items: assembleCollapsedBookCards(
           rows,
@@ -1058,8 +1059,21 @@ export class BookService {
         offset: page * size,
         userId,
       });
+    const bookIds = rows.map((r) => r.id);
+    const customMetadataRows = await this.customMetadataService.getCardValues(bookIds);
     const result = {
-      items: assembleBookCards(rows, authorRows, fileRows, genreRows, progressRows, statusRows, narratorRows, tagRows, seriesMembershipRows),
+      items: assembleBookCards(
+        rows,
+        authorRows,
+        fileRows,
+        genreRows,
+        progressRows,
+        statusRows,
+        narratorRows,
+        tagRows,
+        seriesMembershipRows,
+        customMetadataRows,
+      ),
       total,
       page,
       size,
@@ -2451,6 +2465,7 @@ export class BookService {
       if (r.seriesName !== undefined) dto.seriesName = r.seriesName as string | null;
       if (r.seriesIndex !== undefined) dto.seriesIndex = r.seriesIndex as number | null;
       if (r.seriesMemberships !== undefined) dto.seriesMemberships = r.seriesMemberships as UpdateBookMetadataDto['seriesMemberships'];
+      if (r.hardcoverEditionId !== undefined) dto.hardcoverEditionId = r.hardcoverEditionId as string | null;
       if (r.narrators !== undefined || r.duration !== undefined || r.abridged !== undefined || r.chapters !== undefined) {
         dto.audioMetadata = {};
         if (r.narrators !== undefined) dto.audioMetadata.narrators = r.narrators as string[];
