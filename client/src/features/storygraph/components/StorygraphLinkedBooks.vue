@@ -13,6 +13,7 @@ import {
 
 const books = ref<StorygraphLinkedBook[]>([])
 const loading = ref(true)
+const loadError = ref(false)
 const expandedBookId = ref<number | null>(null)
 const linkInputs = reactive<Record<number, string>>({})
 const linking = reactive<Record<number, boolean>>({})
@@ -25,10 +26,15 @@ onMounted(async () => {
   await loadBooks()
 })
 
+// Swallows its own failures (loadError drives the UI) so post-action refreshes can't
+// bubble into callers' try/catch and misattribute a reload failure to the action itself.
 async function loadBooks(): Promise<void> {
   loading.value = true
+  loadError.value = false
   try {
     books.value = await fetchStorygraphLinkedBooks()
+  } catch {
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -126,6 +132,12 @@ async function handleSetEdition(book: StorygraphLinkedBook, edition: StorygraphE
     <div v-if="loading" class="flex items-center gap-2 text-xs text-muted-foreground py-4">
       <Loader2 class="size-3.5 animate-spin" />
       Loading books...
+    </div>
+
+    <div v-else-if="loadError" class="flex items-center gap-2 text-xs text-destructive py-2">
+      <AlertCircle class="size-3.5 shrink-0" />
+      Failed to load books.
+      <button type="button" class="underline underline-offset-2" @click="loadBooks">Retry</button>
     </div>
 
     <div v-else-if="books.length === 0" class="text-xs text-muted-foreground py-2">No books currently being read.</div>

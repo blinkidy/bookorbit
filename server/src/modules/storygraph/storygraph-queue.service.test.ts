@@ -54,4 +54,19 @@ describe('StorygraphQueueService', () => {
     vi.setSystemTime(1010);
     await service.throttle(1);
   });
+
+  it('should serialize concurrent callers instead of releasing them together', async () => {
+    vi.setSystemTime(1000);
+    const spy = vi.spyOn(global, 'setTimeout');
+
+    const first = service.throttle(1);
+    const second = service.throttle(1);
+    const third = service.throttle(1);
+
+    await vi.runAllTimersAsync();
+    await Promise.all([first, second, third]);
+
+    const waits = spy.mock.calls.map(([, ms]) => ms);
+    expect(waits).toEqual([STORYGRAPH_MIN_INTERVAL_MS, STORYGRAPH_MIN_INTERVAL_MS * 2]);
+  });
 });

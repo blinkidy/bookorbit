@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Link, Save, CheckCircle2, AlertCircle, Info, Loader2, Unlink } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
@@ -27,6 +27,11 @@ onMounted(async () => {
   }
 })
 
+// A lingering result would misrepresent edited values, so any input change resets it.
+watch([sessionCookieInput, rememberTokenInput], () => {
+  validationResult.value = null
+})
+
 async function handleValidateCookies() {
   if (!sessionCookieInput.value.trim() || !rememberTokenInput.value.trim()) {
     toast.error('Enter both cookie values first')
@@ -38,6 +43,10 @@ async function handleValidateCookies() {
 
 async function handleSave() {
   const hasNewCookies = sessionCookieInput.value.trim() && rememberTokenInput.value.trim()
+  if (!hasNewCookies && (sessionCookieInput.value.trim() || rememberTokenInput.value.trim())) {
+    toast.error('Enter both cookie values to update the connection')
+    return
+  }
   const ok = await saveSettings({
     ...(hasNewCookies ? { sessionCookie: sessionCookieInput.value.trim(), rememberToken: rememberTokenInput.value.trim() } : {}),
     enabled: form.enabled,

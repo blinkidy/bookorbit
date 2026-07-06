@@ -43,6 +43,11 @@ export class StorygraphSettingsService {
     const sessionCookie = payload.sessionCookie !== undefined ? payload.sessionCookie.trim() : undefined;
     const rememberToken = payload.rememberToken !== undefined ? payload.rememberToken.trim() : undefined;
 
+    // A provided-but-blank cookie would otherwise slip past the ?? fallbacks below and
+    // overwrite stored credentials with an empty string, silently breaking sync.
+    if (sessionCookie === '' || rememberToken === '') {
+      throw new BadRequestException('Cookie values cannot be empty');
+    }
     if (!existing && (!sessionCookie || !rememberToken)) {
       throw new BadRequestException('Both the session cookie and remember token are required to connect StoryGraph');
     }

@@ -178,6 +178,20 @@ describe('StorygraphSettingsService', () => {
         enabled: false,
       });
     });
+
+    it('throws BadRequestException instead of overwriting stored cookies with empty strings', async () => {
+      const existing = {
+        sessionCookie: 'saved-sess',
+        rememberToken: 'saved-remember',
+        enabled: true,
+        autoSyncOnStatusChange: true,
+        autoSyncOnProgressUpdate: true,
+      };
+      mockRepo.findSettings.mockResolvedValue(existing);
+      await expect(makeService().upsertSettings(1, { sessionCookie: '', rememberToken: '   ' })).rejects.toThrow(BadRequestException);
+      await expect(makeService().upsertSettings(1, { sessionCookie: '  ', rememberToken: 'new-remember' })).rejects.toThrow(BadRequestException);
+      expect(mockRepo.upsertSettings).not.toHaveBeenCalled();
+    });
   });
 
   describe('disconnectUser', () => {

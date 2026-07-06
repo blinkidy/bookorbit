@@ -427,6 +427,7 @@ export class StorygraphSyncService {
         csrf,
       );
       if (isSuccessStatus(retry.status) && !retry.redirectedToSignIn) return;
+      throw new Error(`status_update_failed:${retry.status}`);
     }
 
     throw new Error(`status_update_failed:${response.status}`);

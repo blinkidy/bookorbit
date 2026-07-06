@@ -163,6 +163,22 @@ describe('StorygraphSyncService', () => {
       expect(mockClient.post).toHaveBeenNthCalledWith(2, 1, cookies, expect.stringContaining('status=rereading'), {}, 'csrf-token');
     });
 
+    it('reports the retry status when the rereading fallback also fails', async () => {
+      mockSettingsService.getCookiesForUser.mockResolvedValue(cookies);
+      mockRepo.findSyncableBook.mockResolvedValue(readingBook);
+      mockRepo.findBookState.mockResolvedValue(null);
+      mockMatchService.matchBook.mockResolvedValue({ storygraphBookId: 'abc-123', matchMethod: 'isbn' });
+      mockClient.post
+        .mockResolvedValueOnce({ status: 422, html: '', redirectedToSignIn: false })
+        .mockResolvedValueOnce({ status: 500, html: '', redirectedToSignIn: false });
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('failed');
+
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(
+        expect.objectContaining({ syncError: expect.stringContaining('status_update_failed:500') }),
+      );
+    });
+
     it('treats an expired session as a failure', async () => {
       mockSettingsService.getCookiesForUser.mockResolvedValue(cookies);
       mockRepo.findSyncableBook.mockResolvedValue(readingBook);
