@@ -20,6 +20,7 @@ import { KoreaderPackageService } from './koreader-package.service';
 import { KoreaderChapterExtractorService } from './koreader-chapter-extractor.service';
 import { KoreaderChapterService } from './koreader-chapter.service';
 import { KoreaderController } from './koreader.controller';
+import { KoreaderHashLinkService } from './koreader-hash-link.service';
 import { KoreaderPluginAnnotationService } from './koreader-plugin-annotation.service';
 import { KoreaderPluginController } from './koreader-plugin.controller';
 import { KoreaderPluginRepository } from './koreader-plugin.repository';
@@ -43,6 +44,7 @@ import { KoreaderStatsService } from './koreader-stats.service';
   controllers: [KoreaderController, KoreaderPluginController, KoreaderCatalogController],
   providers: [
     KoreaderService,
+    KoreaderHashLinkService,
     KoreaderRepository,
     KoreaderAudiobookSessionService,
     KoreaderAudiobookSessionRepository,

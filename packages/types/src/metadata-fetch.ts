@@ -16,6 +16,19 @@ export const MetadataProviderKey = {
   ALADIN: "aladin",
 } as const;
 
+export const COMMUNITY_RATING_PROVIDER_KEYS = [
+  MetadataProviderKey.HARDCOVER,
+  MetadataProviderKey.GOODREADS,
+  MetadataProviderKey.GOOGLE,
+  MetadataProviderKey.OPEN_LIBRARY,
+  MetadataProviderKey.ITUNES,
+  MetadataProviderKey.RANOBEDB,
+  MetadataProviderKey.AMAZON,
+  MetadataProviderKey.AUDIBLE,
+] as const;
+
+export type CommunityRatingProviderKey = (typeof COMMUNITY_RATING_PROVIDER_KEYS)[number];
+
 export interface ComicMetadataFields {
   issueNumber?: string;
   volumeName?: string;
@@ -78,6 +91,7 @@ export interface MetadataProviderInfo {
   key: MetadataProviderKey;
   label: string;
   identifiable: boolean;
+  selectedByFieldRules?: boolean;
 }
 
 export type MetadataFetchEmptyReason = "no_active_providers" | "providers_throttled" | "no_candidates" | "no_resolved_fields";

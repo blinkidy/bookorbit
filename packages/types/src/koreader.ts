@@ -41,6 +41,7 @@ export interface KoreaderPluginTotals {
   failedPositions: number;
   pageStatEvents: number;
   annotations: number;
+  unmatchedBooks: number;
 }
 
 export interface KoreaderSyncStatus {
@@ -64,6 +65,54 @@ export interface KoreaderBookSyncInfo {
   canonicalUpdatedAt: string;
   devices: KoreaderBookProgress[];
   fileModifiedSinceLastSync: boolean;
+}
+
+export interface KoreaderUnmatchedBook {
+  hash: string;
+  title: string | null;
+  authors: string | null;
+  lastOpen: number | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+export interface KoreaderManualHashLink {
+  hash: string;
+  bookId: number;
+  bookFileId: number;
+  bookTitle: string | null;
+  bookAuthors: string[];
+  koreaderTitle: string | null;
+  koreaderAuthors: string | null;
+  koreaderLastOpen: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinkKoreaderUnmatchedBookPayload {
+  bookId: number;
+}
+
+export interface LinkKoreaderUnmatchedBookResult {
+  hash: string;
+  bookId: number;
+  bookFileId: number;
+}
+
+export interface DismissKoreaderUnmatchedBookResult {
+  hash: string;
+}
+
+export interface DismissAllKoreaderUnmatchedBooksResult {
+  count: number;
+}
+
+export interface UpdateKoreaderManualHashLinkPayload {
+  bookId: number;
+}
+
+export interface UnlinkKoreaderManualHashLinkResult {
+  hash: string;
 }
 
 export interface CreateKoreaderCredentialsPayload {
@@ -116,6 +165,7 @@ export interface KoreaderCatalogEntry {
   subtitle?: string | null;
   count?: number;
   icon?: string | null;
+  seriesId?: number;
   href?: string;
   booksHref?: string;
 }
@@ -140,6 +190,7 @@ export interface KoreaderCatalogBookListItem {
   id: number;
   title: string;
   authors: string[];
+  seriesId: number | null;
   seriesName: string | null;
   seriesIndex: number | null;
   progressPercentage: number | null;

@@ -98,6 +98,7 @@ function makeBook(overrides: Partial<BookCard> = {}): BookCard {
     pageCount: null,
     isbn13: null,
     narrators: [],
+    customMetadata: [],
     ...overrides,
   }
 }
@@ -206,7 +207,7 @@ describe('useBookTableShell', () => {
       handleEditIndividually()
 
       expect(mocks.setBookContext).toHaveBeenCalledWith([10, 30], 2)
-      expect(mocks.routerPush).toHaveBeenCalledWith({ name: 'book-detail', params: { bookId: 10 }, query: { tab: 'details' } })
+      expect(mocks.routerPush).toHaveBeenCalledWith({ name: 'book-detail', params: { bookId: 10 }, query: { tab: 'edit' } })
       expect(mocks.exitSelectionMode).toHaveBeenCalledOnce()
     })
 
