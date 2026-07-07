@@ -8,15 +8,16 @@ export class StorygraphQueueService {
   private readonly lastRequestAt = new Map<number, number>();
 
   async throttle(userId: number): Promise<void> {
+    // Reserve the next slot synchronously so concurrent callers serialize instead of
+    // reading the same lastRequestAt and firing together after identical waits.
+    const now = Date.now();
     const last = this.lastRequestAt.get(userId);
-    if (last !== undefined) {
-      const elapsed = Date.now() - last;
-      if (elapsed < STORYGRAPH_MIN_INTERVAL_MS) {
-        const wait = STORYGRAPH_MIN_INTERVAL_MS - elapsed;
-        await new Promise((resolve) => setTimeout(resolve, wait));
-      }
+    const slot = last === undefined ? now : Math.max(now, last + STORYGRAPH_MIN_INTERVAL_MS);
+    this.lastRequestAt.set(userId, slot);
+    const wait = slot - now;
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
     }
-    this.lastRequestAt.set(userId, Date.now());
   }
 
   resetUser(userId: number): void {

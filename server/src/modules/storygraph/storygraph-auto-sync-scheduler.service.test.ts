@@ -32,7 +32,6 @@ const enabledSettings: StorygraphSettings = {
   autoSyncOnStatusChange: true,
   autoSyncOnProgressUpdate: true,
   lastSyncedAt: null,
-  connectedAt: null,
 };
 
 function makeDeferred<T>() {

@@ -1,5 +1,6 @@
 export const STORYGRAPH_BASE_URL = 'https://app.thestorygraph.com';
 export const STORYGRAPH_MIN_INTERVAL_MS = 1500;
+export const STORYGRAPH_REQUEST_TIMEOUT_MS = 30_000;
 export const STORYGRAPH_MAX_RETRIES = 2;
 
 export const STORYGRAPH_SESSION_COOKIE_NAME = '_storygraph_session';

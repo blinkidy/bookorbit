@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { Link, Save, CheckCircle2, AlertCircle, Info, Loader2, Unlink } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
@@ -29,6 +29,11 @@ onMounted(async () => {
   }
 })
 
+// A lingering result would misrepresent edited values, so any input change resets it.
+watch([sessionCookieInput, rememberTokenInput], () => {
+  validationResult.value = null
+})
+
 async function handleValidateCookies() {
   if (!sessionCookieInput.value.trim() || !rememberTokenInput.value.trim()) {
     toast.error('Enter both cookie values first')
@@ -40,6 +45,10 @@ async function handleValidateCookies() {
 
 async function handleSave() {
   const hasNewCookies = sessionCookieInput.value.trim() && rememberTokenInput.value.trim()
+  if (!hasNewCookies && (sessionCookieInput.value.trim() || rememberTokenInput.value.trim())) {
+    toast.error('Enter both cookie values to update the connection')
+    return
+  }
   const ok = await saveSettings({
     ...(hasNewCookies ? { sessionCookie: sessionCookieInput.value.trim(), rememberToken: rememberTokenInput.value.trim() } : {}),
     enabled: form.enabled,
@@ -67,12 +76,6 @@ async function handleDisconnect() {
 function toggleCookiesVisible() {
   cookiesVisible.value = !cookiesVisible.value
 }
-
-const connectedAtLabel = computed(() => {
-  const iso = settings.value?.connectedAt
-  if (!iso) return null
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-})
 
 const bookSyncModeOptions = [
   {
@@ -191,16 +194,12 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
         <Info class="size-3.5 shrink-0 text-muted-foreground mt-0.5" />
         <p class="text-xs text-muted-foreground leading-relaxed">
           Sync runs only for books that are not unread. This applies to status and progress triggers. These switches control when a sync runs.
-          <template v-if="connectedAtLabel">
-            Books already marked Read, Skimmed, or Abandoned before you connected ({{ connectedAtLabel }}) are skipped by automatic and bulk sync —
-            use "Linked books" below to push one of those anyway.
-          </template>
         </p>
       </div>
 
       <div class="space-y-2">
         <div>
-          <p class="text-sm">Sync scope</p>
+          <p class="text-sm">Book sync scope</p>
           <p class="text-xs text-muted-foreground mt-0.5">Choose whether StoryGraph sync starts broadly or only for books you pick.</p>
         </div>
         <div class="grid gap-2 sm:grid-cols-2">

@@ -18,8 +18,6 @@ export interface BookSyncData {
   format: string | null;
   status: string;
   progress: number | null;
-  finishedAt: Date | null;
-  statusUpdatedAt: Date | null;
 }
 
 @Injectable()
@@ -188,8 +186,6 @@ export class StorygraphRepository {
         format: schema.bookFiles.format,
         status: sql<string>`coalesce(${schema.userBookStatus.status}, 'unread')`,
         progress: maxProgressSq.maxProgress,
-        finishedAt: schema.userBookStatus.finishedAt,
-        statusUpdatedAt: schema.userBookStatus.updatedAt,
       })
       .from(schema.books)
       .leftJoin(schema.userBookStatus, and(eq(schema.userBookStatus.bookId, schema.books.id), eq(schema.userBookStatus.userId, userId)))

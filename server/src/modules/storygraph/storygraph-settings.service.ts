@@ -37,7 +37,6 @@ export class StorygraphSettingsService {
       autoSyncOnStatusChange: row?.autoSyncOnStatusChange ?? true,
       autoSyncOnProgressUpdate: row?.autoSyncOnProgressUpdate ?? true,
       lastSyncedAt: row?.lastSyncedAt?.toISOString() ?? null,
-      connectedAt: row?.connectedAt?.toISOString() ?? null,
     };
   }
 
@@ -47,6 +46,11 @@ export class StorygraphSettingsService {
     const sessionCookie = payload.sessionCookie !== undefined ? payload.sessionCookie.trim() : undefined;
     const rememberToken = payload.rememberToken !== undefined ? payload.rememberToken.trim() : undefined;
 
+    // A provided-but-blank cookie would otherwise slip past the ?? fallbacks below and
+    // overwrite stored credentials with an empty string, silently breaking sync.
+    if (sessionCookie === '' || rememberToken === '') {
+      throw new BadRequestException('Cookie values cannot be empty');
+    }
     if (!existing && (!sessionCookie || !rememberToken)) {
       throw new BadRequestException('Both the session cookie and remember token are required to connect StoryGraph');
     }
@@ -60,9 +64,6 @@ export class StorygraphSettingsService {
     // the INSERT values must be valid.
     data.sessionCookie = sessionCookie ?? existing!.sessionCookie;
     data.rememberToken = rememberToken ?? existing!.rememberToken;
-    // Books already finished before this moment are treated as pre-existing and skipped by
-    // automatic/bulk sync — only set once, on the connection that creates the settings row.
-    if (!existing) data.connectedAt = new Date();
     if (payload.enabled !== undefined) data.enabled = payload.enabled;
     if (payload.bookSyncMode !== undefined) data.bookSyncMode = payload.bookSyncMode;
     if (payload.autoSyncOnStatusChange !== undefined) data.autoSyncOnStatusChange = payload.autoSyncOnStatusChange;

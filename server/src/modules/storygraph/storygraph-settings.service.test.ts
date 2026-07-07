@@ -104,26 +104,6 @@ describe('StorygraphSettingsService', () => {
       const result = await makeService().getSettings(1);
       expect(result.lastSyncedAt).toBe(syncedAt.toISOString());
     });
-
-    it('returns connectedAt as ISO string when set', async () => {
-      const connectedAt = new Date('2026-06-18T00:00:00Z');
-      mockRepo.findSettings.mockResolvedValue({
-        sessionCookie: 'sess',
-        rememberToken: 'remember',
-        enabled: true,
-        autoSyncOnStatusChange: true,
-        autoSyncOnProgressUpdate: true,
-        connectedAt,
-      });
-      const result = await makeService().getSettings(1);
-      expect(result.connectedAt).toBe(connectedAt.toISOString());
-    });
-
-    it('returns null connectedAt when no settings row exists', async () => {
-      mockRepo.findSettings.mockResolvedValue(undefined);
-      const result = await makeService().getSettings(1);
-      expect(result.connectedAt).toBeNull();
-    });
   });
 
   describe('upsertSettings', () => {
@@ -148,20 +128,7 @@ describe('StorygraphSettingsService', () => {
       mockRepo.upsertSettings.mockResolvedValue({});
       const result = await makeService().upsertSettings(1, { sessionCookie: 'sess', rememberToken: 'remember' });
       expect(result.cookiesConfigured).toBe(true);
-      expect(mockRepo.upsertSettings).toHaveBeenCalledWith(1, { sessionCookie: 'sess', rememberToken: 'remember', connectedAt: expect.any(Date) });
-    });
-
-    it('sets connectedAt only on the first connect, not on later updates', async () => {
-      mockRepo.findSettings.mockResolvedValueOnce(undefined).mockResolvedValue({
-        sessionCookie: 'sess',
-        rememberToken: 'remember',
-        enabled: true,
-        autoSyncOnStatusChange: true,
-        autoSyncOnProgressUpdate: true,
-      });
-      mockRepo.upsertSettings.mockResolvedValue({});
-      await makeService().upsertSettings(1, { sessionCookie: 'sess', rememberToken: 'remember' });
-      expect(mockRepo.upsertSettings).toHaveBeenCalledWith(1, expect.objectContaining({ connectedAt: expect.any(Date) }));
+      expect(mockRepo.upsertSettings).toHaveBeenCalledWith(1, { sessionCookie: 'sess', rememberToken: 'remember' });
     });
 
     it('carries existing cookies forward when updating settings without new values', async () => {
@@ -180,6 +147,20 @@ describe('StorygraphSettingsService', () => {
         rememberToken: 'saved-remember',
         enabled: false,
       });
+    });
+
+    it('throws BadRequestException instead of overwriting stored cookies with empty strings', async () => {
+      const existing = {
+        sessionCookie: 'saved-sess',
+        rememberToken: 'saved-remember',
+        enabled: true,
+        autoSyncOnStatusChange: true,
+        autoSyncOnProgressUpdate: true,
+      };
+      mockRepo.findSettings.mockResolvedValue(existing);
+      await expect(makeService().upsertSettings(1, { sessionCookie: '', rememberToken: '   ' })).rejects.toThrow(BadRequestException);
+      await expect(makeService().upsertSettings(1, { sessionCookie: '  ', rememberToken: 'new-remember' })).rejects.toThrow(BadRequestException);
+      expect(mockRepo.upsertSettings).not.toHaveBeenCalled();
     });
 
     it('saves a valid bookSyncMode', async () => {

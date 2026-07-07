@@ -27,12 +27,6 @@ import {
   resolveStorygraphBookSyncOverrideForToggle,
 } from './storygraph-sync-policy';
 
-// Books already in one of these statuses before the user connected StoryGraph are assumed to
-// already be logged there (the user almost certainly tracked them manually) and are skipped by
-// automatic/bulk sync. Currently-reading books always sync normally — there's no pre-existing
-// StoryGraph log for an in-progress book that connecting could duplicate.
-const FINISHED_STATUSES = new Set<ReadStatus>(['read', 'skimmed', 'abandoned']);
-
 // "Linked books" only needs to manage matches for books actively being read right now —
 // finished/want-to-read books aren't useful to manually re-link from that view.
 const CURRENTLY_READING_STATUSES = new Set<ReadStatus>(['reading', 'rereading']);
@@ -76,13 +70,8 @@ export class StorygraphSyncService {
     const book = await this.repo.findBookSyncData(userId, bookId);
     if (!book) return 'skipped';
 
-    const [settings, rawSettings, state] = await Promise.all([
-      this.settingsService.getSettings(userId),
-      this.repo.findSettings(userId),
-      this.repo.findBookState(userId, book.bookId),
-    ]);
-    const connectedAt = rawSettings?.connectedAt ?? (settings.connectedAt ? new Date(settings.connectedAt) : null);
-    if (!this.resolveBookSyncDecision(settings, book, state, connectedAt, true).syncEnabled) return 'skipped';
+    const [settings, state] = await Promise.all([this.settingsService.getSettings(userId), this.repo.findBookState(userId, book.bookId)]);
+    if (!this.resolveBookSyncDecision(settings, book, state, true).syncEnabled) return 'skipped';
     if (!this.hasChanges(book, state)) return 'skipped';
 
     return this.syncSingleBook(userId, cookies, book, state);
@@ -317,8 +306,7 @@ export class StorygraphSyncService {
 
       const state = await this.repo.findBookState(userId, book.bookId);
       const settings = await this.settingsService.getSettings(userId);
-      const connectedAt = settings.connectedAt ? new Date(settings.connectedAt) : null;
-      if (!this.resolveBookSyncDecision(settings, book, state, connectedAt, true).syncEnabled) {
+      if (!this.resolveBookSyncDecision(settings, book, state, true).syncEnabled) {
         skipped++;
         this.emitProgress(userId, synced);
         continue;
@@ -466,6 +454,7 @@ export class StorygraphSyncService {
         csrf,
       );
       if (isSuccessStatus(retry.status) && !retry.redirectedToSignIn) return;
+      throw new Error(`status_update_failed:${retry.status}`);
     }
 
     throw new Error(`status_update_failed:${response.status}`);
@@ -499,25 +488,15 @@ export class StorygraphSyncService {
   }
 
   private async filterBooksInSyncScope(userId: number, books: BookSyncData[]): Promise<BookSyncData[]> {
-    const [settings, rawSettings, states] = await Promise.all([
+    const [settings, states] = await Promise.all([
       this.settingsService.getSettings(userId),
-      this.repo.findSettings(userId),
       this.repo.findBookStatesByBookIds(
         userId,
         books.map((book) => book.bookId),
       ),
     ]);
-    const connectedAt = rawSettings?.connectedAt ?? (settings.connectedAt ? new Date(settings.connectedAt) : null);
     const stateByBookId = new Map(states.map((state) => [state.bookId, state]));
-    return books.filter((book) => this.resolveBookSyncDecision(settings, book, stateByBookId.get(book.bookId), connectedAt, true).syncEnabled);
-  }
-
-  private isPreExistingFinished(book: BookSyncData, connectedAt: Date | null): boolean {
-    if (!connectedAt) return false;
-    if (!FINISHED_STATUSES.has(book.status as ReadStatus)) return false;
-    const finishedAt = book.finishedAt ?? book.statusUpdatedAt;
-    if (!finishedAt) return false;
-    return finishedAt.getTime() < connectedAt.getTime();
+    return books.filter((book) => this.resolveBookSyncDecision(settings, book, stateByBookId.get(book.bookId), true).syncEnabled);
   }
 
   private hasChanges(book: BookSyncData, state: StorygraphBookStateSnapshot): boolean {
@@ -535,8 +514,7 @@ export class StorygraphSyncService {
   ): StorygraphBookSyncState {
     if (!book) return this.bookNotFoundState(bookId, settings, state);
 
-    const connectedAt = settings.connectedAt ? new Date(settings.connectedAt) : null;
-    const decision = this.resolveBookSyncDecision(settings, book, state, connectedAt);
+    const decision = this.resolveBookSyncDecision(settings, book, state);
     return {
       bookId,
       syncOverride: normalizeStorygraphBookSyncOverride(state),
@@ -565,7 +543,6 @@ export class StorygraphSyncService {
     settings: StorygraphSettings,
     book: BookSyncData,
     state: StorygraphBookStateSnapshot,
-    connectedAt: Date | null,
     allowUnsupportedStatus = false,
   ): { syncEnabled: boolean; effectiveReason: StorygraphBookSyncEffectiveReason | null } {
     if (allowUnsupportedStatus && !STATUS_MAP[book.status as ReadStatus] && book.status !== 'unread') {
@@ -580,7 +557,6 @@ export class StorygraphSyncService {
       settings,
       status: book.status,
       syncOverride: normalizeStorygraphBookSyncOverride(state),
-      preExistingFinished: this.isPreExistingFinished(book, connectedAt),
     });
   }
 

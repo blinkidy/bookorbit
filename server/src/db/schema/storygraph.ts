@@ -18,7 +18,6 @@ export const storygraphUserSettings = pgTable('storygraph_user_settings', {
   lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
   // When the user first connected StoryGraph. Books already finished before this moment are
   // assumed to already be logged on StoryGraph and are skipped by automatic/bulk sync.
-  connectedAt: timestamp('connected_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .defaultNow()
