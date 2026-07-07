@@ -35,7 +35,6 @@ export function resolveStorygraphBookSyncDecision(input: {
   settings: StorygraphBookSyncPolicySettings;
   status: string | null | undefined;
   syncOverride: StorygraphBookSyncOverride;
-  preExistingFinished: boolean;
 }): StorygraphBookSyncDecision {
   if (!input.settings.effectiveEnabled) {
     return {
@@ -57,10 +56,6 @@ export function resolveStorygraphBookSyncDecision(input: {
 
   if (input.syncOverride === 'included') {
     return { syncEnabled: true, effectiveReason: null };
-  }
-
-  if (input.preExistingFinished) {
-    return { syncEnabled: false, effectiveReason: 'pre_existing_finished' };
   }
 
   if (input.settings.bookSyncMode === 'all_eligible') {

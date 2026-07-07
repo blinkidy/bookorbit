@@ -14,8 +14,6 @@ function resolveReasonLabel(reason: StorygraphBookSyncEffectiveReason | null | u
       return 'Excluded'
     case 'not_selected':
       return 'Not selected'
-    case 'pre_existing_finished':
-      return 'Skipped as already tracked'
     case 'unread':
       return null
     case 'unsupported_status':

@@ -15,7 +15,7 @@ const baseSettings: StorygraphBookSyncPolicySettings = {
 
 describe('storygraph sync policy', () => {
   it('defaults all eligible mode to enabled for supported statuses', () => {
-    expect(resolveStorygraphBookSyncDecision({ settings: baseSettings, status: 'reading', syncOverride: null, preExistingFinished: false })).toEqual({
+    expect(resolveStorygraphBookSyncDecision({ settings: baseSettings, status: 'reading', syncOverride: null })).toEqual({
       syncEnabled: true,
       effectiveReason: null,
     });
@@ -27,7 +27,6 @@ describe('storygraph sync policy', () => {
         settings: { ...baseSettings, bookSyncMode: 'selected_only' },
         status: 'reading',
         syncOverride: null,
-        preExistingFinished: false,
       }),
     ).toEqual({
       syncEnabled: false,
@@ -35,13 +34,12 @@ describe('storygraph sync policy', () => {
     });
   });
 
-  it('lets explicit inclusion override selected-only and pre-existing finished skips', () => {
+  it('lets explicit inclusion override selected-only mode', () => {
     expect(
       resolveStorygraphBookSyncDecision({
         settings: { ...baseSettings, bookSyncMode: 'selected_only' },
         status: 'read',
         syncOverride: 'included',
-        preExistingFinished: true,
       }),
     ).toEqual({
       syncEnabled: true,

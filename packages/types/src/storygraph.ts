@@ -10,7 +10,6 @@ export interface StorygraphSettings {
   autoSyncOnStatusChange: boolean;
   autoSyncOnProgressUpdate: boolean;
   lastSyncedAt: string | null;
-  connectedAt: string | null;
 }
 
 export interface UpsertStorygraphSettingsPayload {
@@ -41,8 +40,7 @@ export type StorygraphBookSyncEffectiveReason =
   | "not_selected"
   | "excluded"
   | "unread"
-  | "unsupported_status"
-  | "pre_existing_finished";
+  | "unsupported_status";
 
 export interface StorygraphBookSyncState {
   bookId: number;

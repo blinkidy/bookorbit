@@ -2,7 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
-import { STORYGRAPH_BASE_URL, STORYGRAPH_MAX_RETRIES, STORYGRAPH_REMEMBER_COOKIE_NAME, STORYGRAPH_SESSION_COOKIE_NAME } from './storygraph.constants';
+import {
+  STORYGRAPH_BASE_URL,
+  STORYGRAPH_MAX_RETRIES,
+  STORYGRAPH_REMEMBER_COOKIE_NAME,
+  STORYGRAPH_REQUEST_TIMEOUT_MS,
+  STORYGRAPH_SESSION_COOKIE_NAME,
+} from './storygraph.constants';
 import { StorygraphQueueService } from './storygraph-queue.service';
 import { StorygraphRepository } from './storygraph.repository';
 
@@ -75,7 +81,7 @@ export class StorygraphClientService {
 
     let response: Response;
     try {
-      response = await fetch(url, { method, headers, body, redirect: 'follow' });
+      response = await fetch(url, { method, headers, body, redirect: 'follow', signal: AbortSignal.timeout(STORYGRAPH_REQUEST_TIMEOUT_MS) });
     } catch (err) {
       const errorClass = err instanceof Error ? err.constructor.name : 'UnknownError';
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
