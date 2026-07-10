@@ -355,7 +355,7 @@ describe('HardcoverSyncService', () => {
     it('sends progress_seconds (not progress_pages) when the matched edition is an audiobook', async () => {
       const audioBook = { ...readingBook, audioPositionSeconds: 4521.7 };
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
-      mockRepo.findSyncableBook.mockResolvedValue(audioBook);
+      mockRepo.findBookSyncData.mockResolvedValue(audioBook);
       mockRepo.findBookState.mockResolvedValue(null);
       mockMatchService.matchBook.mockResolvedValue({
         hardcoverBookId: 10,
@@ -389,7 +389,7 @@ describe('HardcoverSyncService', () => {
       const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
       const audioBook = { ...readingBook, audioPositionSeconds: null };
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
-      mockRepo.findSyncableBook.mockResolvedValue(audioBook);
+      mockRepo.findBookSyncData.mockResolvedValue(audioBook);
       mockRepo.findBookState.mockResolvedValue(null);
       mockMatchService.matchBook.mockResolvedValue({
         hardcoverBookId: 10,
@@ -408,7 +408,9 @@ describe('HardcoverSyncService', () => {
 
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: null }));
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('matched edition is audio but no local audiobook_progress row exists for this book'),
+        expect.stringContaining(
+          'matched edition is audio but Hardcover has no audio_seconds duration for it, and there is no local audiobook_progress row either',
+        ),
       );
       warnSpy.mockRestore();
     });
