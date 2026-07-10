@@ -1,0 +1,106 @@
+name: Upstream Release Check
+run-name: Check upstream BookOrbit release
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 10 * * *"
+
+concurrency:
+  group: upstream-release-check
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    name: Check and open update PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure git author
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve latest upstream release
+        id: upstream
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest_tag="$(gh api repos/bookorbit/bookorbit/releases/latest --jq '.tag_name')"
+          if [[ -z "${latest_tag}" || "${latest_tag}" == "null" ]]; then
+            echo "::error::Unable to resolve latest upstream release tag."
+            exit 1
+          fi
+
+          upstream_ref="refs/tags/upstream-${latest_tag}"
+          git remote add upstream https://github.com/bookorbit/bookorbit.git
+          git fetch upstream main --prune
+          git fetch upstream "refs/tags/${latest_tag}:${upstream_ref}"
+
+          if git merge-base --is-ancestor "${upstream_ref}" HEAD; then
+            echo "Fork already contains upstream ${latest_tag}."
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+            echo "latest_tag=${latest_tag}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          branch_tag="$(printf '%s' "${latest_tag}" | tr -c 'A-Za-z0-9._-' '-')"
+          echo "has_update=true" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=${latest_tag}" >> "$GITHUB_OUTPUT"
+          echo "upstream_ref=${upstream_ref}" >> "$GITHUB_OUTPUT"
+          echo "branch=automation/upstream-${branch_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Merge upstream release
+        if: steps.upstream.outputs.has_update == 'true'
+        shell: bash
+        env:
+          LATEST_TAG: ${{ steps.upstream.outputs.latest_tag }}
+          UPSTREAM_REF: ${{ steps.upstream.outputs.upstream_ref }}
+          UPDATE_BRANCH: ${{ steps.upstream.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git switch -c "${UPDATE_BRANCH}"
+          git merge --no-edit "${UPSTREAM_REF}"
+          git push --force-with-lease origin "${UPDATE_BRANCH}"
+
+      - name: Open or update PR
+        if: steps.upstream.outputs.has_update == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST_TAG: ${{ steps.upstream.outputs.latest_tag }}
+          UPDATE_BRANCH: ${{ steps.upstream.outputs.branch }}
+        run: |
+          set -euo pipefail
+          existing_pr="$(gh pr list --head "${UPDATE_BRANCH}" --state open --json number --jq '.[0].number // empty')"
+          title="chore: update fork to upstream ${LATEST_TAG}"
+          body_file="$(mktemp)"
+          {
+            echo "## What changed"
+            echo ""
+            echo "Merged upstream \`bookorbit/bookorbit\` release \`${LATEST_TAG}\` into this fork."
+            echo ""
+            echo "This PR was created automatically by the daily upstream release check. Review CI and merge when ready."
+            echo ""
+            echo "## Notes"
+            echo ""
+            echo "The workflow only opens a PR after a clean merge. If the upstream release conflicts with fork-specific changes, the workflow will fail for manual resolution."
+          } > "${body_file}"
+
+          if [[ -n "${existing_pr}" ]]; then
+            gh pr edit "${existing_pr}" --title "${title}" --body-file "${body_file}"
+          else
+            gh pr create --draft --base main --head "${UPDATE_BRANCH}" --title "${title}" --body-file "${body_file}"
+          fi

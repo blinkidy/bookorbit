@@ -7,10 +7,15 @@ export type SidebarVersionUi = {
 }
 
 const GITHUB_RELEASES_BASE = 'https://github.com/bookorbit/bookorbit/releases'
+const PERSONAL_RELEASES_BASE = 'https://github.com/blinkidy/bookorbit/releases'
 const GITHUB_COMMIT_BASE = 'https://github.com/bookorbit/bookorbit/commit'
 
 function isVersionTag(value: string): boolean {
-  return /^v\d+\.\d+\.\d+$/.test(value)
+  return /^v\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(value)
+}
+
+function releaseBaseForTag(value: string): string {
+  return value.endsWith('-personal') ? PERSONAL_RELEASES_BASE : GITHUB_RELEASES_BASE
 }
 
 function extractSha(value: string): string | null {
@@ -36,9 +41,9 @@ export function buildSidebarVersionUi(version: string, updateAvailable: boolean 
 
   return {
     currentLabel: showLatest ? `Current ${currentLabelBase}` : currentLabelBase,
-    currentHref: currentIsTag ? `${GITHUB_RELEASES_BASE}/tag/${currentRaw}` : currentSha ? `${GITHUB_COMMIT_BASE}/${currentSha}` : null,
+    currentHref: currentIsTag ? `${releaseBaseForTag(currentRaw)}/tag/${currentRaw}` : currentSha ? `${GITHUB_COMMIT_BASE}/${currentSha}` : null,
     showLatest,
     latestLabel: normalizeVersionLabel(latestRaw),
-    latestHref: isVersionTag(latestRaw) ? `${GITHUB_RELEASES_BASE}/tag/${latestRaw}` : `${GITHUB_RELEASES_BASE}/latest`,
+    latestHref: isVersionTag(latestRaw) ? `${releaseBaseForTag(latestRaw)}/tag/${latestRaw}` : `${GITHUB_RELEASES_BASE}/latest`,
   }
 }

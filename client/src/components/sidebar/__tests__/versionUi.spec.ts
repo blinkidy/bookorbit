@@ -25,6 +25,14 @@ describe('buildSidebarVersionUi', () => {
     expect(ui.latestHref).toBe('https://github.com/bookorbit/bookorbit/releases/tag/v1.4.0')
   })
 
+  it('treats personal release versions as release tags', () => {
+    const ui = buildSidebarVersionUi('v2.0.1-personal', false, null)
+
+    expect(ui.currentLabel).toBe('v2.0.1-personal')
+    expect(ui.currentHref).toBe('https://github.com/blinkidy/bookorbit/releases/tag/v2.0.1-personal')
+    expect(ui.showLatest).toBe(false)
+  })
+
   it('does not show latest when latestVersion is null', () => {
     const ui = buildSidebarVersionUi('v1.2.3', true, null)
 
