@@ -3,6 +3,7 @@ import type { AuthorAutoEnrichmentConfig, DefaultLibraryAccessConfig, OidcAutoPr
 export const APP_SETTING_KEYS = {
   ALLOW_REGISTRATION: 'allow_registration',
   OPDS_ENABLED: 'opds_enabled',
+  BOOK_DOCK_PAUSED: 'book_dock_paused',
   BOOK_DOCK_AUTO_FETCH_METADATA: 'book_dock_auto_fetch_metadata',
   BOOK_DOCK_AUTO_FINALIZE_ENABLED: 'book_dock_auto_finalize_enabled',
   BOOK_DOCK_AUTO_FINALIZE_THRESHOLD: 'book_dock_auto_finalize_threshold',
@@ -24,6 +25,7 @@ export const APP_SETTING_KEYS = {
   AUDIT_RETENTION_DAYS: 'audit_retention_days',
   INITIAL_SETUP_COMPLETED_AT: 'initial_setup_completed_at',
   UPDATE_CHECK_ENABLED: 'update_check_enabled',
+  MAX_UPLOAD_SIZE_MB: 'max_upload_size_mb',
 } as const;
 
 export const DEFAULT_AUDIT_RETENTION_DAYS = 90;

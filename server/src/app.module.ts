@@ -52,6 +52,7 @@ import { MetadataScoreModule } from './modules/metadata-score/metadata-score.mod
 import { StatisticsModule } from './modules/statistics/statistics.module';
 import { UserStatisticsModule } from './modules/user-statistics/user-statistics.module';
 import { ReadingSessionModule } from './modules/reading-session/reading-session.module';
+import { ReadingStateModule } from './modules/reading-state/reading-state.module';
 import { UserBookStatusModule } from './modules/user-book-status/user-book-status.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { MigrationModule } from './modules/migration/migration.module';
@@ -64,6 +65,7 @@ import { AppInfoModule } from './modules/app-info/app-info.module';
 import { ReleaseNotesModule } from './modules/release-notes/release-notes.module';
 import { AchievementModule } from './modules/achievement/achievement.module';
 import { HardcoverModule } from './modules/hardcover/hardcover.module';
+import { ReadwiseModule } from './modules/readwise/readwise.module';
 import { StorygraphModule } from './modules/storygraph/storygraph.module';
 import { CustomMetadataModule } from './modules/custom-metadata/custom-metadata.module';
 import { CustomIconModule } from './modules/custom-icon/custom-icon.module';
@@ -128,6 +130,7 @@ import { CustomIconModule } from './modules/custom-icon/custom-icon.module';
     StatisticsModule,
     UserStatisticsModule,
     ReadingSessionModule,
+    ReadingStateModule,
     UserBookStatusModule,
     AuditModule,
     MigrationModule,
@@ -140,6 +143,7 @@ import { CustomIconModule } from './modules/custom-icon/custom-icon.module';
     ReleaseNotesModule,
     AchievementModule,
     HardcoverModule,
+    ReadwiseModule,
     StorygraphModule,
   ],
   providers: [

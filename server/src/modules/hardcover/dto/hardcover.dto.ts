@@ -41,18 +41,6 @@ export class ValidateHardcoverTokenDto {
   token?: string;
 }
 
-export class LinkHardcoverBookDto {
-  @IsNotEmpty()
-  @IsString()
-  @MaxLength(2048)
-  input!: string;
-}
-
-export class SetHardcoverEditionDto {
-  @IsInt()
-  editionId!: number;
-}
-
 export class UpdateHardcoverBookSyncDto implements UpdateHardcoverBookSyncPayload {
   @IsBoolean()
   syncEnabled!: boolean;
@@ -70,4 +58,16 @@ export class ApplyHardcoverImportDto implements ApplyHardcoverImportPayload {
   @IsOptional()
   @IsBoolean()
   importProgress?: boolean;
+}
+
+export class LinkHardcoverBookDto {
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(2048)
+  input!: string;
+}
+
+export class SetHardcoverEditionDto {
+  @IsInt()
+  editionId!: number;
 }

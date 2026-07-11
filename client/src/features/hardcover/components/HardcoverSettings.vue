@@ -29,8 +29,8 @@ onUnmounted(() => {
     <HardcoverConnectionCard />
 
     <HardcoverSyncProgress v-if="settings?.tokenConfigured" />
-    <HardcoverLinkedBooks v-if="settings?.tokenConfigured" />
 
     <HardcoverImportStatus v-if="settings?.tokenConfigured" />
+    <HardcoverLinkedBooks v-if="settings?.tokenConfigured" />
   </div>
 </template>

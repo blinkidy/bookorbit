@@ -134,6 +134,22 @@ describe('HardcoverRepository', () => {
     );
   });
 
+  it('setBookSyncOverride inserts or updates only the per-book override', async () => {
+    const { repo, db, bookStateInsert, bookStateRow } = makeRepository();
+    db.insert.mockReset();
+    db.insert.mockReturnValue(bookStateInsert);
+
+    await expect(repo.setBookSyncOverride(7, 42, 'included')).resolves.toEqual(bookStateRow);
+
+    expect(bookStateInsert.values).toHaveBeenCalledWith({ userId: 7, bookId: 42, syncOverride: 'included', syncExcluded: false });
+    expect(bookStateInsert.onConflictDoUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: [schema.hardcoverBookState.userId, schema.hardcoverBookState.bookId],
+        set: expect.objectContaining({ syncOverride: 'included', syncExcluded: false }),
+      }),
+    );
+  });
+
   it('clearBookMatch nulls out the cached match and last-synced snapshot', async () => {
     const { repo } = makeRepository();
     const upsertBookState = vi.spyOn(repo, 'upsertBookState').mockResolvedValue({} as never);
@@ -149,22 +165,6 @@ describe('HardcoverRepository', () => {
       matchError: null,
       lastSyncedAt: null,
     });
-  });
-
-  it('setBookSyncOverride inserts or updates only the per-book override', async () => {
-    const { repo, db, bookStateInsert, bookStateRow } = makeRepository();
-    db.insert.mockReset();
-    db.insert.mockReturnValue(bookStateInsert);
-
-    await expect(repo.setBookSyncOverride(7, 42, 'included')).resolves.toEqual(bookStateRow);
-
-    expect(bookStateInsert.values).toHaveBeenCalledWith({ userId: 7, bookId: 42, syncOverride: 'included', syncExcluded: false });
-    expect(bookStateInsert.onConflictDoUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        target: [schema.hardcoverBookState.userId, schema.hardcoverBookState.bookId],
-        set: expect.objectContaining({ syncOverride: 'included', syncExcluded: false }),
-      }),
-    );
   });
 
   it('updateLastSyncedAt updates the settings timestamp', async () => {

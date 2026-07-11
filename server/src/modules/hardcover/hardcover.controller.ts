@@ -73,35 +73,6 @@ export class HardcoverController {
     return this.syncService.getSyncPendingSummary(user.id);
   }
 
-  @Post('books/:bookId/rematch')
-  async rematchBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
-    await this.bookService.verifyBookAccess(bookId, user);
-    return this.syncService.rematchBook(user.id, bookId).then((result) => ({ result }));
-  }
-
-  @Get('books')
-  listLinkedBooks(@CurrentUser() user: RequestUser) {
-    return this.syncService.listLinkedBooks(user.id);
-  }
-
-  @Patch('books/:bookId/link')
-  async linkBookManually(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: LinkHardcoverBookDto) {
-    await this.bookService.verifyBookAccess(bookId, user);
-    return this.syncService.linkBookManually(user.id, bookId, dto.input);
-  }
-
-  @Get('books/:bookId/editions')
-  async listEditions(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
-    await this.bookService.verifyBookAccess(bookId, user);
-    return this.syncService.listEditions(user.id, bookId);
-  }
-
-  @Patch('books/:bookId/edition')
-  async setEdition(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: SetHardcoverEditionDto) {
-    await this.bookService.verifyBookAccess(bookId, user);
-    return this.syncService.setEdition(user.id, bookId, dto.editionId);
-  }
-
   @Get('books/:bookId/sync-state')
   async getBookSyncState(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
     await this.bookService.verifyBookAccess(bookId, user);
@@ -134,5 +105,30 @@ export class HardcoverController {
   @Post('import/apply')
   applyImport(@CurrentUser() user: RequestUser, @Body() dto: ApplyHardcoverImportDto) {
     return this.importService.applyImport(user, dto);
+  }
+
+  @Post('books/:bookId/rematch')
+  rematchBook(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    return this.syncService.rematchBook(user.id, bookId).then((result) => ({ result }));
+  }
+
+  @Get('books')
+  listLinkedBooks(@CurrentUser() user: RequestUser) {
+    return this.syncService.listLinkedBooks(user.id);
+  }
+
+  @Patch('books/:bookId/link')
+  linkBookManually(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: LinkHardcoverBookDto) {
+    return this.syncService.linkBookManually(user.id, bookId, dto.input);
+  }
+
+  @Get('books/:bookId/editions')
+  listEditions(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number) {
+    return this.syncService.listEditions(user.id, bookId);
+  }
+
+  @Patch('books/:bookId/edition')
+  setEdition(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number, @Body() dto: SetHardcoverEditionDto) {
+    return this.syncService.setEdition(user.id, bookId, dto.editionId);
   }
 }

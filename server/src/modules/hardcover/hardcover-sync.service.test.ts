@@ -11,8 +11,8 @@ const mockRepo = {
   updateLastSyncedAt: vi.fn(),
   findSyncableBooks: vi.fn(),
   findSyncableBook: vi.fn(),
-  clearBookMatch: vi.fn(),
   findBookSyncData: vi.fn(),
+  clearBookMatch: vi.fn(),
 };
 
 const mockClient = {
@@ -63,10 +63,6 @@ const readingBook = {
 describe('HardcoverSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClient.query.mockReset();
-    mockMatchService.matchBook.mockReset();
-    mockMatchService.resolveManualInput.mockReset();
-    mockMatchService.getEditions.mockReset();
     mockRepo.findBookState.mockResolvedValue(undefined);
     mockRepo.findBookStatesByBookIds.mockResolvedValue([]);
     mockRepo.findSyncableBooks.mockResolvedValue([]);
@@ -128,7 +124,7 @@ describe('HardcoverSyncService', () => {
       mockSettingsService.getSettings.mockResolvedValue({ ...defaultSettings, bookSyncMode: 'selected_only' });
       mockRepo.findBookSyncData.mockResolvedValue(readingBook);
       mockRepo.findBookState.mockResolvedValue({ syncOverride: 'included', syncExcluded: false });
-      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: 20, matchMethod: 'isbn' });
+      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: 20, editionPages: 300, matchMethod: 'isbn' });
       mockClient.query
         .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
         .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
@@ -139,6 +135,31 @@ describe('HardcoverSyncService', () => {
 
       expect(mockMatchService.matchBook).toHaveBeenCalledWith(1, 'tok', readingBook);
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ hardcoverUserBookId: 55, hardcoverReadId: 77 }));
+    });
+
+    it('fails when progress is present but the matched edition has no page count', async () => {
+      const errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findBookSyncData.mockResolvedValue(readingBook);
+      mockRepo.findBookState.mockResolvedValue(undefined);
+      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: 20, editionPages: null, matchMethod: 'isbn' });
+      mockClient.query
+        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } });
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('failed');
+
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          bookId: 1,
+          hardcoverBookId: 10,
+          matchMethod: 'isbn',
+          syncError: 'missing_edition_pages',
+        }),
+      );
+
+      errorSpy.mockRestore();
     });
 
     it('skips when the local sync snapshot has no changes', async () => {
@@ -241,7 +262,7 @@ describe('HardcoverSyncService', () => {
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
       mockRepo.findBookSyncData.mockResolvedValue(readingBook);
       mockRepo.findBookState.mockResolvedValue(null);
-      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: 20, matchMethod: 'isbn' });
+      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: 20, editionPages: 300, matchMethod: 'isbn' });
       mockClient.query
         .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
         .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
@@ -317,23 +338,18 @@ describe('HardcoverSyncService', () => {
       logSpy.mockRestore();
     });
 
-    it('keeps progress pending when edition pages are unavailable', async () => {
-      const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    it('stores error when edition pages are unavailable', async () => {
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
       mockRepo.findBookSyncData.mockResolvedValue(readingBook);
       mockRepo.findBookState.mockResolvedValue(null);
       mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: 20, editionPages: null, matchMethod: 'cached' });
       mockClient.query
         .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
-        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
-        .mockResolvedValueOnce({ user_book_reads: [] })
-        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } });
 
       await makeService().syncBook(1, 1);
 
-      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: null }));
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('matched edition has no page count to convert local progress against'));
-      warnSpy.mockRestore();
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ syncError: 'missing_edition_pages' }));
     });
 
     it('sends progress_seconds (not progress_pages) when the matched edition is an audiobook', async () => {
@@ -369,36 +385,6 @@ describe('HardcoverSyncService', () => {
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: audioBook.progress }));
     });
 
-    it("falls back to deriving progress_seconds from percentage when there is no precise audio position (e.g. progress arrives via KOReader sync rather than BookOrbit's own audiobook player)", async () => {
-      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
-      mockRepo.findBookSyncData.mockResolvedValue(readingBook);
-      mockRepo.findBookState.mockResolvedValue(null);
-      mockMatchService.matchBook.mockResolvedValue({
-        hardcoverBookId: 10,
-        hardcoverEditionId: 20,
-        editionPages: null,
-        editionAudioSeconds: 73560,
-        editionIsAudio: true,
-        matchMethod: 'cached',
-      });
-      mockClient.query
-        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
-        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
-        .mockResolvedValueOnce({ user_book_reads: [] })
-        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
-
-      await expect(makeService().syncBook(1, 1)).resolves.toBe('synced');
-
-      expect(mockClient.query).toHaveBeenNthCalledWith(
-        4,
-        1,
-        'tok',
-        expect.stringContaining('mutation InsertUserBookRead'),
-        expect.objectContaining({ object: expect.objectContaining({ progress_seconds: 30895 }) }),
-      );
-      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: readingBook.progress }));
-    });
-
     it('keeps progress pending for an audio edition when there is no local listening position yet', async () => {
       const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
       const audioBook = { ...readingBook, audioPositionSeconds: null };
@@ -432,7 +418,7 @@ describe('HardcoverSyncService', () => {
     it('stores error on API failure without throwing', async () => {
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
       mockRepo.findBookSyncData.mockResolvedValue(readingBook);
-      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: null, matchMethod: 'isbn' });
+      mockMatchService.matchBook.mockResolvedValue({ hardcoverBookId: 10, hardcoverEditionId: null, editionPages: 300, matchMethod: 'isbn' });
       mockClient.query.mockRejectedValue(new Error('timeout'));
       await makeService().syncBook(1, 1);
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ syncError: 'timeout' }));
@@ -850,6 +836,32 @@ describe('HardcoverSyncService', () => {
         syncError: null,
       });
       expect(mockRepo.setBookSyncOverride).toHaveBeenCalledWith(1, 42, 'excluded');
+    });
+
+    it('triggers sync when per-book sync is enabled', async () => {
+      mockRepo.findBookSyncData.mockResolvedValue(readingBook);
+      mockRepo.setBookSyncOverride.mockResolvedValue({
+        syncOverride: 'included',
+        syncExcluded: false,
+        lastSyncedAt: null,
+        syncError: null,
+      });
+
+      const svc = makeService();
+      const syncBookSpy = vi.spyOn(svc, 'syncBook').mockResolvedValue('synced');
+
+      await expect(svc.updateBookSyncState(1, 42, { syncEnabled: true })).resolves.toEqual({
+        bookId: 42,
+        syncOverride: 'included',
+        syncEnabled: true,
+        canSyncNow: true,
+        effectiveReason: null,
+        lastSyncedAt: null,
+        syncError: null,
+      });
+
+      expect(mockRepo.setBookSyncOverride).toHaveBeenCalledWith(1, 42, null);
+      expect(syncBookSpy).toHaveBeenCalledWith(1, 42);
     });
   });
 

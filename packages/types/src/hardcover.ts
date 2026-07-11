@@ -72,31 +72,6 @@ export interface HardcoverActiveSyncStatus {
 
 export type HardcoverPrivacySetting = 1 | 2 | 3;
 
-export interface HardcoverEdition {
-  id: number;
-  format: string;
-  pages: number | null;
-  audioSeconds: number | null;
-  isAudio: boolean;
-  year: number | null;
-}
-
-export interface HardcoverLinkedBook {
-  bookId: number;
-  title: string | null;
-  authorName: string | null;
-  hardcoverBookId: number | null;
-  hardcoverEditionId: number | null;
-  matchMethod: string | null;
-  matchError: string | null;
-}
-
-export interface HardcoverLinkResult {
-  success: boolean;
-  hardcoverBookId?: number;
-  title?: string;
-}
-
 export type HardcoverImportMatchMethod = "hardcover_id" | "isbn" | "title_author";
 
 export type HardcoverImportPreviewOutcome = "will_update" | "needs_review" | "conflict" | "unmatched" | "skipped";
@@ -159,4 +134,29 @@ export interface HardcoverImportApplyResult extends HardcoverImportSummary {
   applied: number;
   progressApplied: number;
   failed: number;
+}
+
+export interface HardcoverEdition {
+  id: number;
+  format: string;
+  pages: number | null;
+  audioSeconds: number | null;
+  isAudio: boolean;
+  year: number | null;
+}
+
+export interface HardcoverLinkedBook {
+  bookId: number;
+  title: string | null;
+  authorName: string | null;
+  hardcoverBookId: number | null;
+  hardcoverEditionId: number | null;
+  matchMethod: string | null;
+  matchError: string | null;
+}
+
+export interface HardcoverLinkResult {
+  success: boolean;
+  hardcoverBookId?: number;
+  title?: string;
 }
