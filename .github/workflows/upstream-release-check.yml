@@ -13,12 +13,17 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
+
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "10"
 
 jobs:
-  check:
-    name: Check and open update PR
+  sync:
+    name: Sync upstream release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Checkout fork
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -52,7 +57,6 @@ jobs:
           if git merge-base --is-ancestor "${upstream_ref}" HEAD; then
             echo "Fork already contains upstream ${latest_tag}."
             echo "has_update=false" >> "$GITHUB_OUTPUT"
-            echo "latest_tag=${latest_tag}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -62,21 +66,78 @@ jobs:
           echo "upstream_ref=${upstream_ref}" >> "$GITHUB_OUTPUT"
           echo "branch=automation/upstream-${branch_tag}" >> "$GITHUB_OUTPUT"
 
-      - name: Merge upstream release
+      - name: Attempt merge
+        id: merge
         if: steps.upstream.outputs.has_update == 'true'
         shell: bash
         env:
-          LATEST_TAG: ${{ steps.upstream.outputs.latest_tag }}
           UPSTREAM_REF: ${{ steps.upstream.outputs.upstream_ref }}
           UPDATE_BRANCH: ${{ steps.upstream.outputs.branch }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           git switch -c "${UPDATE_BRANCH}"
-          git merge --no-edit "${UPSTREAM_REF}"
-          git push --force-with-lease origin "${UPDATE_BRANCH}"
+          if git merge --no-edit "${UPSTREAM_REF}"; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            # Keep the conflict markers committed so the escalation PR is resolvable.
+            git add -A
+            git commit --no-edit -m "merge upstream (CONFLICTS - resolve manually)" || true
+          fi
 
-      - name: Open or update PR
-        if: steps.upstream.outputs.has_update == 'true'
+      # A migration collision (fork and upstream both add a migration in the same window)
+      # will not always show as a git conflict, but produces two files with the same NNNN
+      # prefix. That must never auto-release - it needs a regenerate, not a text merge.
+      - name: Detect migration collision
+        id: migrations
+        if: steps.upstream.outputs.has_update == 'true' && steps.merge.outputs.clean == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dupes="$(ls server/src/db/migrations/*.sql 2>/dev/null \
+            | xargs -n1 basename \
+            | sed -E 's/^([0-9]+)_.*/\1/' \
+            | sort | uniq -d || true)"
+          if [[ -n "${dupes}" ]]; then
+            echo "Duplicate migration indices detected: ${dupes}"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup pnpm
+        if: steps.merge.outputs.clean == 'true' && steps.migrations.outputs.ok == 'true'
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        if: steps.merge.outputs.clean == 'true' && steps.migrations.outputs.ok == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Verify merged tree
+        id: verify
+        if: steps.merge.outputs.clean == 'true' && steps.migrations.outputs.ok == 'true'
+        shell: bash
+        run: |
+          set -uo pipefail
+          pnpm install --frozen-lockfile
+          if pnpm run verify; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ---- Clean path: push, merge to main, and auto-release ----
+      - name: Auto-merge and release
+        if: >-
+          steps.upstream.outputs.has_update == 'true' &&
+          steps.merge.outputs.clean == 'true' &&
+          steps.migrations.outputs.ok == 'true' &&
+          steps.verify.outputs.ok == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -84,21 +145,77 @@ jobs:
           UPDATE_BRANCH: ${{ steps.upstream.outputs.branch }}
         run: |
           set -euo pipefail
-          existing_pr="$(gh pr list --head "${UPDATE_BRANCH}" --state open --json number --jq '.[0].number // empty')"
+          git push --force-with-lease origin "${UPDATE_BRANCH}"
+
           title="chore: update fork to upstream ${LATEST_TAG}"
+          pr_url="$(gh pr create --base main --head "${UPDATE_BRANCH}" \
+            --title "${title}" \
+            --body "Automated clean merge of upstream \`${LATEST_TAG}\`. Verify (lint + typecheck + tests) passed in the sync workflow. Auto-merging and releasing." \
+            2>/dev/null || gh pr list --head "${UPDATE_BRANCH}" --state open --json url --jq '.[0].url')"
+
+          gh pr merge "${pr_url}" --merge --delete-branch
+          git fetch origin main
+          main_sha="$(git rev-parse origin/main)"
+
+          # A merge made with GITHUB_TOKEN does not trigger push-driven workflows, so
+          # dispatch the image build explicitly, wait for it, then dispatch the release
+          # (release promotes that built sha image to :latest + the version tag).
+          echo "Dispatching Container Image build for ${main_sha:0:12}..."
+          gh workflow run container-image.yml --ref main
+          sleep 20
+
+          echo "Waiting for the image build to finish..."
+          for i in $(seq 1 40); do
+            run_json="$(gh run list --workflow container-image.yml --branch main --json headSha,status,conclusion --limit 15)"
+            status="$(echo "${run_json}" | jq -r --arg s "${main_sha}" '[.[] | select(.headSha==$s)][0].status // empty')"
+            concl="$(echo "${run_json}" | jq -r --arg s "${main_sha}" '[.[] | select(.headSha==$s)][0].conclusion // empty')"
+            if [[ "${status}" == "completed" ]]; then
+              if [[ "${concl}" == "success" ]]; then echo "Image built."; break; fi
+              echo "::error::Container image build did not succeed (${concl}); skipping release."
+              exit 1
+            fi
+            if [[ "${i}" == "40" ]]; then echo "::error::Timed out waiting for image build."; exit 1; fi
+            sleep 30
+          done
+
+          echo "Dispatching release..."
+          gh workflow run release.yml --ref main
+
+      # ---- Escalation path: open a PR for manual resolution ----
+      - name: Open manual-resolution PR
+        if: >-
+          steps.upstream.outputs.has_update == 'true' &&
+          (steps.merge.outputs.clean != 'true' ||
+           steps.migrations.outputs.ok != 'true' ||
+           steps.verify.outputs.ok != 'true')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST_TAG: ${{ steps.upstream.outputs.latest_tag }}
+          UPDATE_BRANCH: ${{ steps.upstream.outputs.branch }}
+          MERGE_CLEAN: ${{ steps.merge.outputs.clean }}
+          MIGRATIONS_OK: ${{ steps.migrations.outputs.ok }}
+          VERIFY_OK: ${{ steps.verify.outputs.ok }}
+        run: |
+          set -euo pipefail
+          git push --force-with-lease origin "${UPDATE_BRANCH}"
+
+          reason="Needs manual attention:"
+          if [[ "${MERGE_CLEAN}" != "true" ]]; then reason="${reason} merge conflicts (see conflict markers in the diff)."; fi
+          if [[ "${MIGRATIONS_OK}" == "false" ]]; then reason="${reason} duplicate migration numbers - regenerate the fork migration onto upstream's chain."; fi
+          if [[ "${VERIFY_OK}" == "false" ]]; then reason="${reason} verify (lint/typecheck/tests) failed after merge."; fi
+
+          title="chore: update fork to upstream ${LATEST_TAG} (needs manual merge)"
           body_file="$(mktemp)"
           {
-            echo "## What changed"
+            echo "## Upstream ${LATEST_TAG} could not be merged automatically"
             echo ""
-            echo "Merged upstream \`bookorbit/bookorbit\` release \`${LATEST_TAG}\` into this fork."
+            echo "${reason}"
             echo ""
-            echo "This PR was created automatically by the daily upstream release check. Review CI and merge when ready."
-            echo ""
-            echo "## Notes"
-            echo ""
-            echo "The workflow only opens a PR after a clean merge. If the upstream release conflicts with fork-specific changes, the workflow will fail for manual resolution."
+            echo "Resolve the conflicts / regenerate migrations on \`${UPDATE_BRANCH}\`, push, and merge. The release will run once this lands on main and you dispatch it (or a clean re-run auto-releases)."
           } > "${body_file}"
 
+          existing_pr="$(gh pr list --head "${UPDATE_BRANCH}" --state open --json number --jq '.[0].number // empty')"
           if [[ -n "${existing_pr}" ]]; then
             gh pr edit "${existing_pr}" --title "${title}" --body-file "${body_file}"
           else
