@@ -233,7 +233,7 @@ describe('BookRepository', () => {
       },
     ]);
     const koboReadingChain = makeSelectChain('limit', [{ createdAtKobo: null }]);
-    const koboSnapshotChain = makeSelectChain('limit', [{ snapshotId: 8 }]);
+    const koboSnapshotChain = makeSelectChain('orderBy', [{ deviceId: 3, deviceName: 'Libra', snapshotId: 8 }]);
     const koboCollectionsChain = makeSelectChain('where', [{ name: 'Sync Me' }]);
     const db = {
       select: vi
@@ -282,7 +282,7 @@ describe('BookRepository', () => {
       },
     ]);
     await expect(repo.findKoboReadingState(1, 10)).resolves.toEqual({ createdAtKobo: null });
-    await expect(repo.findKoboSnapshotState(1, 10)).resolves.toEqual({ snapshotId: 8 });
+    await expect(repo.findKoboSnapshotStates(1, 10)).resolves.toEqual([{ deviceId: 3, deviceName: 'Libra', snapshotId: 8 }]);
     await expect(repo.findKoboSyncCollectionNamesForBook(1, 10)).resolves.toEqual(['Sync Me']);
   });
 
@@ -903,5 +903,49 @@ describe('BookRepository', () => {
     expect(del).toHaveBeenCalledTimes(2);
     expect(readingWhere).toHaveBeenCalledTimes(1);
     expect(audioWhere).toHaveBeenCalledTimes(1);
+  });
+
+  describe('bulkSetRating', () => {
+    it('does nothing for an empty book id list', async () => {
+      const db = { insert: vi.fn() };
+      const repo = new BookRepository(db as never);
+
+      await repo.bulkSetRating([], 4, 7);
+
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('upserts a rating row per book id', async () => {
+      const insertChain = makeInsertChain();
+      const db = { insert: vi.fn().mockReturnValue(insertChain) };
+      const repo = new BookRepository(db as never);
+
+      await repo.bulkSetRating([10, 20], 4, 7);
+
+      expect(insertChain.values).toHaveBeenCalledWith([
+        { userId: 7, bookId: 10, rating: 4 },
+        { userId: 7, bookId: 20, rating: 4 },
+      ]);
+      expect(insertChain.onConflictDoUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          set: expect.objectContaining({ rating: 4 }),
+        }),
+      );
+    });
+
+    it('upserts a null rating tombstone instead of deleting the row', async () => {
+      const insertChain = makeInsertChain();
+      const db = { insert: vi.fn().mockReturnValue(insertChain) };
+      const repo = new BookRepository(db as never);
+
+      await repo.bulkSetRating([10], null, 7);
+
+      expect(insertChain.values).toHaveBeenCalledWith([{ userId: 7, bookId: 10, rating: null }]);
+      expect(insertChain.onConflictDoUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          set: expect.objectContaining({ rating: null }),
+        }),
+      );
+    });
   });
 });

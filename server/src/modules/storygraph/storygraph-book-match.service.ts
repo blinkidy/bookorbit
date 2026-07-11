@@ -83,6 +83,7 @@ export class StorygraphBookMatchService {
     book: BookSyncData,
     matchMethod: 'isbn' | 'title',
   ): Promise<StorygraphBookMatch | null> {
+    const startedAt = Date.now();
     try {
       const response = await this.client.get(userId, cookies, `/browse?search_term=${encodeURIComponent(searchTerm)}`);
       if (response.redirectedToSignIn || response.status !== 200) return null;
@@ -94,9 +95,10 @@ export class StorygraphBookMatchService {
 
       return { storygraphBookId: bookId, matchMethod };
     } catch (err) {
+      const errorClass = err instanceof Error ? err.constructor.name : 'Error';
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
       this.logger.warn(
-        `[storygraph.book_match] [fail] userId=${userId} bookId=${book.bookId} method=${matchMethod} error="${error}" - search failed`,
+        `[storygraph.book_match] [fail] userId=${userId} bookId=${book.bookId} method=${matchMethod} durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${error}" - search failed`,
       );
       return null;
     }
@@ -167,20 +169,26 @@ export class StorygraphBookMatchService {
 
   /**
    * Resolves a manually-provided StoryGraph URL or book id directly, with no search/scoring
-   * involved — the user is telling us exactly which book is correct, so we just verify it exists.
+   * involved - the user is telling us exactly which book is correct, so we just verify it exists.
    */
   async resolveManualInput(userId: number, cookies: StorygraphCookies, input: string): Promise<{ storygraphBookId: string; title: string } | null> {
+    const startedAt = Date.now();
     const bookId = this.extractBookIdFromInput(input);
     if (!bookId) return null;
 
     try {
-      const response = await this.client.get(userId, cookies, `/books/${bookId}`);
+      // The id can be pasted directly by the user, so encode it before putting it in the path.
+      // A stray ?, #, or / would otherwise change which URL we request.
+      const response = await this.client.get(userId, cookies, `/books/${encodeURIComponent(bookId)}`);
       if (response.redirectedToSignIn || response.status !== 200) return null;
 
       return { storygraphBookId: bookId, title: this.parseBookTitle(response.html) };
     } catch (err) {
+      const errorClass = err instanceof Error ? err.constructor.name : 'Error';
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
-      this.logger.warn(`[storygraph.manual_link] [fail] userId=${userId} input="${sanitizeLogValue(input)}" error="${error}" - resolve failed`);
+      this.logger.warn(
+        `[storygraph.manual_link] [fail] userId=${userId} input="${sanitizeLogValue(input)}" durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${error}" - resolve failed`,
+      );
       return null;
     }
   }
@@ -209,15 +217,17 @@ export class StorygraphBookMatchService {
    * scraped from the book's dedicated /editions page.
    */
   async getEditions(userId: number, cookies: StorygraphCookies, storygraphBookId: string): Promise<StorygraphEdition[]> {
+    const startedAt = Date.now();
     try {
       const response = await this.client.get(userId, cookies, `/books/${storygraphBookId}/editions`);
       if (response.redirectedToSignIn || response.status !== 200) return [];
 
       return this.parseEditions(response.html);
     } catch (err) {
+      const errorClass = err instanceof Error ? err.constructor.name : 'Error';
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
       this.logger.warn(
-        `[storygraph.editions] [fail] userId=${userId} storygraphBookId=${storygraphBookId} error="${error}" - failed to fetch editions`,
+        `[storygraph.editions] [fail] userId=${userId} storygraphBookId=${storygraphBookId} durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${error}" - failed to fetch editions`,
       );
       return [];
     }
@@ -275,6 +285,7 @@ export class StorygraphBookMatchService {
   async switchEdition(userId: number, cookies: StorygraphCookies, fromStorygraphBookId: string, toStorygraphBookId: string): Promise<boolean> {
     if (!fromStorygraphBookId || !toStorygraphBookId || fromStorygraphBookId === toStorygraphBookId) return true;
 
+    const startedAt = Date.now();
     try {
       const page = await this.client.get(userId, cookies, `/books/${fromStorygraphBookId}/editions`);
       if (page.redirectedToSignIn || page.status !== 200) return false;
@@ -292,9 +303,10 @@ export class StorygraphBookMatchService {
 
       return (response.status >= 200 && response.status < 300) || response.status === 302 || response.status === 303;
     } catch (err) {
+      const errorClass = err instanceof Error ? err.constructor.name : 'Error';
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
       this.logger.warn(
-        `[storygraph.switch_edition] [fail] userId=${userId} from=${fromStorygraphBookId} to=${toStorygraphBookId} error="${error}" - switch failed`,
+        `[storygraph.switch_edition] [fail] userId=${userId} from=${fromStorygraphBookId} to=${toStorygraphBookId} durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${error}" - switch failed`,
       );
       return false;
     }

@@ -2,11 +2,11 @@ import { api } from '@/lib/api'
 import type {
   ApplyHardcoverImportPayload,
   HardcoverActiveSyncStatus,
-  HardcoverBookSyncNowResult,
   HardcoverBookSyncState,
-  HardcoverEdition,
+  HardcoverBookSyncNowResult,
   HardcoverImportApplyResult,
   HardcoverImportPreview,
+  HardcoverEdition,
   HardcoverLinkedBook,
   HardcoverLinkResult,
   HardcoverSyncPendingSummary,
@@ -106,44 +106,6 @@ export async function fetchHardcoverSyncPendingSummary(): Promise<HardcoverSyncP
   return res.json()
 }
 
-export async function rematchHardcoverBook(bookId: number): Promise<{ result: 'synced' | 'skipped' | 'failed' }> {
-  const res = await api(`${BASE}/books/${bookId}/rematch`, { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to re-match with Hardcover')
-  return res.json()
-}
-
-export async function fetchHardcoverLinkedBooks(): Promise<HardcoverLinkedBook[]> {
-  const res = await api(`${BASE}/books`)
-  if (!res.ok) return []
-  return res.json()
-}
-
-export async function linkHardcoverBook(bookId: number, input: string): Promise<HardcoverLinkResult> {
-  const res = await api(`${BASE}/books/${bookId}/link`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
-  })
-  if (!res.ok) throw new Error('Failed to link Hardcover book')
-  return res.json()
-}
-
-export async function fetchHardcoverEditions(bookId: number): Promise<HardcoverEdition[]> {
-  const res = await api(`${BASE}/books/${bookId}/editions`)
-  if (!res.ok) return []
-  return res.json()
-}
-
-export async function setHardcoverEdition(bookId: number, editionId: number): Promise<{ success: boolean }> {
-  const res = await api(`${BASE}/books/${bookId}/edition`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ editionId }),
-  })
-  if (!res.ok) throw new Error('Failed to set Hardcover edition')
-  return res.json()
-}
-
 export async function fetchHardcoverBookSyncState(bookId: number): Promise<HardcoverBookSyncState> {
   const res = await api(`${BASE}/books/${bookId}/sync-state`)
   if (!res.ok) throw new Error('Failed to fetch Hardcover book sync state')
@@ -191,5 +153,43 @@ export async function applyHardcoverImport(payload: ApplyHardcoverImportPayload 
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { message?: string }).message ?? 'Failed to import Hardcover read status')
   }
+  return res.json()
+}
+
+export async function rematchHardcoverBook(bookId: number): Promise<{ result: 'synced' | 'skipped' | 'failed' }> {
+  const res = await api(`${BASE}/books/${bookId}/rematch`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to re-match with Hardcover')
+  return res.json()
+}
+
+export async function fetchHardcoverLinkedBooks(): Promise<HardcoverLinkedBook[]> {
+  const res = await api(`${BASE}/books`)
+  if (!res.ok) return []
+  return res.json()
+}
+
+export async function linkHardcoverBook(bookId: number, input: string): Promise<HardcoverLinkResult> {
+  const res = await api(`${BASE}/books/${bookId}/link`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input }),
+  })
+  if (!res.ok) throw new Error('Failed to link Hardcover book')
+  return res.json()
+}
+
+export async function fetchHardcoverEditions(bookId: number): Promise<HardcoverEdition[]> {
+  const res = await api(`${BASE}/books/${bookId}/editions`)
+  if (!res.ok) return []
+  return res.json()
+}
+
+export async function setHardcoverEdition(bookId: number, editionId: number): Promise<{ success: boolean }> {
+  const res = await api(`${BASE}/books/${bookId}/edition`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ editionId }),
+  })
+  if (!res.ok) throw new Error('Failed to set Hardcover edition')
   return res.json()
 }

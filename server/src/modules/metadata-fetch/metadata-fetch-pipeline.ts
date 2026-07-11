@@ -18,6 +18,7 @@ import { MetadataPreferenceResolver } from '../metadata-preferences/metadata-pre
 import { ProviderConfigService } from '../metadata-preferences/provider-config.service';
 import { MetadataPreferencesService } from '../metadata-preferences/metadata-preferences.service';
 import { createGenreBlocklistTokenSet, filterGenresAgainstBlocklist } from '../../common/utils/genre-blocklist.utils';
+import { normalizeMetadataText, normalizeMetadataTextKey } from '../../common/utils/metadata-text-normalize.utils';
 import { MetadataFetchService } from './metadata-fetch.service';
 import { ProviderRegistry } from './provider-registry';
 import { ProviderThrottleTracker } from './provider-throttle.tracker';
@@ -26,6 +27,7 @@ import { MetadataSearchParams } from './providers/metadata-search-params';
 export type ResolvedMetadataFields = Partial<Record<MetadataField, string | string[] | number | null>> & {
   coverUrl?: string;
   hardcoverEditionId?: string | null;
+  publishedDate?: string | null;
   seriesMemberships?: MetadataSeriesMembership[];
   chapters?: AudiobookChapter[];
   comicMetadata?: ComicMetadataFields;
@@ -290,12 +292,14 @@ export class MetadataFetchPipeline {
           case 'fillMissing':
             if (this.isMissing(existingValue)) {
               (result as Record<string, unknown>)[field] = value;
+              this.copyPublishedDateForYear(result, candidate, field);
               sources[field] = providerKey;
             }
             break;
           case 'overwrite':
           case 'overwriteIfProvided':
             (result as Record<string, unknown>)[field] = value;
+            this.copyPublishedDateForYear(result, candidate, field);
             sources[field] = providerKey;
             break;
         }
@@ -356,6 +360,12 @@ export class MetadataFetchPipeline {
     return key ? candidate[key] : undefined;
   }
 
+  private copyPublishedDateForYear(result: ResolvedMetadataFields, candidate: MetadataCandidate, field: MetadataField): void {
+    if (field === 'publishedYear' && candidate.publishedDate !== undefined) {
+      result.publishedDate = candidate.publishedDate;
+    }
+  }
+
   private collectCommunityRatings(providerKeys: MetadataProviderKey[], byProvider: Map<string, MetadataCandidate>): BookCommunityRating[] {
     const updatedAt = new Date().toISOString();
     const ratings: BookCommunityRating[] = [];
@@ -412,9 +422,9 @@ export class MetadataFetchPipeline {
     const normalized: MetadataSeriesMembership[] = [];
     const seen = new Set<string>();
     for (const membership of memberships) {
-      const seriesName = membership.seriesName.trim();
-      const key = seriesName.toLowerCase();
-      if (!seriesName || seen.has(key)) continue;
+      const seriesName = normalizeMetadataText(membership.seriesName);
+      const key = normalizeMetadataTextKey(seriesName);
+      if (!seriesName || !key || seen.has(key)) continue;
 
       const seriesIndex = typeof membership.seriesIndex === 'number' && Number.isFinite(membership.seriesIndex) ? membership.seriesIndex : null;
       seen.add(key);

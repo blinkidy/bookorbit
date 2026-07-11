@@ -133,7 +133,12 @@ For E2E tests, suite IDs, coverage thresholds, and the test harness, see [TESTIN
 
 ### Phase 8: Verify Code Quality
 
-There are no local git hooks enforcing this — run it yourself before marking your PR ready for review:
+The project has two automated gates that catch issues before they reach CI:
+
+- **Pre-commit hook** runs `lint-staged` on your staged files (ESLint + Prettier).
+- **Pre-push hook** runs `pnpm verify:fast` (lint + typecheck + tests). Your push is blocked if this fails.
+
+Before marking your PR ready for review, run the full quality gate yourself:
 
 ```bash
 pnpm verify

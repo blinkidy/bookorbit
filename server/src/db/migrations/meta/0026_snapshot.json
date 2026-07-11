@@ -1,6 +1,6 @@
 {
-  "id": "0e588e77-bfae-4229-b4a5-d6467b3d8bee",
-  "prevId": "5d74830d-9088-482b-af6a-617a99b2f57b",
+  "id": "2cfbc141-1695-4c3b-8cac-6e5a64bf7b29",
+  "prevId": "28e48376-1902-493e-87a6-9adba9d7c4ca",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4167,6 +4167,90 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.book_community_ratings": {
+      "name": "book_community_ratings",
+      "schema": "",
+      "columns": {
+        "book_id": {
+          "name": "book_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rating": {
+          "name": "rating",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rating_count": {
+          "name": "rating_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "book_community_ratings_provider_idx": {
+          "name": "book_community_ratings_provider_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "book_community_ratings_book_id_books_id_fk": {
+          "name": "book_community_ratings_book_id_books_id_fk",
+          "tableFrom": "book_community_ratings",
+          "tableTo": "books",
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "book_community_ratings_book_id_provider_pk": {
+          "name": "book_community_ratings_book_id_provider_pk",
+          "columns": ["book_id", "provider"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "book_community_ratings_rating_range_chk": {
+          "name": "book_community_ratings_rating_range_chk",
+          "value": "\"book_community_ratings\".\"rating\" >= 0 and \"book_community_ratings\".\"rating\" <= 5"
+        },
+        "book_community_ratings_count_nonnegative_chk": {
+          "name": "book_community_ratings_count_nonnegative_chk",
+          "value": "\"book_community_ratings\".\"rating_count\" is null or \"book_community_ratings\".\"rating_count\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.book_genres": {
       "name": "book_genres",
       "schema": "",
@@ -4347,6 +4431,12 @@
         "hardcover_id": {
           "name": "hardcover_id",
           "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hardcover_edition_id": {
+          "name": "hardcover_edition_id",
+          "type": "varchar(50)",
           "primaryKey": false,
           "notNull": false
         },

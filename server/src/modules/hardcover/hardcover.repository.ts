@@ -118,6 +118,19 @@ export class HardcoverRepository {
     return row!;
   }
 
+  async setBookSyncOverride(userId: number, bookId: number, syncOverride: 'included' | 'excluded' | null): Promise<HardcoverBookState> {
+    const syncExcluded = syncOverride === 'excluded';
+    const [row] = await this.db
+      .insert(schema.hardcoverBookState)
+      .values({ userId, bookId, syncOverride, syncExcluded } as NewHardcoverBookState)
+      .onConflictDoUpdate({
+        target: [schema.hardcoverBookState.userId, schema.hardcoverBookState.bookId],
+        set: { syncOverride, syncExcluded, updatedAt: new Date() },
+      })
+      .returning();
+    return row!;
+  }
+
   // Clears the cached match and last-synced snapshot so the next sync re-runs matching from
   // scratch instead of trusting a previous (possibly wrong) match.
   async clearBookMatch(userId: number, bookId: number): Promise<void> {
@@ -130,19 +143,6 @@ export class HardcoverRepository {
       matchError: null,
       lastSyncedAt: null,
     });
-  }
-
-  async setBookSyncOverride(userId: number, bookId: number, syncOverride: 'included' | 'excluded' | null): Promise<HardcoverBookState> {
-    const syncExcluded = syncOverride === 'excluded';
-    const [row] = await this.db
-      .insert(schema.hardcoverBookState)
-      .values({ userId, bookId, syncOverride, syncExcluded } as NewHardcoverBookState)
-      .onConflictDoUpdate({
-        target: [schema.hardcoverBookState.userId, schema.hardcoverBookState.bookId],
-        set: { syncOverride, syncExcluded, updatedAt: new Date() },
-      })
-      .returning();
-    return row!;
   }
 
   // ---- Sync Settings ----
