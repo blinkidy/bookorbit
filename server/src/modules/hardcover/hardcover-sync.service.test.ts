@@ -13,6 +13,8 @@ const mockRepo = {
   findSyncableBook: vi.fn(),
   findBookSyncData: vi.fn(),
   clearBookMatch: vi.fn(),
+  findReadingAttempts: vi.fn(),
+  linkReadingAttempt: vi.fn(),
 };
 
 const mockClient = {
@@ -68,6 +70,8 @@ describe('HardcoverSyncService', () => {
     mockRepo.findSyncableBooks.mockResolvedValue([]);
     mockRepo.findSyncableBook.mockResolvedValue(null);
     mockRepo.findBookSyncData.mockResolvedValue(null);
+    mockRepo.findReadingAttempts.mockResolvedValue([]);
+    mockRepo.linkReadingAttempt.mockResolvedValue(undefined);
     mockRepo.upsertBookState.mockResolvedValue({});
     mockRepo.setBookSyncOverride.mockResolvedValue({});
     mockRepo.updateLastSyncedAt.mockResolvedValue(undefined);

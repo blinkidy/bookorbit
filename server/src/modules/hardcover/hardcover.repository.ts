@@ -26,6 +26,7 @@ export interface BookSyncData {
   rating: number | null;
   progress: number | null;
   audioPositionSeconds: number | null;
+  attemptsUpdatedAt?: Date | null;
 }
 
 export interface HardcoverImportLocalBook {
@@ -213,6 +214,16 @@ export class HardcoverRepository {
       .groupBy(schema.bookAuthors.bookId)
       .as('first_author_sq');
 
+    const attemptsSq = this.db
+      .select({
+        bookId: schema.readingAttempts.bookId,
+        updatedAt: sql<Date | null>`max(${schema.readingAttempts.updatedAt})`.as('attempts_updated_at'),
+      })
+      .from(schema.readingAttempts)
+      .where(and(eq(schema.readingAttempts.userId, userId), sql`${schema.readingAttempts.deletedAt} is null`))
+      .groupBy(schema.readingAttempts.bookId)
+      .as('hardcover_attempts_sq');
+
     const query = this.db
       .select({
         bookId: schema.books.id,
@@ -240,6 +251,7 @@ export class HardcoverRepository {
           )
         `,
         audioPositionSeconds: audioProgressSq.audioPositionSeconds,
+        attemptsUpdatedAt: attemptsSq.updatedAt,
       })
       .from(schema.books)
       .leftJoin(schema.userBookStatus, and(eq(schema.userBookStatus.bookId, schema.books.id), eq(schema.userBookStatus.userId, userId)))
@@ -248,11 +260,29 @@ export class HardcoverRepository {
       .leftJoin(maxProgressSq, eq(maxProgressSq.bookId, schema.books.id))
       .leftJoin(audioProgressSq, eq(audioProgressSq.bookId, schema.books.id))
       .leftJoin(firstAuthorSq, eq(firstAuthorSq.bookId, schema.books.id))
+      .leftJoin(attemptsSq, eq(attemptsSq.bookId, schema.books.id))
       .leftJoin(schema.bookFiles, eq(schema.bookFiles.id, schema.books.primaryFileId));
 
     const rows = includeUnread ? await query.where(bookFilter) : await query.where(and(bookFilter, ne(schema.userBookStatus.status, 'unread')));
 
     return rows as BookSyncData[];
+  }
+
+  async findReadingAttempts(userId: number, bookId: number) {
+    return this.db
+      .select()
+      .from(schema.readingAttempts)
+      .where(
+        and(eq(schema.readingAttempts.userId, userId), eq(schema.readingAttempts.bookId, bookId), sql`${schema.readingAttempts.deletedAt} is null`),
+      )
+      .orderBy(schema.readingAttempts.id);
+  }
+
+  async linkReadingAttempt(userId: number, attemptId: number, hardcoverReadId: number): Promise<void> {
+    await this.db
+      .update(schema.readingAttempts)
+      .set({ externalProvider: 'hardcover', externalId: String(hardcoverReadId), updatedAt: new Date() })
+      .where(and(eq(schema.readingAttempts.userId, userId), eq(schema.readingAttempts.id, attemptId)));
   }
 
   async findBookIdByFileId(bookFileId: number): Promise<number | null> {

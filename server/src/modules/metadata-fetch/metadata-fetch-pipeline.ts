@@ -33,7 +33,23 @@ export type ResolvedMetadataFields = Partial<Record<MetadataField, string | stri
   comicMetadata?: ComicMetadataFields;
   communityRatings?: BookCommunityRating[];
 };
+
+export interface ExistingMetadataFields extends Partial<Record<MetadataField, unknown>> {
+  chapters?: unknown;
+  comicMetadata?: Partial<Record<keyof ComicMetadataFields, unknown>> | null;
+  hardcoverEditionId?: unknown;
+}
+
+export interface MetadataFetchRunOptions {
+  preserveExisting?: boolean;
+}
+
 type ResolvedProviderIds = Partial<Record<MetadataProviderKey, string>>;
+const AUDIOBOOK_PROVIDER_KEYS = new Set<MetadataProviderKey>([
+  MetadataProviderKey.AUDIBLE,
+  MetadataProviderKey.AUDNEXUS,
+  MetadataProviderKey.LIBROFM,
+]);
 
 type ProviderSelectionDiagnostics = Pick<
   MetadataFetchDiagnostics,
@@ -68,24 +84,26 @@ export class MetadataFetchPipeline {
 
   async run(
     params: MetadataSearchParams,
-    existingFields: Partial<Record<MetadataField, unknown>>,
+    existingFields: ExistingMetadataFields,
     libraryId?: number,
+    options?: MetadataFetchRunOptions,
   ): Promise<ResolvedMetadataFields> {
-    const { resolved } = await this.runInternal(params, existingFields, libraryId);
+    const { resolved } = await this.runInternal(params, existingFields, libraryId, options);
     return resolved;
   }
 
   async runWithSources(
     params: MetadataSearchParams,
-    existingFields: Partial<Record<MetadataField, unknown>>,
+    existingFields: ExistingMetadataFields,
     libraryId?: number,
+    options?: MetadataFetchRunOptions,
   ): Promise<{
     resolved: ResolvedMetadataFields;
     sources: Record<string, string>;
     providerIds: ResolvedProviderIds;
     diagnostics: MetadataFetchDiagnostics;
   }> {
-    return this.runInternal(params, existingFields, libraryId);
+    return this.runInternal(params, existingFields, libraryId, options);
   }
 
   async getEffectiveProviderKeys(libraryId?: number): Promise<MetadataProviderKey[]> {
@@ -95,8 +113,9 @@ export class MetadataFetchPipeline {
 
   private async runInternal(
     params: MetadataSearchParams,
-    existingFields: Partial<Record<MetadataField, unknown>>,
+    existingFields: ExistingMetadataFields,
     libraryId?: number,
+    options?: MetadataFetchRunOptions,
   ): Promise<{
     resolved: ResolvedMetadataFields;
     sources: Record<string, string>;
@@ -105,8 +124,11 @@ export class MetadataFetchPipeline {
   }> {
     const { preferences, registeredKeys, providerConfig } = await this.resolveProviderPreferenceContext(libraryId);
     const providerSelection = this.deriveProviderSet(preferences, registeredKeys, providerConfig);
+    const searchParams = providerSelection.activeProviders.some((provider) => AUDIOBOOK_PROVIDER_KEYS.has(provider))
+      ? { ...params, isAudiobook: true }
+      : params;
     const candidates = providerSelection.activeProviders.length
-      ? await firstValueFrom(this.fetchService.search(params, providerSelection.activeProviders).pipe(toArray()), {
+      ? await firstValueFrom(this.fetchService.search(searchParams, providerSelection.activeProviders).pipe(toArray()), {
           defaultValue: [] as MetadataCandidate[],
         })
       : [];
@@ -115,7 +137,7 @@ export class MetadataFetchPipeline {
     for (const c of candidates) {
       if (!byProvider.has(c.provider)) byProvider.set(c.provider, c);
     }
-    const { resolved, sources, providerIds } = this.applyPreferences(preferences, byProvider, existingFields);
+    const { resolved, sources, providerIds } = this.applyPreferences(preferences, byProvider, existingFields, params.existingProviderIds, options);
     const diagnostics = this.buildDiagnostics(providerSelection, candidates, resolved);
     return { resolved, sources, providerIds, diagnostics };
   }
@@ -224,7 +246,9 @@ export class MetadataFetchPipeline {
   private applyPreferences(
     preferences: MetadataFetchPreferences,
     byProvider: Map<string, MetadataCandidate>,
-    existing: Partial<Record<MetadataField, unknown>>,
+    existing: ExistingMetadataFields,
+    existingProviderIds: Partial<Record<MetadataProviderKey, string>> | undefined,
+    options: MetadataFetchRunOptions | undefined,
   ): { resolved: ResolvedMetadataFields; sources: Record<string, string>; providerIds: ResolvedProviderIds } {
     const result: ResolvedMetadataFields = {};
     const sources: Record<string, string> = {};
@@ -233,13 +257,14 @@ export class MetadataFetchPipeline {
     for (const field of Object.keys(preferences.fields) as MetadataField[]) {
       const fieldPreference = preferences.fields[field];
       if (!fieldPreference.enabled) continue;
+      const mergeStrategy = options?.preserveExisting ? 'fillMissing' : fieldPreference.mergeStrategy;
 
       if (field === 'genres' && preferences.options?.genres.mode === 'merge') {
         const { genres, sourceProvider } = this.mergeGenres(fieldPreference.providers as MetadataProviderKey[], byProvider, blockedGenreTokens);
         if (!genres.length) continue;
 
         const existingValue = existing[field];
-        switch (fieldPreference.mergeStrategy) {
+        switch (mergeStrategy) {
           case 'fillMissing':
             if (this.isMissing(existingValue)) {
               result.genres = genres;
@@ -257,7 +282,7 @@ export class MetadataFetchPipeline {
 
       if (field === 'communityRating') {
         const existingValue = existing[field];
-        if (fieldPreference.mergeStrategy === 'fillMissing' && !this.isMissing(existingValue)) continue;
+        if (mergeStrategy === 'fillMissing' && !this.isMissing(existingValue)) continue;
 
         const communityRatings = this.collectCommunityRatings(fieldPreference.providers as MetadataProviderKey[], byProvider);
         if (communityRatings.length > 0) {
@@ -275,6 +300,8 @@ export class MetadataFetchPipeline {
         if (value === undefined || value === null) continue;
 
         if (field === 'cover') {
+          const existingValue = existing[field];
+          if (mergeStrategy === 'fillMissing' && !this.isMissing(existingValue)) break;
           result.coverUrl = candidate.coverUrl;
           sources['coverUrl'] = providerKey;
           break;
@@ -288,7 +315,7 @@ export class MetadataFetchPipeline {
         }
 
         const existingValue = existing[field];
-        switch (fieldPreference.mergeStrategy) {
+        switch (mergeStrategy) {
           case 'fillMissing':
             if (this.isMissing(existingValue)) {
               (result as Record<string, unknown>)[field] = value;
@@ -313,8 +340,16 @@ export class MetadataFetchPipeline {
     const providerIds: ResolvedProviderIds = {};
     if (preferences.options?.saveProviderIds) {
       for (const candidate of byProvider.values()) {
-        if (candidate.providerId) providerIds[candidate.provider] = candidate.providerId;
-        if (candidate.provider === MetadataProviderKey.HARDCOVER && candidate.hardcoverEditionId) {
+        const providerIdKey = candidate.provider === MetadataProviderKey.AUDNEXUS ? MetadataProviderKey.AUDIBLE : candidate.provider;
+        const providerId = candidate.provider === MetadataProviderKey.AUDNEXUS ? (candidate.audibleId ?? candidate.providerId) : candidate.providerId;
+        if (providerId && (!options?.preserveExisting || !existingProviderIds?.[providerIdKey])) {
+          providerIds[providerIdKey] = providerId;
+        }
+        if (
+          candidate.provider === MetadataProviderKey.HARDCOVER &&
+          candidate.hardcoverEditionId &&
+          (!options?.preserveExisting || this.isMissing(existing.hardcoverEditionId))
+        ) {
           result.hardcoverEditionId = candidate.hardcoverEditionId;
         }
       }
@@ -326,14 +361,15 @@ export class MetadataFetchPipeline {
     const chapterProviders = [...narratorProviders, ...byProvider.keys()];
     for (const providerKey of chapterProviders) {
       const candidate = byProvider.get(providerKey);
-      if (candidate?.chapters?.length) {
+      if (candidate?.chapters?.length && (!options?.preserveExisting || this.isMissing(existing.chapters))) {
         result.chapters = candidate.chapters;
         break;
       }
     }
 
     const comicMetadata = this.resolveComicMetadata(preferences, byProvider);
-    if (comicMetadata) result.comicMetadata = comicMetadata;
+    const filteredComicMetadata = options?.preserveExisting ? this.filterExistingComicMetadata(comicMetadata, existing.comicMetadata) : comicMetadata;
+    if (filteredComicMetadata) result.comicMetadata = filteredComicMetadata;
 
     return { resolved: result, sources, providerIds };
   }
@@ -459,6 +495,21 @@ export class MetadataFetchPipeline {
     if (value === null || value === undefined || value === '') return true;
     if (Array.isArray(value)) return value.length === 0;
     return false;
+  }
+
+  private filterExistingComicMetadata(
+    resolved: ComicMetadataFields | undefined,
+    existing: Partial<Record<keyof ComicMetadataFields, unknown>> | null | undefined,
+  ): ComicMetadataFields | undefined {
+    if (!resolved || !existing) return resolved;
+
+    const filtered: ComicMetadataFields = {};
+    for (const [key, value] of Object.entries(resolved) as [keyof ComicMetadataFields, ComicMetadataFields[keyof ComicMetadataFields]][]) {
+      if (value === undefined || !this.isMissing(existing[key])) continue;
+      filtered[key] = value as never;
+    }
+
+    return this.hasComicMetadata(filtered) ? filtered : undefined;
   }
 
   private resolveComicMetadata(preferences: MetadataFetchPreferences, byProvider: Map<string, MetadataCandidate>): ComicMetadataFields | undefined {
