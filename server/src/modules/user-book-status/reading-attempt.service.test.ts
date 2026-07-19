@@ -267,6 +267,44 @@ describe('ReadingAttemptService', () => {
     expect(result.status).toBe('on_hold');
   });
 
+  it.each([
+    ['completed', 'unread', 'read'],
+    ['skimmed', 'unread', 'skimmed'],
+    ['abandoned', 'unread', 'abandoned'],
+    ['completed', 'want_to_read', 'read'],
+    ['skimmed', 'want_to_read', 'skimmed'],
+    ['abandoned', 'want_to_read', 'abandoned'],
+  ] as const)('projects a historical %s attempt over a current %s status', async (outcome, currentStatus, expectedStatus) => {
+    fake.repo.findStatus.mockResolvedValue({ status: currentStatus });
+
+    await service.createHistorical(1, 10, {
+      startedOn: '2026-01-01',
+      endedOn: '2026-01-10',
+      outcome,
+    });
+
+    expect(fake.projections.at(-1)?.status).toBe(expectedStatus);
+  });
+
+  it('reprojects an edited historical attempt over a current unread status', async () => {
+    const row = await fake.repo.create(
+      {},
+      {
+        userId: 1,
+        bookId: 10,
+        startedOn: '2026-01-01',
+        endedOn: '2026-01-10',
+        outcome: 'completed',
+        origin: 'manual',
+      },
+    );
+    fake.repo.findStatus.mockResolvedValue({ status: 'unread' });
+
+    await service.update(1, 10, row.id, { outcome: 'skimmed' });
+
+    expect(fake.projections.at(-1)?.status).toBe('skimmed');
+  });
+
   it('rejects an end date before the start date', async () => {
     await expect(service.createHistorical(1, 10, { startedOn: '2026-07-12', endedOn: '2026-07-01', outcome: 'completed' })).rejects.toBeInstanceOf(
       BadRequestException,

@@ -294,10 +294,10 @@ export class ReadingAttemptService {
       const target = active ?? latest;
       let status: ReadStatus = 'unread';
       if (active) status = current?.status === 'on_hold' ? 'on_hold' : hasCompleted ? 'rereading' : 'reading';
-      else if (current?.status === 'want_to_read' || current?.status === 'unread') status = current.status;
       else if (latest?.outcome === 'completed') status = 'read';
       else if (latest?.outcome === 'skimmed') status = 'skimmed';
       else if (latest?.outcome === 'abandoned') status = 'abandoned';
+      else if (current?.status === 'want_to_read' || current?.status === 'unread') status = current.status;
       await this.repo.project(tx, userId, bookId, {
         status,
         source: 'manual',
