@@ -19,6 +19,8 @@ const form = reactive({
   bookSyncMode: 'all_eligible' as 'all_eligible' | 'selected_only',
   autoSyncOnStatusChange: true,
   autoSyncOnProgressUpdate: true,
+  deviceProgressSyncEnabled: true,
+  deviceProgressSyncDelayMinutes: 10,
   autoSyncOnRatingChange: true,
   privacySettingId: 3,
 })
@@ -30,6 +32,8 @@ onMounted(async () => {
     form.bookSyncMode = settings.value.bookSyncMode
     form.autoSyncOnStatusChange = settings.value.autoSyncOnStatusChange
     form.autoSyncOnProgressUpdate = settings.value.autoSyncOnProgressUpdate
+    form.deviceProgressSyncEnabled = settings.value.deviceProgressSyncEnabled
+    form.deviceProgressSyncDelayMinutes = settings.value.deviceProgressSyncDelayMinutes
     form.autoSyncOnRatingChange = settings.value.autoSyncOnRatingChange
     form.privacySettingId = settings.value.privacySettingId
   }
@@ -51,6 +55,8 @@ async function handleSave() {
     bookSyncMode: form.bookSyncMode,
     autoSyncOnStatusChange: form.autoSyncOnStatusChange,
     autoSyncOnProgressUpdate: form.autoSyncOnProgressUpdate,
+    deviceProgressSyncEnabled: form.deviceProgressSyncEnabled,
+    deviceProgressSyncDelayMinutes: form.deviceProgressSyncDelayMinutes,
     autoSyncOnRatingChange: form.autoSyncOnRatingChange,
     privacySettingId: form.privacySettingId,
   })
@@ -212,6 +218,30 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
           <p class="text-xs text-muted-foreground mt-0.5">{{ t('hardcover.connection.syncOnProgress.description') }}</p>
         </div>
         <ToggleSwitch v-model="form.autoSyncOnProgressUpdate" :disabled="!form.enabled" />
+      </div>
+
+      <div class="flex items-center justify-between gap-4 pl-3 border-l-2 border-border">
+        <div>
+          <p class="text-sm">Forward KOReader and ABS progress</p>
+          <p class="text-xs text-muted-foreground mt-0.5">Automatically push device progress after reading activity becomes quiet.</p>
+        </div>
+        <ToggleSwitch v-model="form.deviceProgressSyncEnabled" :disabled="!form.enabled || !form.autoSyncOnProgressUpdate" />
+      </div>
+
+      <div class="flex items-center justify-between gap-4 pl-3 border-l-2 border-border">
+        <div>
+          <p class="text-sm">Device progress quiet period</p>
+          <p class="text-xs text-muted-foreground mt-0.5">Minutes without a new KOReader or ABS update before syncing. Use 0 for immediate.</p>
+        </div>
+        <input
+          v-model.number="form.deviceProgressSyncDelayMinutes"
+          type="number"
+          min="0"
+          max="1440"
+          step="1"
+          class="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          :disabled="!form.enabled || !form.autoSyncOnProgressUpdate || !form.deviceProgressSyncEnabled"
+        />
       </div>
 
       <div class="flex items-center justify-between">

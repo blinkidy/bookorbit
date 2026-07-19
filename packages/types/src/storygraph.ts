@@ -9,6 +9,8 @@ export interface StorygraphSettings {
   bookSyncMode: StorygraphBookSyncMode;
   autoSyncOnStatusChange: boolean;
   autoSyncOnProgressUpdate: boolean;
+  deviceProgressSyncEnabled: boolean;
+  deviceProgressSyncDelayMinutes: number;
   lastSyncedAt: string | null;
 }
 
@@ -19,6 +21,8 @@ export interface UpsertStorygraphSettingsPayload {
   bookSyncMode?: StorygraphBookSyncMode;
   autoSyncOnStatusChange?: boolean;
   autoSyncOnProgressUpdate?: boolean;
+  deviceProgressSyncEnabled?: boolean;
+  deviceProgressSyncDelayMinutes?: number;
 }
 
 export interface StorygraphCookieValidationResult {

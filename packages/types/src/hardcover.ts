@@ -12,6 +12,8 @@ export interface HardcoverSettings {
   bookSyncMode: HardcoverBookSyncMode;
   autoSyncOnStatusChange: boolean;
   autoSyncOnProgressUpdate: boolean;
+  deviceProgressSyncEnabled: boolean;
+  deviceProgressSyncDelayMinutes: number;
   autoSyncOnRatingChange: boolean;
   privacySettingId: number;
   lastSyncedAt: string | null;
@@ -23,6 +25,8 @@ export interface UpsertHardcoverSettingsPayload {
   bookSyncMode?: HardcoverBookSyncMode;
   autoSyncOnStatusChange?: boolean;
   autoSyncOnProgressUpdate?: boolean;
+  deviceProgressSyncEnabled?: boolean;
+  deviceProgressSyncDelayMinutes?: number;
   autoSyncOnRatingChange?: boolean;
   privacySettingId?: number;
 }

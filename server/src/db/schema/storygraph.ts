@@ -16,6 +16,8 @@ export const storygraphUserSettings = pgTable('storygraph_user_settings', {
   bookSyncMode: varchar('book_sync_mode', { length: 20 }).notNull().default('all_eligible'),
   autoSyncOnStatusChange: boolean('auto_sync_on_status_change').notNull().default(true),
   autoSyncOnProgressUpdate: boolean('auto_sync_on_progress_update').notNull().default(true),
+  deviceProgressSyncEnabled: boolean('device_progress_sync_enabled').notNull().default(true),
+  deviceProgressSyncDelayMinutes: integer('device_progress_sync_delay_minutes').notNull().default(10),
   lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true })

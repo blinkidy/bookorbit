@@ -393,6 +393,13 @@
       "when": 1784417689220,
       "tag": "0055_audiobook-kosync-sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1784420395345,
+      "tag": "0056_device-progress-sync-delay",
+      "breakpoints": true
     }
   ]
 }

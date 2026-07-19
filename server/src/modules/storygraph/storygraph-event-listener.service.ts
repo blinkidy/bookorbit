@@ -41,6 +41,10 @@ export class StorygraphEventListener implements OnModuleInit {
   }
 
   private handleProgressChanged(payload: BookProgressChangedPayload): void {
+    if (payload.source === 'koreader' || payload.source === 'audiobook') {
+      void this.scheduler.requestDeviceProgressSync({ userId: payload.userId, bookId: payload.bookId });
+      return;
+    }
     this.scheduler.requestSync({ userId: payload.userId, bookId: payload.bookId, reason: 'progress' });
   }
 }

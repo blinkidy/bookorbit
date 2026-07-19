@@ -31,6 +31,8 @@ const enabledSettings: StorygraphSettings = {
   bookSyncMode: 'all_eligible',
   autoSyncOnStatusChange: true,
   autoSyncOnProgressUpdate: true,
+  deviceProgressSyncEnabled: true,
+  deviceProgressSyncDelayMinutes: 10,
   lastSyncedAt: null,
 };
 
@@ -91,6 +93,24 @@ describe('StorygraphAutoSyncSchedulerService', () => {
     expect(mockSettingsService.getSettings).toHaveBeenCalledTimes(1);
     expect(mockSyncService.syncBook).toHaveBeenCalledTimes(1);
     expect(mockSyncService.syncBook).toHaveBeenCalledWith(1, 10);
+  });
+
+  it('waits for the configured quiet period and resets it on each device update', async () => {
+    await service.requestDeviceProgressSync({ userId: 1, bookId: 10 });
+    await vi.advanceTimersByTimeAsync(9 * 60 * 1000);
+    await service.requestDeviceProgressSync({ userId: 1, bookId: 10 });
+    await vi.advanceTimersByTimeAsync(9 * 60 * 1000);
+    expect(mockSyncService.syncBook).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    expect(mockSyncService.syncBook).toHaveBeenCalledWith(1, 10);
+  });
+
+  it('skips device forwarding when its provider toggle is disabled', async () => {
+    mockSettingsService.getSettings.mockResolvedValue({ ...enabledSettings, deviceProgressSyncEnabled: false });
+    await service.requestDeviceProgressSync({ userId: 1, bookId: 10 });
+    await vi.runAllTimersAsync();
+    expect(mockSyncService.syncBook).not.toHaveBeenCalled();
   });
 
   it.each([

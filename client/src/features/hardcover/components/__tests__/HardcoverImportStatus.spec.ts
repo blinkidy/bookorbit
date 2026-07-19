@@ -235,6 +235,8 @@ describe('HardcoverImportStatus', () => {
       bookSyncMode: 'all_eligible',
       autoSyncOnStatusChange: false,
       autoSyncOnProgressUpdate: false,
+      deviceProgressSyncEnabled: true,
+      deviceProgressSyncDelayMinutes: 10,
       autoSyncOnRatingChange: false,
       privacySettingId: 1,
       lastSyncedAt: null,

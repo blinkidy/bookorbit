@@ -15,6 +15,7 @@ interface AutoSyncRequest {
   userId: number;
   bookId: number;
   reason: HardcoverAutoSyncReason;
+  delayMs?: number;
 }
 
 interface AutoSyncBookFileRequest {
@@ -30,6 +31,7 @@ interface AutoSyncState {
   reasons: Set<HardcoverAutoSyncReason>;
   timer: ReturnType<typeof setTimeout> | null;
   inFlight: boolean;
+  delayMs: number;
 }
 
 const AUTO_SYNC_EVENT = 'hardcover.auto_sync';
@@ -40,6 +42,7 @@ export class HardcoverAutoSyncSchedulerService {
   private readonly logger = new Logger(HardcoverAutoSyncSchedulerService.name);
   private readonly states = new Map<string, AutoSyncState>();
   private readonly userSyncQueues = new Map<number, Promise<void>>();
+  private readonly deviceRequestVersions = new Map<string, number>();
 
   constructor(
     private readonly settingsService: HardcoverSettingsService,
@@ -50,10 +53,30 @@ export class HardcoverAutoSyncSchedulerService {
   requestSync(request: AutoSyncRequest): void {
     const state = this.getOrCreateState(request.userId, request.bookId);
     state.reasons.add(request.reason);
+    state.delayMs = request.delayMs ?? HARDCOVER_AUTO_SYNC_DEBOUNCE_MS;
 
     if (state.inFlight) return;
 
     this.schedule(state);
+  }
+
+  async requestDeviceProgressSync(request: { userId: number; bookId: number }): Promise<void> {
+    const key = `${request.userId}:${request.bookId}`;
+    const version = (this.deviceRequestVersions.get(key) ?? 0) + 1;
+    this.deviceRequestVersions.set(key, version);
+    const settings = await this.settingsService.getSettings(request.userId);
+    if (this.deviceRequestVersions.get(key) !== version) return;
+    this.deviceRequestVersions.delete(key);
+
+    if (!settings.effectiveEnabled || !settings.autoSyncOnProgressUpdate || !settings.deviceProgressSyncEnabled) {
+      this.cancelState(key);
+      return;
+    }
+    this.requestSync({
+      ...request,
+      reason: 'progress',
+      delayMs: settings.deviceProgressSyncDelayMinutes * 60 * 1000,
+    });
   }
 
   requestSyncForBookFile(request: AutoSyncBookFileRequest): void {
@@ -72,6 +95,7 @@ export class HardcoverAutoSyncSchedulerService {
       reasons: new Set(),
       timer: null,
       inFlight: false,
+      delayMs: HARDCOVER_AUTO_SYNC_DEBOUNCE_MS,
     };
     this.states.set(key, state);
     return state;
@@ -83,7 +107,13 @@ export class HardcoverAutoSyncSchedulerService {
     state.timer = setTimeout(() => {
       state.timer = null;
       void this.runDueSync(state.key);
-    }, HARDCOVER_AUTO_SYNC_DEBOUNCE_MS);
+    }, state.delayMs);
+  }
+
+  private cancelState(key: string): void {
+    const state = this.states.get(key);
+    if (state?.timer) clearTimeout(state.timer);
+    if (!state?.inFlight) this.states.delete(key);
   }
 
   private async runDueSync(key: string): Promise<void> {
