@@ -44,6 +44,8 @@ const SETTINGS: StorygraphSettings = {
   bookSyncMode: 'all_eligible',
   autoSyncOnStatusChange: true,
   autoSyncOnProgressUpdate: true,
+  deviceProgressSyncEnabled: true,
+  deviceProgressSyncDelayMinutes: 10,
   lastSyncedAt: null,
 }
 

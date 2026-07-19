@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Link, Save, CheckCircle2, AlertCircle, Info, Loader2, Unlink } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { useHardcoverSettings } from '../composables/useHardcoverSettings'
+
+const { t } = useI18n()
 
 const { settings, saving, validating, error, fetchSettings, saveSettings, disconnect, validateToken } = useHardcoverSettings()
 
@@ -16,6 +19,8 @@ const form = reactive({
   bookSyncMode: 'all_eligible' as 'all_eligible' | 'selected_only',
   autoSyncOnStatusChange: true,
   autoSyncOnProgressUpdate: true,
+  deviceProgressSyncEnabled: true,
+  deviceProgressSyncDelayMinutes: 10,
   autoSyncOnRatingChange: true,
   privacySettingId: 3,
 })
@@ -27,6 +32,8 @@ onMounted(async () => {
     form.bookSyncMode = settings.value.bookSyncMode
     form.autoSyncOnStatusChange = settings.value.autoSyncOnStatusChange
     form.autoSyncOnProgressUpdate = settings.value.autoSyncOnProgressUpdate
+    form.deviceProgressSyncEnabled = settings.value.deviceProgressSyncEnabled
+    form.deviceProgressSyncDelayMinutes = settings.value.deviceProgressSyncDelayMinutes
     form.autoSyncOnRatingChange = settings.value.autoSyncOnRatingChange
     form.privacySettingId = settings.value.privacySettingId
   }
@@ -34,7 +41,7 @@ onMounted(async () => {
 
 async function handleValidateToken() {
   if (!tokenInput.value.trim()) {
-    toast.error('Enter your Hardcover API token first')
+    toast.error(t('hardcover.connection.toast.enterToken'))
     return
   }
   const result = await validateToken(tokenInput.value.trim())
@@ -48,14 +55,16 @@ async function handleSave() {
     bookSyncMode: form.bookSyncMode,
     autoSyncOnStatusChange: form.autoSyncOnStatusChange,
     autoSyncOnProgressUpdate: form.autoSyncOnProgressUpdate,
+    deviceProgressSyncEnabled: form.deviceProgressSyncEnabled,
+    deviceProgressSyncDelayMinutes: form.deviceProgressSyncDelayMinutes,
     autoSyncOnRatingChange: form.autoSyncOnRatingChange,
     privacySettingId: form.privacySettingId,
   })
   if (ok) {
     tokenInput.value = ''
-    toast.success('Hardcover settings saved')
+    toast.success(t('hardcover.connection.toast.saved'))
   } else {
-    toast.error(error.value ?? 'Failed to save settings')
+    toast.error(error.value ?? t('hardcover.connection.toast.saveFailed'))
   }
 }
 
@@ -63,31 +72,31 @@ async function handleDisconnect() {
   await disconnect()
   tokenInput.value = ''
   validationResult.value = null
-  toast.success('Hardcover disconnected')
+  toast.success(t('hardcover.connection.toast.disconnected'))
 }
 
 function toggleTokenVisible() {
   tokenVisible.value = !tokenVisible.value
 }
 
-const privacyOptions = [
-  { id: 1, label: 'Public' },
-  { id: 2, label: 'Followers only' },
-  { id: 3, label: 'Private' },
-]
+const privacyOptions = computed(() => [
+  { id: 1, label: t('hardcover.connection.privacy.public') },
+  { id: 2, label: t('hardcover.connection.privacy.followersOnly') },
+  { id: 3, label: t('hardcover.connection.privacy.private') },
+])
 
-const bookSyncModeOptions = [
+const bookSyncModeOptions = computed(() => [
   {
     id: 'all_eligible' as const,
-    label: 'All eligible books',
-    description: 'Sync everything unless you exclude a book.',
+    label: t('hardcover.connection.syncScope.allEligible.label'),
+    description: t('hardcover.connection.syncScope.allEligible.description'),
   },
   {
     id: 'selected_only' as const,
-    label: 'Selected books only',
-    description: 'Sync only books you explicitly include.',
+    label: t('hardcover.connection.syncScope.selectedOnly.label'),
+    description: t('hardcover.connection.syncScope.selectedOnly.description'),
   },
-]
+])
 
 function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
   form.bookSyncMode = mode
@@ -99,22 +108,22 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
     <div class="flex items-center gap-3">
       <Link class="size-5 text-primary shrink-0" />
       <div>
-        <p class="font-medium text-sm">Connection</p>
-        <p class="text-xs text-muted-foreground mt-0.5">Connect your Hardcover account to sync reading data.</p>
+        <p class="font-medium text-sm">{{ t('hardcover.connection.title') }}</p>
+        <p class="text-xs text-muted-foreground mt-0.5">{{ t('hardcover.connection.description') }}</p>
       </div>
       <div v-if="settings?.tokenConfigured" class="ml-auto flex items-center gap-1.5 text-xs text-green-600">
         <CheckCircle2 class="size-3.5" />
-        Connected
+        {{ t('hardcover.connection.connected') }}
       </div>
     </div>
 
     <div class="space-y-2">
-      <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider"> API Token </label>
+      <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider"> {{ t('hardcover.connection.apiToken') }} </label>
       <div class="flex gap-2">
         <input
           v-model="tokenInput"
           :type="tokenVisible ? 'text' : 'password'"
-          placeholder="Paste your Hardcover API token"
+          :placeholder="t('hardcover.connection.tokenPlaceholder')"
           class="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           autocomplete="off"
         />
@@ -123,11 +132,11 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
           class="px-3 py-2 text-xs rounded-md border border-border bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
           @click="toggleTokenVisible"
         >
-          {{ tokenVisible ? 'Hide' : 'Show' }}
+          {{ tokenVisible ? t('hardcover.connection.hide') : t('hardcover.connection.show') }}
         </button>
       </div>
       <p class="text-xs text-muted-foreground">
-        Find your token at
+        {{ t('hardcover.connection.findTokenAt') }}
         <a href="https://hardcover.app/account/api" target="_blank" rel="noopener" class="text-primary underline underline-offset-2"
           >hardcover.app/account/api</a
         >.
@@ -142,7 +151,7 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
         @click="handleValidateToken"
       >
         <Loader2 v-if="validating" class="size-3 animate-spin" />
-        Validate token
+        {{ t('hardcover.connection.validateToken') }}
       </button>
       <span
         v-if="validationResult !== null"
@@ -151,22 +160,23 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
       >
         <CheckCircle2 v-if="validationResult.valid" class="size-3.5" />
         <AlertCircle v-else class="size-3.5" />
-        {{ validationResult.valid ? `Valid (${validationResult.username})` : 'Invalid token' }}
+        {{
+          validationResult.valid ? t('hardcover.connection.valid', { username: validationResult.username }) : t('hardcover.connection.invalidToken')
+        }}
       </span>
     </div>
 
     <div v-if="settings?.tokenConfigured" class="space-y-3 pt-2 border-t border-border">
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sync options</p>
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">{{ t('hardcover.connection.syncOptions') }}</p>
       <div class="flex items-start gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 py-2">
         <Info class="size-3.5 shrink-0 text-muted-foreground mt-0.5" />
         <p class="text-xs text-muted-foreground leading-relaxed">
-          Sync runs only for books that are not unread. This applies to status, progress, and rating triggers. These switches control when a sync
-          runs.
+          {{ t('hardcover.connection.syncInfo') }}
         </p>
       </div>
 
       <div class="space-y-2">
-        <p class="text-sm">Book sync scope</p>
+        <p class="text-sm">{{ t('hardcover.connection.syncScope.title') }}</p>
         <div class="grid gap-2 sm:grid-cols-2">
           <button
             v-for="option in bookSyncModeOptions"
@@ -188,40 +198,64 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
 
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm">Enable sync</p>
-          <p class="text-xs text-muted-foreground mt-0.5">Pause all Hardcover syncing without disconnecting.</p>
+          <p class="text-sm">{{ t('hardcover.connection.enableSync.title') }}</p>
+          <p class="text-xs text-muted-foreground mt-0.5">{{ t('hardcover.connection.enableSync.description') }}</p>
         </div>
         <ToggleSwitch v-model="form.enabled" />
       </div>
 
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm">Sync on status change</p>
-          <p class="text-xs text-muted-foreground mt-0.5">Push updates when you mark a book as reading, read, etc.</p>
+          <p class="text-sm">{{ t('hardcover.connection.syncOnStatus.title') }}</p>
+          <p class="text-xs text-muted-foreground mt-0.5">{{ t('hardcover.connection.syncOnStatus.description') }}</p>
         </div>
         <ToggleSwitch v-model="form.autoSyncOnStatusChange" :disabled="!form.enabled" />
       </div>
 
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm">Sync on progress update</p>
-          <p class="text-xs text-muted-foreground mt-0.5">Push reading progress and dates when BookOrbit or KOReader progress changes.</p>
+          <p class="text-sm">{{ t('hardcover.connection.syncOnProgress.title') }}</p>
+          <p class="text-xs text-muted-foreground mt-0.5">{{ t('hardcover.connection.syncOnProgress.description') }}</p>
         </div>
         <ToggleSwitch v-model="form.autoSyncOnProgressUpdate" :disabled="!form.enabled" />
       </div>
 
+      <div class="flex items-center justify-between gap-4 pl-3 border-l-2 border-border">
+        <div>
+          <p class="text-sm">Forward KOReader and ABS progress</p>
+          <p class="text-xs text-muted-foreground mt-0.5">Automatically push device progress after reading activity becomes quiet.</p>
+        </div>
+        <ToggleSwitch v-model="form.deviceProgressSyncEnabled" :disabled="!form.enabled || !form.autoSyncOnProgressUpdate" />
+      </div>
+
+      <div class="flex items-center justify-between gap-4 pl-3 border-l-2 border-border">
+        <div>
+          <p class="text-sm">Device progress quiet period</p>
+          <p class="text-xs text-muted-foreground mt-0.5">Minutes without a new KOReader or ABS update before syncing. Use 0 for immediate.</p>
+        </div>
+        <input
+          v-model.number="form.deviceProgressSyncDelayMinutes"
+          type="number"
+          min="0"
+          max="1440"
+          step="1"
+          class="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          :disabled="!form.enabled || !form.autoSyncOnProgressUpdate || !form.deviceProgressSyncEnabled"
+        />
+      </div>
+
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm">Sync on rating change</p>
-          <p class="text-xs text-muted-foreground mt-0.5">Push your star ratings to Hardcover.</p>
+          <p class="text-sm">{{ t('hardcover.connection.syncOnRating.title') }}</p>
+          <p class="text-xs text-muted-foreground mt-0.5">{{ t('hardcover.connection.syncOnRating.description') }}</p>
         </div>
         <ToggleSwitch v-model="form.autoSyncOnRatingChange" :disabled="!form.enabled" />
       </div>
 
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm">Privacy</p>
-          <p class="text-xs text-muted-foreground mt-0.5">Default visibility for synced books on Hardcover.</p>
+          <p class="text-sm">{{ t('hardcover.connection.privacy.title') }}</p>
+          <p class="text-xs text-muted-foreground mt-0.5">{{ t('hardcover.connection.privacy.description') }}</p>
         </div>
         <select
           v-model="form.privacySettingId"
@@ -242,7 +276,7 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
         @click="handleDisconnect"
       >
         <Unlink class="size-3.5" />
-        Disconnect
+        {{ t('hardcover.connection.disconnect') }}
       </button>
       <div class="flex-1" />
       <button
@@ -253,7 +287,7 @@ function selectBookSyncMode(mode: 'all_eligible' | 'selected_only') {
       >
         <Loader2 v-if="saving" class="size-3.5 animate-spin" />
         <Save v-else class="size-3.5" />
-        Save
+        {{ t('common.save') }}
       </button>
     </div>
   </div>

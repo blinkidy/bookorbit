@@ -1,4 +1,4 @@
-import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 import type { ApplyHardcoverImportPayload, UpdateHardcoverBookSyncPayload } from '@bookorbit/types';
 
@@ -23,6 +23,16 @@ export class UpsertHardcoverSettingsDto {
   @IsOptional()
   @IsBoolean()
   autoSyncOnProgressUpdate?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  deviceProgressSyncEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  deviceProgressSyncDelayMinutes?: number;
 
   @IsOptional()
   @IsBoolean()

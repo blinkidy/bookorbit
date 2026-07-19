@@ -15,6 +15,7 @@ import { HardcoverRepository } from './hardcover.repository';
 
 const VALID_PRIVACY_IDS = [HARDCOVER_PRIVACY.PUBLIC, HARDCOVER_PRIVACY.FOLLOWS, HARDCOVER_PRIVACY.PRIVATE];
 const VALID_BOOK_SYNC_MODES = ['all_eligible', 'selected_only'] as const;
+const MAX_DEVICE_PROGRESS_DELAY_MINUTES = 1440;
 
 @Injectable()
 export class HardcoverSettingsService {
@@ -38,6 +39,8 @@ export class HardcoverSettingsService {
       bookSyncMode: (row?.bookSyncMode ?? 'all_eligible') as HardcoverBookSyncMode,
       autoSyncOnStatusChange: row?.autoSyncOnStatusChange ?? true,
       autoSyncOnProgressUpdate: row?.autoSyncOnProgressUpdate ?? true,
+      deviceProgressSyncEnabled: row?.deviceProgressSyncEnabled ?? true,
+      deviceProgressSyncDelayMinutes: row?.deviceProgressSyncDelayMinutes ?? 10,
       autoSyncOnRatingChange: row?.autoSyncOnRatingChange ?? true,
       privacySettingId: row?.privacySettingId ?? HARDCOVER_PRIVACY.PRIVATE,
       lastSyncedAt: row?.lastSyncedAt?.toISOString() ?? null,
@@ -50,6 +53,14 @@ export class HardcoverSettingsService {
     }
     if (payload.bookSyncMode !== undefined && !VALID_BOOK_SYNC_MODES.includes(payload.bookSyncMode)) {
       throw new BadRequestException(`Invalid bookSyncMode: ${payload.bookSyncMode}`);
+    }
+    if (
+      payload.deviceProgressSyncDelayMinutes !== undefined &&
+      (!Number.isInteger(payload.deviceProgressSyncDelayMinutes) ||
+        payload.deviceProgressSyncDelayMinutes < 0 ||
+        payload.deviceProgressSyncDelayMinutes > MAX_DEVICE_PROGRESS_DELAY_MINUTES)
+    ) {
+      throw new BadRequestException(`deviceProgressSyncDelayMinutes must be an integer from 0 to ${MAX_DEVICE_PROGRESS_DELAY_MINUTES}`);
     }
 
     const existing = await this.repo.findSettings(userId);
@@ -69,6 +80,8 @@ export class HardcoverSettingsService {
     if (payload.bookSyncMode !== undefined) data.bookSyncMode = payload.bookSyncMode;
     if (payload.autoSyncOnStatusChange !== undefined) data.autoSyncOnStatusChange = payload.autoSyncOnStatusChange;
     if (payload.autoSyncOnProgressUpdate !== undefined) data.autoSyncOnProgressUpdate = payload.autoSyncOnProgressUpdate;
+    if (payload.deviceProgressSyncEnabled !== undefined) data.deviceProgressSyncEnabled = payload.deviceProgressSyncEnabled;
+    if (payload.deviceProgressSyncDelayMinutes !== undefined) data.deviceProgressSyncDelayMinutes = payload.deviceProgressSyncDelayMinutes;
     if (payload.autoSyncOnRatingChange !== undefined) data.autoSyncOnRatingChange = payload.autoSyncOnRatingChange;
     if (payload.privacySettingId !== undefined) data.privacySettingId = payload.privacySettingId;
 

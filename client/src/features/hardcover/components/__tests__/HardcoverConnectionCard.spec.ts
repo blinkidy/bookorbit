@@ -50,6 +50,8 @@ function makeSettings(overrides: Partial<HardcoverSettings> = {}): HardcoverSett
     bookSyncMode: 'all_eligible',
     autoSyncOnStatusChange: true,
     autoSyncOnProgressUpdate: true,
+    deviceProgressSyncEnabled: true,
+    deviceProgressSyncDelayMinutes: 10,
     autoSyncOnRatingChange: true,
     privacySettingId: 3,
     lastSyncedAt: null,
@@ -104,7 +106,7 @@ describe('HardcoverConnectionCard', () => {
     await switches[0].trigger('click')
     await switches[1].trigger('click')
     await switches[2].trigger('click')
-    await switches[3].trigger('click')
+    await switches[4].trigger('click')
     await nextTick()
     await privacySelect.setValue('1')
     await tokenInput.setValue('  token-123  ')
@@ -118,6 +120,8 @@ describe('HardcoverConnectionCard', () => {
         bookSyncMode: 'selected_only',
         autoSyncOnStatusChange: true,
         autoSyncOnProgressUpdate: false,
+        deviceProgressSyncEnabled: true,
+        deviceProgressSyncDelayMinutes: 10,
         autoSyncOnRatingChange: true,
         privacySettingId: 1,
       }),

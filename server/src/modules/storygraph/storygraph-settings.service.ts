@@ -13,6 +13,7 @@ import { StorygraphClientService, type StorygraphCookies } from './storygraph-cl
 import { StorygraphRepository } from './storygraph.repository';
 
 const VALID_BOOK_SYNC_MODES: StorygraphBookSyncMode[] = ['all_eligible', 'selected_only'];
+const MAX_DEVICE_PROGRESS_DELAY_MINUTES = 1440;
 
 @Injectable()
 export class StorygraphSettingsService {
@@ -36,6 +37,8 @@ export class StorygraphSettingsService {
       bookSyncMode: (row?.bookSyncMode ?? 'all_eligible') as StorygraphBookSyncMode,
       autoSyncOnStatusChange: row?.autoSyncOnStatusChange ?? true,
       autoSyncOnProgressUpdate: row?.autoSyncOnProgressUpdate ?? true,
+      deviceProgressSyncEnabled: row?.deviceProgressSyncEnabled ?? true,
+      deviceProgressSyncDelayMinutes: row?.deviceProgressSyncDelayMinutes ?? 10,
       lastSyncedAt: row?.lastSyncedAt?.toISOString() ?? null,
     };
   }
@@ -57,6 +60,14 @@ export class StorygraphSettingsService {
     if (payload.bookSyncMode !== undefined && !VALID_BOOK_SYNC_MODES.includes(payload.bookSyncMode)) {
       throw new BadRequestException(`Invalid bookSyncMode: ${payload.bookSyncMode}`);
     }
+    if (
+      payload.deviceProgressSyncDelayMinutes !== undefined &&
+      (!Number.isInteger(payload.deviceProgressSyncDelayMinutes) ||
+        payload.deviceProgressSyncDelayMinutes < 0 ||
+        payload.deviceProgressSyncDelayMinutes > MAX_DEVICE_PROGRESS_DELAY_MINUTES)
+    ) {
+      throw new BadRequestException(`deviceProgressSyncDelayMinutes must be an integer from 0 to ${MAX_DEVICE_PROGRESS_DELAY_MINUTES}`);
+    }
 
     const data: Parameters<typeof this.repo.upsertSettings>[1] = {};
     // Always carry both cookie values into the INSERT side so the NOT NULL constraints are satisfied.
@@ -68,6 +79,8 @@ export class StorygraphSettingsService {
     if (payload.bookSyncMode !== undefined) data.bookSyncMode = payload.bookSyncMode;
     if (payload.autoSyncOnStatusChange !== undefined) data.autoSyncOnStatusChange = payload.autoSyncOnStatusChange;
     if (payload.autoSyncOnProgressUpdate !== undefined) data.autoSyncOnProgressUpdate = payload.autoSyncOnProgressUpdate;
+    if (payload.deviceProgressSyncEnabled !== undefined) data.deviceProgressSyncEnabled = payload.deviceProgressSyncEnabled;
+    if (payload.deviceProgressSyncDelayMinutes !== undefined) data.deviceProgressSyncDelayMinutes = payload.deviceProgressSyncDelayMinutes;
 
     await this.repo.upsertSettings(userId, data);
     return this.getSettings(userId);

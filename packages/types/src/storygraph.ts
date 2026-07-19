@@ -9,6 +9,8 @@ export interface StorygraphSettings {
   bookSyncMode: StorygraphBookSyncMode;
   autoSyncOnStatusChange: boolean;
   autoSyncOnProgressUpdate: boolean;
+  deviceProgressSyncEnabled: boolean;
+  deviceProgressSyncDelayMinutes: number;
   lastSyncedAt: string | null;
 }
 
@@ -19,6 +21,8 @@ export interface UpsertStorygraphSettingsPayload {
   bookSyncMode?: StorygraphBookSyncMode;
   autoSyncOnStatusChange?: boolean;
   autoSyncOnProgressUpdate?: boolean;
+  deviceProgressSyncEnabled?: boolean;
+  deviceProgressSyncDelayMinutes?: number;
 }
 
 export interface StorygraphCookieValidationResult {
@@ -35,12 +39,7 @@ export interface StorygraphSyncPendingSummary {
 export type StorygraphBookSyncOverride = "included" | "excluded" | null;
 
 export type StorygraphBookSyncEffectiveReason =
-  | StorygraphSyncDisabledReason
-  | "global_disabled"
-  | "not_selected"
-  | "excluded"
-  | "unread"
-  | "unsupported_status";
+  StorygraphSyncDisabledReason | "global_disabled" | "not_selected" | "excluded" | "unread" | "unsupported_status";
 
 export interface StorygraphBookSyncState {
   bookId: number;

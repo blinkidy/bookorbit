@@ -11,6 +11,7 @@ import { StorygraphEventListener } from './storygraph-event-listener.service';
 
 const mockScheduler = {
   requestSync: vi.fn(),
+  requestDeviceProgressSync: vi.fn(),
   requestSyncForBookFile: vi.fn(),
 };
 
@@ -51,7 +52,7 @@ describe('StorygraphEventListener', () => {
     expect(mockScheduler.requestSyncForBookFile).toHaveBeenCalledWith({ userId: 1, bookFileId: 5, reason: 'progress' });
   });
 
-  it('schedules progress auto-sync on book progress changes', () => {
+  it('schedules delayed device progress sync on KOReader progress changes', () => {
     const { events } = makeListener();
 
     events.emit(ACHIEVEMENT_EVENT_BOOK_PROGRESS_CHANGED, {
@@ -62,6 +63,6 @@ describe('StorygraphEventListener', () => {
       source: 'koreader',
     });
 
-    expect(mockScheduler.requestSync).toHaveBeenCalledWith({ userId: 1, bookId: 10, reason: 'progress' });
+    expect(mockScheduler.requestDeviceProgressSync).toHaveBeenCalledWith({ userId: 1, bookId: 10 });
   });
 });

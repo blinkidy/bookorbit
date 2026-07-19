@@ -41,6 +41,8 @@ const SETTINGS: HardcoverSettings = {
   bookSyncMode: 'all_eligible',
   autoSyncOnStatusChange: true,
   autoSyncOnProgressUpdate: true,
+  deviceProgressSyncEnabled: true,
+  deviceProgressSyncDelayMinutes: 10,
   autoSyncOnRatingChange: true,
   privacySettingId: 3,
   lastSyncedAt: null,

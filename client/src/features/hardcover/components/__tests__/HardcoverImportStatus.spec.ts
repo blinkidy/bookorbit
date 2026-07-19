@@ -235,6 +235,8 @@ describe('HardcoverImportStatus', () => {
       bookSyncMode: 'all_eligible',
       autoSyncOnStatusChange: false,
       autoSyncOnProgressUpdate: false,
+      deviceProgressSyncEnabled: true,
+      deviceProgressSyncDelayMinutes: 10,
       autoSyncOnRatingChange: false,
       privacySettingId: 1,
       lastSyncedAt: null,
@@ -303,6 +305,6 @@ describe('HardcoverImportStatus', () => {
       .trigger('click')
     await flushPromises()
 
-    expect(mockToast.success).toHaveBeenCalledWith('2 read statuses imported, 0 progress updates')
+    expect(mockToast.success).toHaveBeenCalledWith('2 read statuses imported, no progress updates')
   })
 })

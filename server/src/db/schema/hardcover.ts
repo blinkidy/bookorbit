@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, real, serial, text, timestamp, unique, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgTable, real, serial, text, timestamp, unique, varchar } from 'drizzle-orm/pg-core';
 
 import { books } from './books';
 import { users } from './auth';
@@ -14,6 +14,8 @@ export const hardcoverUserSettings = pgTable('hardcover_user_settings', {
   bookSyncMode: varchar('book_sync_mode', { length: 20 }).notNull().default('all_eligible'),
   autoSyncOnStatusChange: boolean('auto_sync_on_status_change').notNull().default(true),
   autoSyncOnProgressUpdate: boolean('auto_sync_on_progress_update').notNull().default(true),
+  deviceProgressSyncEnabled: boolean('device_progress_sync_enabled').notNull().default(true),
+  deviceProgressSyncDelayMinutes: integer('device_progress_sync_delay_minutes').notNull().default(10),
   autoSyncOnRatingChange: boolean('auto_sync_on_rating_change').notNull().default(true),
   privacySettingId: integer('privacy_setting_id').notNull().default(3),
   lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
@@ -55,7 +57,7 @@ export const hardcoverBookState = pgTable(
       .notNull()
       .$onUpdateFn(() => new Date()),
   },
-  (t) => [unique('hardcover_book_state_user_book_uidx').on(t.userId, t.bookId)],
+  (t) => [unique('hardcover_book_state_user_book_uidx').on(t.userId, t.bookId), index('hardcover_book_state_book_id_idx').on(t.bookId)],
 );
 
 export type HardcoverUserSetting = typeof hardcoverUserSettings.$inferSelect;

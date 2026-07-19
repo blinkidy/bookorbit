@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class UpsertStorygraphSettingsDto {
   @IsOptional()
@@ -26,6 +26,16 @@ export class UpsertStorygraphSettingsDto {
   @IsOptional()
   @IsBoolean()
   autoSyncOnProgressUpdate?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  deviceProgressSyncEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  deviceProgressSyncDelayMinutes?: number;
 }
 
 export class ValidateStorygraphCookiesDto {
