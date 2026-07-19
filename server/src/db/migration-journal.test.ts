@@ -60,4 +60,16 @@ describe('Drizzle migration journal', () => {
     expect(journalTags).toEqual(fileTags);
     expect(new Set(journalTags).size).toBe(journalTags.length);
   });
+
+  it('preserves the audiobook migration identity shipped in v2.0.7-personal', () => {
+    const journal = readJournal();
+    const audiobookEntry = journal.entries[47];
+
+    expect(audiobookEntry).toMatchObject({
+      idx: 47,
+      when: 1783683005125,
+      tag: '0047_audiobook_kosync_sessions',
+    });
+    expect(journal.entries.filter((entry) => entry.tag.includes('audiobook_kosync_sessions'))).toHaveLength(1);
+  });
 });

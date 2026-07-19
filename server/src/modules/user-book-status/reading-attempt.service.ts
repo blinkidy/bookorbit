@@ -102,7 +102,8 @@ export class ReadingAttemptService {
 
       const completedBefore = await this.repo.hasCompleted(tx, userId, bookId);
       const projectedStatus = active ? (status === 'on_hold' ? 'on_hold' : completedBefore ? 'rereading' : 'reading') : status;
-      const projectionTarget = active ?? latest;
+      const resetsLifecycleDates = projectedStatus === 'unread' || projectedStatus === 'want_to_read';
+      const projectionTarget = resetsLifecycleDates ? null : (active ?? latest);
       const startedAt = dateToUtcDate(projectionTarget?.startedOn ?? null);
       const finishedAt = projectionTarget?.outcome === 'completed' ? dateToUtcDate(projectionTarget.endedOn) : null;
       await this.repo.project(tx, userId, bookId, { status: projectedStatus, source: 'manual', startedAt, finishedAt });

@@ -22,7 +22,7 @@ type Row = {
 function makeFakeRepo() {
   const rows: Row[] = [];
   let nextId = 1;
-  const projections: Array<{ status: ReadStatus }> = [];
+  const projections: Array<{ status: ReadStatus; startedAt: Date | null; finishedAt: Date | null }> = [];
   const repo = {
     transaction: vi.fn((callback: (tx: object) => Promise<unknown>) => callback({})),
     findActive: vi.fn((_tx: object, userId: number, bookId: number) =>
@@ -77,10 +77,12 @@ function makeFakeRepo() {
       Object.assign(row, patch, { updatedAt: new Date('2026-07-12T12:00:00.000Z') });
       return Promise.resolve(row);
     }),
-    project: vi.fn((_tx: object, _userId: number, _bookId: number, projection: { status: ReadStatus }) => {
-      projections.push(projection);
-      return Promise.resolve();
-    }),
+    project: vi.fn(
+      (_tx: object, _userId: number, _bookId: number, projection: { status: ReadStatus; startedAt: Date | null; finishedAt: Date | null }) => {
+        projections.push(projection);
+        return Promise.resolve();
+      },
+    ),
     findStatus: vi.fn(() => Promise.resolve(null)),
     findByExternal: vi.fn((_tx: object, userId: number, provider: string, externalId: string) =>
       Promise.resolve(rows.find((row) => row.userId === userId && row.externalProvider === provider && row.externalId === externalId)),
@@ -247,6 +249,15 @@ describe('ReadingAttemptService', () => {
     expect(fake.rows).toHaveLength(1);
     expect(fake.rows[0]?.endedOn).toBe('2026-01-12');
     expect(result.finishedAt).toBe('2026-01-12');
+  });
+
+  it.each(['unread', 'want_to_read'] as const)('clears projected lifecycle dates when resetting a completed book to %s', async (status) => {
+    await service.applyManualStatus(1, 10, 'read', '2026-01-01', '2026-01-10', '2026-07-12');
+
+    const result = await service.applyManualStatus(1, 10, status, undefined, undefined, '2026-07-12');
+
+    expect(result).toMatchObject({ status, startedAt: null, finishedAt: null });
+    expect(fake.projections.at(-1)).toMatchObject({ status, startedAt: null, finishedAt: null });
   });
 
   it('keeps an active reread on hold without changing it to rereading', async () => {

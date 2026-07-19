@@ -1,6 +1,6 @@
 {
   "id": "f4e2bcdc-15d5-46fd-a660-789bc27c254e",
-  "prevId": "32d3ce71-fe36-46aa-a09c-7ae01276bb08",
+  "prevId": "7eeae6ed-90c2-44c1-b45c-e5fe38a56e51",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -15011,239 +15011,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.kosync_audiobook_sessions": {
-      "name": "kosync_audiobook_sessions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "book_file_id": {
-          "name": "book_file_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "book_id": {
-          "name": "book_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "library_id": {
-          "name": "library_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "device": {
-          "name": "device",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_progress_at": {
-          "name": "last_progress_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "start_progress": {
-          "name": "start_progress",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "latest_progress": {
-          "name": "latest_progress",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_external_sync_at": {
-          "name": "last_external_sync_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_external_sync_progress": {
-          "name": "last_external_sync_progress",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "kas_user_file_device_uidx": {
-          "name": "kas_user_file_device_uidx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "book_file_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "device_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "kas_last_progress_at_idx": {
-          "name": "kas_last_progress_at_idx",
-          "columns": [
-            {
-              "expression": "last_progress_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "kas_user_id_idx": {
-          "name": "kas_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "kosync_audiobook_sessions_user_id_users_id_fk": {
-          "name": "kosync_audiobook_sessions_user_id_users_id_fk",
-          "tableFrom": "kosync_audiobook_sessions",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "kosync_audiobook_sessions_book_file_id_book_files_id_fk": {
-          "name": "kosync_audiobook_sessions_book_file_id_book_files_id_fk",
-          "tableFrom": "kosync_audiobook_sessions",
-          "tableTo": "book_files",
-          "columnsFrom": [
-            "book_file_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "kosync_audiobook_sessions_book_id_books_id_fk": {
-          "name": "kosync_audiobook_sessions_book_id_books_id_fk",
-          "tableFrom": "kosync_audiobook_sessions",
-          "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "kosync_audiobook_sessions_library_id_libraries_id_fk": {
-          "name": "kosync_audiobook_sessions_library_id_libraries_id_fk",
-          "tableFrom": "kosync_audiobook_sessions",
-          "tableTo": "libraries",
-          "columnsFrom": [
-            "library_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "kas_start_progress_range_chk": {
-          "name": "kas_start_progress_range_chk",
-          "value": "\"kosync_audiobook_sessions\".\"start_progress\" >= 0 and \"kosync_audiobook_sessions\".\"start_progress\" <= 100"
-        },
-        "kas_latest_progress_range_chk": {
-          "name": "kas_latest_progress_range_chk",
-          "value": "\"kosync_audiobook_sessions\".\"latest_progress\" >= 0 and \"kosync_audiobook_sessions\".\"latest_progress\" <= 100"
-        },
-        "kas_last_external_sync_progress_range_chk": {
-          "name": "kas_last_external_sync_progress_range_chk",
-          "value": "\"kosync_audiobook_sessions\".\"last_external_sync_progress\" is null or (\"kosync_audiobook_sessions\".\"last_external_sync_progress\" >= 0 and \"kosync_audiobook_sessions\".\"last_external_sync_progress\" <= 100)"
-        },
-        "kas_last_after_started_chk": {
-          "name": "kas_last_after_started_chk",
-          "value": "\"kosync_audiobook_sessions\".\"last_progress_at\" >= \"kosync_audiobook_sessions\".\"started_at\""
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.achievements": {
       "name": "achievements",
       "schema": "",
@@ -16393,6 +16160,239 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.kosync_audiobook_sessions": {
+      "name": "kosync_audiobook_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "book_file_id": {
+          "name": "book_file_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "book_id": {
+          "name": "book_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "library_id": {
+          "name": "library_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device": {
+          "name": "device",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_progress_at": {
+          "name": "last_progress_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_progress": {
+          "name": "start_progress",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latest_progress": {
+          "name": "latest_progress",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_external_sync_at": {
+          "name": "last_external_sync_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_external_sync_progress": {
+          "name": "last_external_sync_progress",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "kas_user_file_device_uidx": {
+          "name": "kas_user_file_device_uidx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "book_file_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "device_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kas_last_progress_at_idx": {
+          "name": "kas_last_progress_at_idx",
+          "columns": [
+            {
+              "expression": "last_progress_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kas_user_id_idx": {
+          "name": "kas_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "kosync_audiobook_sessions_user_id_users_id_fk": {
+          "name": "kosync_audiobook_sessions_user_id_users_id_fk",
+          "tableFrom": "kosync_audiobook_sessions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kosync_audiobook_sessions_book_file_id_book_files_id_fk": {
+          "name": "kosync_audiobook_sessions_book_file_id_book_files_id_fk",
+          "tableFrom": "kosync_audiobook_sessions",
+          "tableTo": "book_files",
+          "columnsFrom": [
+            "book_file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kosync_audiobook_sessions_book_id_books_id_fk": {
+          "name": "kosync_audiobook_sessions_book_id_books_id_fk",
+          "tableFrom": "kosync_audiobook_sessions",
+          "tableTo": "books",
+          "columnsFrom": [
+            "book_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kosync_audiobook_sessions_library_id_libraries_id_fk": {
+          "name": "kosync_audiobook_sessions_library_id_libraries_id_fk",
+          "tableFrom": "kosync_audiobook_sessions",
+          "tableTo": "libraries",
+          "columnsFrom": [
+            "library_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "kas_start_progress_range_chk": {
+          "name": "kas_start_progress_range_chk",
+          "value": "\"kosync_audiobook_sessions\".\"start_progress\" >= 0 and \"kosync_audiobook_sessions\".\"start_progress\" <= 100"
+        },
+        "kas_latest_progress_range_chk": {
+          "name": "kas_latest_progress_range_chk",
+          "value": "\"kosync_audiobook_sessions\".\"latest_progress\" >= 0 and \"kosync_audiobook_sessions\".\"latest_progress\" <= 100"
+        },
+        "kas_last_external_sync_progress_range_chk": {
+          "name": "kas_last_external_sync_progress_range_chk",
+          "value": "\"kosync_audiobook_sessions\".\"last_external_sync_progress\" is null or (\"kosync_audiobook_sessions\".\"last_external_sync_progress\" >= 0 and \"kosync_audiobook_sessions\".\"last_external_sync_progress\" <= 100)"
+        },
+        "kas_last_after_started_chk": {
+          "name": "kas_last_after_started_chk",
+          "value": "\"kosync_audiobook_sessions\".\"last_progress_at\" >= \"kosync_audiobook_sessions\".\"started_at\""
+        }
+      },
       "isRLSEnabled": false
     }
   },
