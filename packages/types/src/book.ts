@@ -4,8 +4,12 @@ import type { AudiobookChapter, NarratorRef } from "./audiobook";
 import type { ComicMetadataFields } from "./metadata-fetch";
 import type { BookFileWriteField, WriteResult } from "./file-write";
 import type { CustomMetadataBookValue } from "./custom-metadata";
+import type { CoverAspectRatio } from "./library";
+import { DEFAULT_FORMAT_PRIORITY } from "./library";
 
-export const BOOK_FORMATS = ["epub", "pdf", "mobi", "azw3", "cbz", "cbr", "cb7", "fb2", "m4b", "mp3", "m4a", "opus", "ogg", "flac"] as const;
+// Derived rather than duplicated: these two lists describe the same set of formats,
+// and maintaining them separately let BOOK_FORMATS fall behind on azw and kepub.
+export const BOOK_FORMATS = DEFAULT_FORMAT_PRIORITY;
 export type BookFormat = (typeof BOOK_FORMATS)[number];
 
 const AUDIO_FORMATS = new Set<string>(["m4b", "mp3", "m4a", "opus", "ogg", "flac"]);
@@ -75,16 +79,52 @@ export type BookFileRef = {
   sizeBytes: number | null;
 };
 
+export type BookMediaKind = "ebook" | "audiobook" | "comic" | "unknown";
+
+export type BookMediaProfile = {
+  primaryMediaKind: BookMediaKind;
+  hasEbook: boolean;
+  hasAudio: boolean;
+  hasComic: boolean;
+};
+
+type BookMediaFile = Pick<BookFileRef, "format" | "role">;
+
+export function getPrimaryBookFile<T extends BookMediaFile>(files: readonly T[]): T | null {
+  return files.find((file) => file.role === "primary") ?? files.find((file) => file.format != null) ?? files[0] ?? null;
+}
+
+export function getBookMediaKind(format: string | null | undefined): BookMediaKind {
+  const normalized = format?.trim().toLowerCase();
+  if (!normalized) return "unknown";
+  if (isAudioFormat(normalized)) return "audiobook";
+  if (isComicFormat(normalized)) return "comic";
+  return "ebook";
+}
+
+export function getBookMediaProfile(files: readonly BookMediaFile[]): BookMediaProfile {
+  const mediaKinds = files.map((file) => getBookMediaKind(file.format));
+  return {
+    primaryMediaKind: getBookMediaKind(getPrimaryBookFile(files)?.format),
+    hasEbook: mediaKinds.includes("ebook"),
+    hasAudio: mediaKinds.includes("audiobook"),
+    hasComic: mediaKinds.includes("comic"),
+  };
+}
+
 export type BookSeriesMembership = {
   seriesId: number;
   seriesName: string;
   seriesIndex: number | null;
   displayOrder: number;
+  /** Series-level, shared by every book in the series and by every user. */
+  expectedBookCount: number | null;
 };
 
 export type BookCard = {
   id: number;
   status: string;
+  coverAspectRatio: CoverAspectRatio;
   title: string | null;
   authors: string[];
   seriesId?: number | null;
@@ -282,6 +322,7 @@ export type BooksPage = {
 export type BookRecommendation = {
   id: number;
   title: string | null;
+  coverAspectRatio: CoverAspectRatio;
   updatedAt: string | null;
   hasCover: boolean;
   authors: string[];
@@ -292,6 +333,7 @@ export type BookRecommendation = {
 export type SeriesBookRecommendation = {
   id: number;
   title: string | null;
+  coverAspectRatio: CoverAspectRatio;
   updatedAt: string | null;
   seriesIndex: number | null;
   hasCover: boolean;

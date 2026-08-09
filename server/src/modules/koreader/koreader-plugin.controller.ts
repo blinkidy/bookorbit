@@ -6,6 +6,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import type { RequestUser } from '../../common/types/request-user';
 import { KoreaderAuthGuard } from './koreader-auth.guard';
 import { KoreaderAnnotationExchangeService } from './koreader-annotation-exchange.service';
+import { KoreaderBookmarkExchangeService } from './koreader-bookmark-exchange.service';
 import { KoreaderPackageService } from './koreader-package.service';
 import { KoreaderPluginAnnotationService } from './koreader-plugin-annotation.service';
 import { KoreaderPluginService } from './koreader-plugin.service';
@@ -15,6 +16,8 @@ import {
   AnnotationExchangeDto,
   AnnotationsUploadDto,
   BookStatesUploadDto,
+  BookmarkExchangeAckDto,
+  BookmarkExchangeDto,
   BulkProgressDto,
   MatchCheckDto,
   PageStatsUploadDto,
@@ -30,6 +33,7 @@ export class KoreaderPluginController {
     private readonly statsService: KoreaderStatsService,
     private readonly annotationService: KoreaderPluginAnnotationService,
     private readonly annotationExchangeService: KoreaderAnnotationExchangeService,
+    private readonly bookmarkExchangeService: KoreaderBookmarkExchangeService,
     private readonly packageService: KoreaderPackageService,
   ) {}
 
@@ -59,6 +63,16 @@ export class KoreaderPluginController {
     return this.annotationExchangeService.exchangeAck(user, dto);
   }
 
+  @Post('bookmarks/exchange')
+  exchangeBookmarks(@CurrentUser() user: RequestUser, @Body() dto: BookmarkExchangeDto) {
+    return this.bookmarkExchangeService.exchange(user, dto);
+  }
+
+  @Post('bookmarks/exchange-ack')
+  exchangeBookmarksAck(@CurrentUser() user: RequestUser, @Body() dto: BookmarkExchangeAckDto) {
+    return this.bookmarkExchangeService.exchangeAck(user, dto);
+  }
+
   @Post('book-states')
   uploadBookStates(@CurrentUser() user: RequestUser, @Body() dto: BookStatesUploadDto) {
     return this.pluginService.uploadBookStates(user, dto);
@@ -75,8 +89,8 @@ export class KoreaderPluginController {
   }
 
   @Get('version')
-  getVersion() {
-    return this.packageService.getVersionInfo();
+  getVersion(@CurrentUser() user: RequestUser) {
+    return this.packageService.getVersionInfoForSelfUpdate(user.id);
   }
 
   @Get('package')

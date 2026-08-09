@@ -35,7 +35,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Dependency review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
@@ -51,7 +51,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout trusted pull request base
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.base.sha }}
@@ -180,7 +180,7 @@ jobs:
           done <<< "${issue_refs}"
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -189,6 +189,25 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+
+      - name: Enforce localization change policy
+        shell: bash
+        env:
+          IS_CROWDIN: ${{ steps.crowdin.outputs.is_crowdin }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          validator="$RUNNER_TEMP/validate-locale-pr.mjs"
+          if git cat-file -e "$PR_BASE_SHA:scripts/validate-locale-pr.mjs" 2>/dev/null; then
+            git show "$PR_BASE_SHA:scripts/validate-locale-pr.mjs" > "$validator"
+          else
+            git show "$PR_HEAD_SHA:scripts/validate-locale-pr.mjs" > "$validator"
+          fi
+          node "$validator" "$PR_BASE_SHA" "$PR_HEAD_SHA" "$IS_CROWDIN"
+
+      - name: Test PR policy scripts
+        run: node --test scripts/validate-locale-pr.test.mjs
 
       - name: Lint PR title
         shell: bash
@@ -203,7 +222,9 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          pnpm exec commitlint --config commitlint.config.cjs --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
+          while IFS= read -r commit_sha; do
+            git show -s --format=%B "$commit_sha" | pnpm exec commitlint --config commitlint.config.cjs --verbose
+          done < <(git rev-list --first-parent "$PR_BASE_SHA..$PR_HEAD_SHA")
 
   detect-changes:
     name: Detect Changed Paths
@@ -219,7 +240,7 @@ jobs:
       client: ${{ steps.manual.outputs.client || steps.changes.outputs.client }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -242,6 +263,9 @@ jobs:
           filters: |
             server:
               - 'server/**'
+              # Server tests assert against the plugin sources, so plugin-only
+              # changes can break them.
+              - 'koreader-plugin/**'
               - 'packages/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -256,6 +280,7 @@ jobs:
               - 'pnpm-workspace.yaml'
               - '.github/actions/setup-node-pnpm/action.yml'
               - '.github/workflows/ci.yml'
+              - '.github/workflows/crowdin-translations.yml'
 
       - name: Print change scope
         shell: bash
@@ -301,7 +326,7 @@ jobs:
 
       - name: Checkout
         if: steps.has-changes.outputs.run == 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js and pnpm
         if: steps.has-changes.outputs.run == 'true'
@@ -373,7 +398,7 @@ jobs:
 
       - name: Checkout
         if: steps.has-changes.outputs.run == 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js and pnpm
         if: steps.has-changes.outputs.run == 'true'
@@ -437,7 +462,7 @@ jobs:
 
       - name: Checkout
         if: steps.has-changes.outputs.run == 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js and pnpm
         if: steps.has-changes.outputs.run == 'true'
@@ -552,12 +577,12 @@ jobs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -622,7 +647,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Prepare PR image tag
         id: pr-meta
@@ -678,7 +703,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Prepare PR publish tag
         id: pr-meta
@@ -696,7 +721,7 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}

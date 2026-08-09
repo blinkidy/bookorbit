@@ -1,7 +1,7 @@
 import { basename } from 'path';
 
 import type { BookCard, BookMetadataLockField, CollapsedSeriesInfo, CustomMetadataBookValue, UserBookStatus } from '@bookorbit/types';
-import { BOOK_METADATA_LOCK_FIELDS } from '@bookorbit/types';
+import { BOOK_METADATA_LOCK_FIELDS, normalizeCoverAspectRatio } from '@bookorbit/types';
 
 const LOCK_FIELD_SET = new Set<string>(BOOK_METADATA_LOCK_FIELDS);
 
@@ -13,6 +13,7 @@ function normalizeLockedFields(raw: string[] | null | undefined): BookMetadataLo
 type BookRow = {
   id: number;
   status: string;
+  coverAspectRatio: string;
   primaryFileId?: number | null;
   folderPath: string;
   addedAt: Date;
@@ -50,7 +51,14 @@ type CollapsedBookRow = BookRow & {
 type NameRow = { bookId: number; name: string };
 type NarratorRow = { bookId: number; name: string };
 type FileRow = { bookId: number; id: number; format: string | null; role: string; sizeBytes: number | null };
-type SeriesMembershipRow = { bookId: number; seriesId: number; seriesName: string; seriesIndex: number | null; displayOrder: number };
+type SeriesMembershipRow = {
+  bookId: number;
+  seriesId: number;
+  seriesName: string;
+  seriesIndex: number | null;
+  displayOrder: number;
+  expectedBookCount?: number | null;
+};
 type ProgressRow = { bookFileId: number; percentage: number | null };
 type StatusRow = {
   bookId: number;
@@ -181,6 +189,7 @@ export function assembleBookCards(
     return {
       id: row.id,
       status: row.status,
+      coverAspectRatio: normalizeCoverAspectRatio(row.coverAspectRatio),
       title: row.title ?? basename(row.folderPath),
       seriesId: row.seriesId ?? null,
       seriesName: row.seriesName ?? null,
@@ -193,6 +202,7 @@ export function assembleBookCards(
           seriesName: membership.seriesName,
           seriesIndex: membership.seriesIndex,
           displayOrder: membership.displayOrder,
+          expectedBookCount: membership.expectedBookCount ?? null,
         })),
       authors: authorsByBook.get(row.id) ?? [],
       files,

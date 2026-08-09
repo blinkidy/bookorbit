@@ -5,6 +5,7 @@ import {
   BookOpen,
   Download,
   FileSpreadsheet,
+  FolderInput,
   FolderMinus,
   FolderPlus,
   ImageDown,
@@ -49,8 +50,8 @@ export type ExportScope = 'primary' | 'all' | 'audio'
 
 const ICON_SIZE = 17
 
-const BTN_ICON = 'text-foreground/80 h-9 w-9 shrink-0 flex items-center justify-center rounded-full transition-colors'
-const BTN_DISABLED = 'text-muted-foreground/60 cursor-not-allowed'
+const BTN_ICON = 'text-foreground h-9 w-9 shrink-0 flex items-center justify-center rounded-full transition-colors'
+const BTN_DISABLED = 'text-muted-foreground cursor-not-allowed'
 const BTN_PRIMARY = 'text-foreground hover:bg-primary hover:text-primary-foreground'
 const BTN_MUTED = 'text-foreground hover:bg-muted'
 const BTN_DESTRUCTIVE = 'text-destructive hover:bg-destructive hover:text-destructive-foreground'
@@ -84,6 +85,7 @@ const emit = defineEmits<{
   'set-rating': [rating: number | null]
   'set-field': [field: BulkEditableField, value: BulkEditableValue]
   'lock-metadata': [locked: boolean]
+  'move-to-library': []
   delete: []
   exit: []
 }>()
@@ -105,7 +107,8 @@ const hasCustomContent = computed(() => Boolean(slots.content))
 const canBulkActions = computed(() => !isDemoRestrictedAccount.value)
 const canDownload = computed(() => hasPermission('library_download') && canBulkActions.value)
 const canEditMetadata = computed(() => hasPermission('library_edit_metadata') && canBulkActions.value)
-const canShowMoreMenu = computed(() => canDownload.value || canEditMetadata.value)
+const canMoveToLibrary = computed(() => hasPermission('library_edit_metadata') && canBulkActions.value)
+const canShowMoreMenu = computed(() => canDownload.value || canEditMetadata.value || canMoveToLibrary.value)
 const canShare = computed(() => hasPermission('email_send') || canDownload.value)
 const numericFieldSelected = computed(() => bulkField.value === 'publishedYear')
 const arrayFieldSelected = computed(() => (BULK_EDITABLE_ARRAY_FIELDS as readonly string[]).includes(bulkField.value))
@@ -177,6 +180,11 @@ function onRefreshMetadata() {
 function onReExtractCover() {
   if (props.count === 0) return
   emit('re-extract-cover')
+}
+
+function onMoveToLibrary() {
+  if (props.count === 0) return
+  emit('move-to-library')
 }
 
 function resetFieldEditor() {
@@ -442,6 +450,13 @@ watch(
                           <span>{{ t('components.selectionActionBar.exportMetadata') }}</span>
                         </DropdownMenuItem>
                       </template>
+                      <template v-if="canMoveToLibrary">
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem data-testid="action-move-to-library" @click="onMoveToLibrary">
+                          <FolderInput :size="14" />
+                          <span>{{ t('book.move.action') }}</span>
+                        </DropdownMenuItem>
+                      </template>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </span>
@@ -541,7 +556,7 @@ watch(
           <!-- Delete confirmation -->
           <template v-else>
             <span class="px-3 text-sm font-semibold text-destructive whitespace-nowrap">
-              {{ t('components.selectionActionBar.deleteConfirm', { count }, count) }}
+              {{ t('components.selectionActionBar.deleteConfirm', { count }) }}
             </span>
             <template v-if="count > 50">
               <input

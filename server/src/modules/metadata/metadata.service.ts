@@ -23,6 +23,7 @@ import {
 } from '../../common/utils/metadata-text-normalize.utils';
 import { normalizePublishedDate, publishedYearFromDateKey } from '../../common/utils/published-date.utils';
 import { SeriesIdentityService } from '../../common/services/series-identity.service';
+import { SeriesExpectedCountService } from '../../common/services/series-expected-count.service';
 import { SeriesMembershipService } from '../../common/services/series-membership.service';
 import { refreshPrimaryAuthorSortNamesForAuthors, refreshPrimaryAuthorSortNamesForBooks } from '../../db/book-author-sort-key';
 import { BookEmbedderService } from '../embedding/book-embedder.service';
@@ -77,6 +78,7 @@ export class MetadataService {
     @Optional() private readonly metadataEvents?: MetadataEventsService,
     @Optional() private readonly seriesIdentity?: SeriesIdentityService,
     @Optional() private readonly seriesMemberships?: SeriesMembershipService,
+    @Optional() private readonly seriesExpectedCount?: SeriesExpectedCountService,
   ) {
     this.appDataPath = this.config.get<string>('storage.appDataPath')!;
   }
@@ -110,11 +112,7 @@ export class MetadataService {
 
       await Promise.all([this.persistMetadata(bookId, data, format), data.cover ? this.persistCover(bookId, data.cover, true) : Promise.resolve()]);
 
-      this.scoreService.calculateAndSave(bookId).catch((error: Error) => {
-        this.logger.warn(
-          `[metadata.score_calculation] [fail] bookId=${bookId} errorClass=${error.name} error="${sanitizeLogValue(error.message)}" - metadata score calculation failed`,
-        );
-      });
+      await this.scoreService.calculateAndSave(bookId);
 
       this.logger.debug(
         `[${event}] [end] bookId=${bookId} format=${format} durationMs=${Date.now() - startedAt} coverExtracted=${data.cover != null} - metadata extraction completed`,
@@ -194,8 +192,6 @@ export class MetadataService {
       }
 
       await this.persistCover(bookId, buffer, true);
-      this.logger.debug(`[${event}] [end] bookId=${bookId} durationMs=${Date.now() - startedAt} saved=true - cover download completed`);
-      return true;
     } catch (error) {
       const errorClass = error instanceof Error ? error.name : 'Error';
       const errorMessage = sanitizeLogValue(error instanceof Error ? error.message : String(error));
@@ -204,10 +200,15 @@ export class MetadataService {
       );
       return false;
     }
+
+    await this.scoreService.calculateAndSave(bookId);
+    this.logger.debug(`[${event}] [end] bookId=${bookId} durationMs=${Date.now() - startedAt} saved=true - cover download completed`);
+    return true;
   }
 
   async saveExtractedCoverBytes(bookId: number, bytes: Buffer): Promise<void> {
     await this.persistCover(bookId, bytes, true);
+    await this.scoreService.calculateAndSave(bookId);
   }
 
   async refreshCoverForBook(bookId: number, absolutePath: string, format: string): Promise<boolean> {
@@ -235,10 +236,6 @@ export class MetadataService {
         return false;
       }
       await this.persistCover(bookId, data.cover, false);
-      this.logger.debug(
-        `[${event}] [end] bookId=${bookId} format=${format} durationMs=${Date.now() - startedAt} refreshed=true - cover refresh completed`,
-      );
-      return true;
     } catch (error) {
       const errorClass = error instanceof Error ? error.name : 'Error';
       const errorMessage = sanitizeLogValue(error instanceof Error ? error.message : String(error));
@@ -247,6 +244,12 @@ export class MetadataService {
       );
       return false;
     }
+
+    await this.scoreService.calculateAndSave(bookId);
+    this.logger.debug(
+      `[${event}] [end] bookId=${bookId} format=${format} durationMs=${Date.now() - startedAt} refreshed=true - cover refresh completed`,
+    );
+    return true;
   }
 
   // ── Audio helpers ────────────────────────────────────────────────────────────
@@ -650,6 +653,7 @@ export class MetadataService {
       openLibraryId: data.openLibraryId,
       ranobedbId: data.ranobedbId,
       koboId: data.koboId,
+      comicvineId: data.comicvineId,
       lubimyczytacId: data.lubimyczytacId,
       aladinId: data.aladinId,
       itunesId: data.itunesId,
@@ -687,6 +691,7 @@ export class MetadataService {
     if (filtered.openLibraryId !== undefined) scalarFields.openLibraryId = filtered.openLibraryId;
     if (filtered.ranobedbId !== undefined) scalarFields.ranobedbId = filtered.ranobedbId;
     if (filtered.koboId !== undefined) scalarFields.koboId = filtered.koboId;
+    if (filtered.comicvineId !== undefined) scalarFields.comicvineId = filtered.comicvineId;
     if (filtered.lubimyczytacId !== undefined) scalarFields.lubimyczytacId = filtered.lubimyczytacId;
     if (filtered.aladinId !== undefined) scalarFields.aladinId = filtered.aladinId;
     if (filtered.itunesId !== undefined) scalarFields.itunesId = filtered.itunesId;
@@ -714,6 +719,10 @@ export class MetadataService {
     if (filtered.comicMetadata) {
       await this.comicMetadataRepository.upsert(bookId, filtered.comicMetadata);
     }
+
+    // ComicInfo Count describes the series the file names, so it is read from the parsed file
+    // rather than the lock-filtered patch: a locked seriesName still leaves the count truthful.
+    await this.seriesExpectedCount?.record(data.seriesName, data.seriesTotalBooks);
 
     this.logger.debug(
       `[metadata.persist_book] [end] bookId=${bookId} format=${format} title="${sanitizeLogValue(data.title ?? '')}" - book metadata persisted`,

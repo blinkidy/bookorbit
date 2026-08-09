@@ -55,6 +55,7 @@ export enum AuditAction {
   BookBulkUpdateTags = "book.bulk.update_tags",
   BookBulkSetMetadataLock = "book.bulk.set_metadata_lock",
   BookBulkEditMetadata = "book.bulk.edit_metadata",
+  BookBulkMoveLibrary = "book.bulk.move_library",
   BookReadingStateReset = "book.reading_state.reset",
 
   BookWriteAndRename = "book.write_and_rename",
@@ -151,6 +152,22 @@ export interface AuditLogEntry {
   ip: string | null;
   meta: Record<string, unknown> | null;
   createdAt: string;
+}
+
+export interface BookDeletionAuditBook {
+  id: number;
+  title: string | null;
+}
+
+export interface BookDeletionAuditMeta {
+  total: number;
+  books: BookDeletionAuditBook[];
+  omitted: number;
+}
+
+export interface AuditActorOption {
+  userId: number | null;
+  username: string;
 }
 
 export interface AuditLogPage {

@@ -31,6 +31,11 @@ export interface KoreaderDeviceSweepInfo {
   pluginVersion: string | null;
   latestPluginVersion: string | null;
   updateAvailable: boolean | null;
+  /**
+   * The device runs a plugin too old to install its own updates, so the server
+   * withholds the update offer and the user must install the zip by hand.
+   */
+  requiresManualUpdate: boolean;
   lastSweepAt: string;
   lastSweepBooksMatched: number;
   lastSweepPageStats: number;
@@ -148,8 +153,10 @@ export type KoreaderCatalogSortOrder = "asc" | "desc";
 export type KoreaderCatalogReadStatusFilter = "unread" | "reading" | "finished";
 
 // Read statuses the catalog detail page can set on a book. A subset of the
-// full ReadStatus enum, chosen for reading-device ergonomics.
-export type KoreaderCatalogSettableReadStatus = "want_to_read" | "reading" | "on_hold" | "read" | "abandoned";
+// full ReadStatus enum, chosen for reading-device ergonomics. "unread" is the
+// default state, so it has to stay settable or a device write becomes a one-way
+// door that only the web dashboard can undo.
+export type KoreaderCatalogSettableReadStatus = "unread" | "want_to_read" | "reading" | "on_hold" | "read" | "abandoned";
 
 export interface KoreaderCatalogSeriesSummary {
   total: number;
@@ -193,6 +200,8 @@ export interface KoreaderCatalogBookListItem {
   seriesName: string | null;
   seriesIndex: number | null;
   progressPercentage: number | null;
+  /** When reading progress was last recorded, so the plugin can show recency. */
+  lastReadAt: string | null;
   readStatus: string | null;
   formats: string[];
   hasCover: boolean;
@@ -270,14 +279,58 @@ export interface KoreaderCatalogSectionResponse {
   query?: string | null;
 }
 
+// The dashboard row below Continue reading is user-selectable. "random"
+// reproduces the original Discover row and remains the default.
+export const KOREADER_DASHBOARD_SECTION_TYPE = {
+  RANDOM: "random",
+  RECENTLY_ADDED: "recently-added",
+  WANT_TO_READ: "want-to-read",
+  UP_NEXT_IN_SERIES: "up-next-in-series",
+  SMART_SCOPE: "smart-scope",
+} as const;
+
+export type KoreaderDashboardSectionType = (typeof KOREADER_DASHBOARD_SECTION_TYPE)[keyof typeof KOREADER_DASHBOARD_SECTION_TYPE];
+export const KOREADER_DASHBOARD_SECTION_TYPES = Object.values(KOREADER_DASHBOARD_SECTION_TYPE) as ReadonlyArray<KoreaderDashboardSectionType>;
+
+// Ordered so a later release can render more than one configurable row without
+// a wire change. Only the first entry is honoured today.
+export interface KoreaderDashboardSectionConfig {
+  type: KoreaderDashboardSectionType;
+  smartScopeId?: number;
+}
+
+export interface KoreaderCatalogDashboardSection {
+  type: KoreaderDashboardSectionType;
+  smartScopeId: number | null;
+  books: KoreaderCatalogBookListItem[];
+}
+
+// Totals behind the dashboard's Browse tiles. Optional so a plugin reading an
+// older server simply renders the tiles without badges. There is deliberately
+// no not-on-device total: which books are on a device is local KOReader state
+// the server never sees.
+export interface KoreaderCatalogBrowseCounts {
+  inProgress: number;
+  libraries: number;
+  authors: number;
+  series: number;
+  collections: number;
+  smartScopes: number;
+}
+
 export interface KoreaderCatalogDashboardResponse {
   generatedAt: string;
   username: string;
   displayName: string;
   totalBooks: number;
+  browseCounts?: KoreaderCatalogBrowseCounts;
   sections: KoreaderCatalogEntry[];
   continueReading: KoreaderCatalogBookListItem[];
+  // Legacy Discover row. Populated only for requests that name no section, so a
+  // plugin predating the section parameter keeps its original response and the
+  // books are never carried twice.
   discover: KoreaderCatalogBookListItem[];
+  section?: KoreaderCatalogDashboardSection;
   readingGoal: ReadingGoalWidgetData;
   readingStreak: ReadingStreakWidgetData;
   highlightOfTheDay: HighlightOfTheDayWidgetData | null;
@@ -285,6 +338,56 @@ export interface KoreaderCatalogDashboardResponse {
 
 export interface KoreaderCatalogDiscoverResponse {
   discover: KoreaderCatalogBookListItem[];
+}
+
+export interface KoreaderCatalogDashboardSectionResponse {
+  section: KoreaderCatalogDashboardSection;
+}
+
+// Everything a bulk download needs per downloadable file, so no per-book detail
+// request remains. `fileHash` is the KOReader partial MD5 of the exact bytes the
+// download route streams, so it doubles as the restart-validation checksum and
+// as the digest that keys local match state.
+export interface KoreaderCatalogManifestFile {
+  id: number;
+  format: string;
+  sizeBytes: number | null;
+  contentVersion: string;
+  fileHash: string | null;
+  downloadUrl: string;
+  devicePath: string;
+}
+
+export interface KoreaderCatalogManifestBook {
+  id: number;
+  title: string;
+  authors: string[];
+  seriesName: string | null;
+  seriesIndex: number | null;
+  formats: string[];
+  files: KoreaderCatalogManifestFile[];
+}
+
+export interface KoreaderCatalogManifestPage {
+  items: KoreaderCatalogManifestBook[];
+  hasNext: boolean;
+  // Opaque, bound to the user, the normalized filter and the manifest snapshot.
+  nextCursor: string | null;
+  manifestVersion: string;
+  // Set when a supplied cursor was minted under a different cursor contract.
+  // A library change during a run does not set it: the keyset orders by immutable
+  // book id, so enumeration continues and only manifestVersion carries the change.
+  // On a restart, already-published files are skipped by size and hash validation,
+  // so no transfer work is repeated.
+  restartRequired: boolean;
+}
+
+export type KoreaderPluginCapability = "catalogBulkManifest" | "catalogDashboardSections" | "bookmarkSync";
+
+export interface KoreaderPluginVersionInfo {
+  pluginVersion: string;
+  serverVersion: string;
+  capabilities: KoreaderPluginCapability[];
 }
 
 export interface KoreaderCatalogReadStatusResult {

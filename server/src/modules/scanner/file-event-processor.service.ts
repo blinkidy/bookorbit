@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { readdir, stat } from 'fs/promises';
+import { readdir, realpath, stat } from 'fs/promises';
 import type { BigIntStats } from 'fs';
 import { dirname, join, relative } from 'path';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
@@ -12,6 +12,7 @@ export type FileEventResult =
   | { type: 'book-restored'; libraryId: number; bookIds: number[] }
   | { type: 'book-moved'; libraryId: number; bookIds: number[] }
   | { type: 'book-transferred'; fromLibraryId: number; toLibraryId: number; bookIds: number[] }
+  | { type: 'scan-required'; scope: 'file' | 'directory' }
   | { type: 'noop' };
 
 type FsStat = BigIntStats;
@@ -116,7 +117,9 @@ export class FileEventProcessorService {
       const book =
         (await this.scannerRepo.findMissingBookByFolderPath(dirname(absolutePath), scopeLibraryId)) ??
         (await this.scannerRepo.findMissingBookByFolderPath(absolutePath, scopeLibraryId));
-      if (!book) return { type: 'noop' };
+      if (!book) {
+        return this.fileStateMatches(existing.file, fileStat) ? { type: 'noop' } : { type: 'scan-required', scope: 'file' };
+      }
 
       await this.scannerRepo.updateBookFile(existing.file.id, this.statToFileInfo(fileStat));
       await this.refreshPrimaryFile(book.id, book.libraryId);
@@ -180,7 +183,8 @@ export class FileEventProcessorService {
       }
     }
 
-    return this.detectMovedFile(absolutePath, fileStat, scopeLibraryId);
+    const moveResult = await this.detectMovedFile(absolutePath, fileStat, scopeLibraryId);
+    return moveResult.type === 'noop' ? { type: 'scan-required', scope: 'file' } : moveResult;
   }
 
   async reconcileMissingBooks(libraryIds: number[]): Promise<FileEventResult[]> {
@@ -325,10 +329,14 @@ export class FileEventProcessorService {
     // Partial move guard - for multi-file books, verify the old file is
     // actually gone before reassigning. During a folder move, multiple events fire
     // and some files may not have been unlinked yet.
-    const oldFileStillExists = await stat(file.absolutePath).then(
+    let oldFileStillExists = await stat(file.absolutePath).then(
       (s) => s.isFile(),
       () => false,
     );
+    if (oldFileStillExists && file.absolutePath.toLowerCase() === newAbsolutePath.toLowerCase()) {
+      const canonicalPath = await realpath(file.absolutePath).catch(() => null);
+      oldFileStillExists = canonicalPath !== newAbsolutePath;
+    }
     if (oldFileStillExists) {
       this.logger.log(
         `[scanner.file_event.move] [end] libraryId=${rowLibraryId} bookId=${file.bookId} from="${sanitizeLogValue(file.absolutePath)}" to="${sanitizeLogValue(newAbsolutePath)}" action=skip_old_still_exists - old file still exists, deferring to scan`,
@@ -375,6 +383,10 @@ export class FileEventProcessorService {
     return { ino: s.ino, sizeBytes: Number(s.size), mtime: s.mtime };
   }
 
+  private fileStateMatches(file: { ino: bigint; sizeBytes: number | null; mtime: Date | null }, fileStat: FsStat): boolean {
+    return file.ino === fileStat.ino && file.sizeBytes === Number(fileStat.size) && file.mtime?.getTime() === fileStat.mtime.getTime();
+  }
+
   private async pathIsFile(path: string): Promise<boolean> {
     try {
       const s = await stat(path, { bigint: true });
@@ -395,27 +407,48 @@ export class FileEventProcessorService {
   }
 
   private async detectMovedBooksInDir(dirPath: string, scopeLibraryId?: number): Promise<FileEventResult> {
-    const entries = await readdir(dirPath, { recursive: true, withFileTypes: true }).catch(() => []);
+    const entries = await readdir(dirPath, { recursive: true, withFileTypes: true }).catch(() => null);
+    if (!entries) return { type: 'scan-required', scope: 'directory' };
+
     const movedBookIds: number[] = [];
     let detectedLibraryId: number | null = null;
+    let contentFound = false;
+    let scanRequired = false;
+    const knownBooks = await this.scannerRepo.findBooksByFolderPath(dirPath, scopeLibraryId);
+    const knownFiles = await this.scannerRepo.findBookFilesByBookIds(knownBooks.map((book) => book.id));
+    const knownFileByPath = new Map(knownFiles.map((file) => [file.absolutePath, file]));
 
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       const fullPath = join(entry.parentPath ?? dirPath, entry.name);
       const { role } = classifyFile(fullPath);
       if (role !== 'content') continue;
+      contentFound = true;
 
       const s = await stat(fullPath, { bigint: true }).catch(() => null);
-      if (!s) continue;
+      if (!s) {
+        scanRequired = true;
+        continue;
+      }
+
+      const existing = knownFileByPath.get(fullPath);
+      if (existing) {
+        if (!this.fileStateMatches(existing, s)) scanRequired = true;
+        continue;
+      }
 
       const result = await this.detectMovedFile(fullPath, s, scopeLibraryId);
       if (result.type === 'book-moved') {
         movedBookIds.push(...result.bookIds);
         detectedLibraryId = result.libraryId;
+      } else if (result.type === 'noop') {
+        scanRequired = true;
       }
     }
 
-    if (movedBookIds.length === 0 || !detectedLibraryId) return { type: 'noop' };
+    if (movedBookIds.length === 0 || !detectedLibraryId) {
+      return !contentFound || scanRequired ? { type: 'scan-required', scope: 'directory' } : { type: 'noop' };
+    }
     this.logger.log(
       `[scanner.file_event.move_dir] [end] libraryId=${detectedLibraryId} dirPath="${sanitizeLogValue(dirPath)}" movedCount=${movedBookIds.length} - moved books detected in directory`,
     );

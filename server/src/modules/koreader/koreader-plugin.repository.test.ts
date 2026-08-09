@@ -107,37 +107,83 @@ describe('KoreaderPluginRepository', () => {
     });
   });
 
-  describe('getRating', () => {
-    it('returns the current rating row for a user and book', async () => {
+  describe('getRatings', () => {
+    it('reads every requested book in one query and keys the result by book', async () => {
       const updatedAt = new Date('2026-06-01T10:00:00.000Z');
-      db.select.mockReturnValue(makeQueryChain([{ rating: 4, updatedAt }]));
+      db.select.mockReturnValue(
+        makeQueryChain([
+          { bookId: 20, rating: 4, updatedAt },
+          { bookId: 21, rating: null, updatedAt },
+        ]),
+      );
 
-      await expect(repo.getRating(7, 20)).resolves.toEqual({ rating: 4, updatedAt });
+      await expect(repo.getRatings(7, [20, 21, 20])).resolves.toEqual(
+        new Map([
+          [20, { rating: 4, updatedAt }],
+          [21, { rating: null, updatedAt }],
+        ]),
+      );
+      expect(db.select).toHaveBeenCalledTimes(1);
     });
 
-    it('returns null when no rating row exists', async () => {
+    it('issues no query for an empty book list', async () => {
+      await expect(repo.getRatings(7, [])).resolves.toEqual(new Map());
+      expect(db.select).not.toHaveBeenCalled();
+    });
+
+    it('splits oversized book lists into bounded queries', async () => {
       db.select.mockReturnValue(makeQueryChain([]));
 
-      await expect(repo.getRating(7, 20)).resolves.toBeNull();
+      await repo.getRatings(
+        7,
+        Array.from({ length: 450 }, (_, index) => index + 1),
+      );
+
+      expect(db.select).toHaveBeenCalledTimes(3);
     });
   });
 
-  describe('upsertRating', () => {
-    it('returns the canonical rating row written by the upsert', async () => {
-      const updatedAt = new Date('2026-06-02T10:00:00.000Z');
-      const insertChain = makeInsertChain([{ rating: 4, updatedAt }]);
+  describe('upsertRatings', () => {
+    it('writes every entry in one statement and keeps per-row ratings', async () => {
+      const insertChain = makeInsertChain(undefined);
       db.insert.mockReturnValue(insertChain);
+      const updatedAt = new Date('2026-06-02T10:00:00.000Z');
 
-      await expect(repo.upsertRating(7, 20, 4)).resolves.toEqual({ rating: 4, updatedAt });
-      expect(insertChain.values).toHaveBeenCalledWith({ userId: 7, bookId: 20, rating: 4 });
+      await repo.upsertRatings(
+        7,
+        [
+          { bookId: 20, rating: 4 },
+          { bookId: 21, rating: null },
+        ],
+        updatedAt,
+      );
+
+      expect(db.insert).toHaveBeenCalledTimes(1);
+      expect(insertChain.values).toHaveBeenCalledWith([
+        { userId: 7, bookId: 20, rating: 4, updatedAt },
+        { userId: 7, bookId: 21, rating: null, updatedAt },
+      ]);
     });
 
-    it('supports clearing a rating to null', async () => {
-      const updatedAt = new Date('2026-06-03T10:00:00.000Z');
-      const insertChain = makeInsertChain([{ rating: null, updatedAt }]);
-      db.insert.mockReturnValue(insertChain);
+    it('issues no statement for an empty entry list', async () => {
+      await repo.upsertRatings(7, [], new Date());
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+  });
 
-      await expect(repo.upsertRating(7, 20, null)).resolves.toEqual({ rating: null, updatedAt });
+  describe('listDevicePluginVersions', () => {
+    it('returns the reported version of every device, including unreported ones', async () => {
+      const chain = makeQueryChain([{ pluginVersion: '1.4.0' }, { pluginVersion: null }, { pluginVersion: '1.3.0' }]);
+      db.selectDistinct = vi.fn().mockReturnValue(chain);
+
+      await expect(repo.listDevicePluginVersions(7)).resolves.toEqual(['1.4.0', null, '1.3.0']);
+      expect(chain.where).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns an empty list for a user with no devices', async () => {
+      db.selectDistinct = vi.fn().mockReturnValue(makeQueryChain([]));
+
+      await expect(repo.listDevicePluginVersions(7)).resolves.toEqual([]);
     });
   });
 });

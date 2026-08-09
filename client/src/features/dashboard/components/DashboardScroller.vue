@@ -3,7 +3,7 @@ import { computed, ref, useAttrs } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Aperture, BookMarked, BookmarkPlus, ChevronLeft, ChevronRight, Headphones, ListOrdered, RefreshCw, Shuffle, Sparkles } from '@lucide/vue'
 
-import { isAudioFormat, type BookCard, type CoverAspectRatio, type ScrollerType } from '@bookorbit/types'
+import type { BookCard, ScrollerType } from '@bookorbit/types'
 import BookCoverCard from '@/features/book/components/BookCoverCard.vue'
 import BookQuickView from '@/features/book/components/BookQuickView.vue'
 import AddToCollectionSheet from '@/features/collection/components/AddToCollectionSheet.vue'
@@ -44,10 +44,12 @@ const typeIcon = computed(() => {
 })
 
 const SKELETONS = Array.from({ length: 8 })
-const DEFAULT_COVER_WIDTH_CLASS = 'w-[120px]'
-const SQUARE_AUDIOBOOK_COVER_WIDTH_CLASS = 'w-[150px]'
+const PORTRAIT_COVER_WIDTH_CLASS = 'w-[120px]'
+const SQUARE_COVER_WIDTH_CLASS = 'w-[150px]'
 
-type BookActionType = 'quick-view' | 'edit-metadata' | 'add-to-collection' | 'delete'
+// 'move-to-library' is part of the shared card contract; this view does not
+// opt in, so it never fires here.
+type BookActionType = 'quick-view' | 'edit-metadata' | 'add-to-collection' | 'move-to-library' | 'delete'
 
 const quickViewBookId = ref<number | null>(null)
 const quickViewOpen = ref(false)
@@ -81,16 +83,8 @@ function handleBookAction(book: BookCard, action: BookActionType) {
   }
 }
 
-function isAudiobookCard(book: BookCard): boolean {
-  return book.files.some((file) => (file.format ? isAudioFormat(file.format) : false))
-}
-
 function coverWidthClass(book: BookCard): string {
-  return isAudiobookCard(book) ? SQUARE_AUDIOBOOK_COVER_WIDTH_CLASS : DEFAULT_COVER_WIDTH_CLASS
-}
-
-function coverAspectRatio(book: BookCard): CoverAspectRatio {
-  return isAudiobookCard(book) ? '1/1' : '2/3'
+  return book.coverAspectRatio === '1/1' ? SQUARE_COVER_WIDTH_CLASS : PORTRAIT_COVER_WIDTH_CLASS
 }
 </script>
 
@@ -145,7 +139,7 @@ function coverAspectRatio(book: BookCard): CoverAspectRatio {
     <!-- Empty -->
     <div v-else-if="books.length === 0" class="flex flex-col items-center justify-center py-10 gap-3 text-center animate-fade-up">
       <div class="h-12 w-12 rounded-full bg-muted flex items-center justify-center animate-scale-in">
-        <component :is="typeIcon" :size="20" class="text-muted-foreground/60" />
+        <component :is="typeIcon" :size="20" class="text-muted-foreground" />
       </div>
       <p class="text-sm text-muted-foreground">
         <template v-if="type === 'continue-reading'">{{ t('dashboard.scroller.empty.continueReading') }}</template>
@@ -168,7 +162,7 @@ function coverAspectRatio(book: BookCard): CoverAspectRatio {
         style="animation: dashboardFadeUp 0.35s ease both"
         :style="{ animationDelay: `${index * 35}ms` }"
       >
-        <BookCoverCard :book="book" :cover-aspect-ratio="coverAspectRatio(book)" @action="handleBookAction(book, $event)" />
+        <BookCoverCard :book="book" :cover-aspect-ratio="book.coverAspectRatio" @action="handleBookAction(book, $event)" />
       </div>
     </div>
   </section>

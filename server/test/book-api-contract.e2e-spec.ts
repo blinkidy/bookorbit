@@ -250,6 +250,7 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
           libraryId: visibleLibrary.libraryId,
           libraryName: visibleLibraryName,
           formats: ['epub'],
+          updatedAt: expect.any(String),
         },
         {
           id: visiblePdf.bookId,
@@ -259,6 +260,7 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
           libraryId: visibleLibrary.libraryId,
           libraryName: visibleLibraryName,
           formats: ['pdf'],
+          updatedAt: expect.any(String),
         },
         {
           id: visibleCbz.bookId,
@@ -268,6 +270,7 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
           libraryId: visibleLibrary.libraryId,
           libraryName: visibleLibraryName,
           formats: ['cbz'],
+          updatedAt: expect.any(String),
         },
       ]);
 
@@ -312,6 +315,82 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
     });
   });
 
+  describe('bulk query selections', () => {
+    it('resolves metadata filters and search without regressing subquery or explicit selections', async () => {
+      const metadataCollectionResponse = await ctx.app.inject({
+        method: 'POST',
+        url: '/api/v1/collections',
+        headers: authHeader(limitedUser.accessToken),
+        payload: { name: `Metadata selection ${randomUUID()}`, icon: 'FolderOpen' },
+      });
+      expect(metadataCollectionResponse.statusCode).toBe(201);
+      const metadataCollection = metadataCollectionResponse.json() as { id: number };
+
+      const metadataAdd = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/v1/collections/${metadataCollection.id}/books`,
+        headers: authHeader(limitedUser.accessToken),
+        payload: {
+          query: {
+            libraryId: visibleLibrary.libraryId,
+            filter: {
+              type: 'group',
+              join: 'AND',
+              rules: [{ type: 'rule', field: 'title', operator: 'contains', value: 'Contract' }],
+            },
+          },
+        },
+      });
+      expect(metadataAdd.statusCode).toBe(201);
+      expect(metadataAdd.json()).toMatchObject({ id: metadataCollection.id, bookCount: 3 });
+
+      const subqueryRemove = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/v1/collections/${metadataCollection.id}/books`,
+        headers: authHeader(limitedUser.accessToken),
+        payload: {
+          query: {
+            libraryId: visibleLibrary.libraryId,
+            filter: {
+              type: 'group',
+              join: 'AND',
+              rules: [{ type: 'rule', field: 'format', operator: 'includesAny', value: ['pdf'] }],
+            },
+          },
+        },
+      });
+      expect(subqueryRemove.statusCode).toBe(200);
+      expect(subqueryRemove.json()).toMatchObject({ id: metadataCollection.id, bookCount: 2 });
+
+      const explicitAdd = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/v1/collections/${metadataCollection.id}/books`,
+        headers: authHeader(limitedUser.accessToken),
+        payload: { bookIds: [visiblePdf.bookId] },
+      });
+      expect(explicitAdd.statusCode).toBe(201);
+      expect(explicitAdd.json()).toMatchObject({ id: metadataCollection.id, bookCount: 3 });
+
+      const searchCollectionResponse = await ctx.app.inject({
+        method: 'POST',
+        url: '/api/v1/collections',
+        headers: authHeader(limitedUser.accessToken),
+        payload: { name: `Search selection ${randomUUID()}`, icon: 'FolderSearch' },
+      });
+      expect(searchCollectionResponse.statusCode).toBe(201);
+      const searchCollection = searchCollectionResponse.json() as { id: number };
+
+      const scopedSearchAdd = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/v1/collections/${searchCollection.id}/books`,
+        headers: authHeader(limitedUser.accessToken),
+        payload: { query: { q: 'EPUB' } },
+      });
+      expect(scopedSearchAdd.statusCode).toBe(201);
+      expect(scopedSearchAdd.json()).toMatchObject({ id: searchCollection.id, bookCount: 1 });
+    });
+  });
+
   describe('detail and reader state', () => {
     it('returns detail payload fields and keeps progress and status isolated per user', async () => {
       const saveProgress = await ctx.app.inject({
@@ -334,7 +413,14 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
         payload: { status: 'reading' },
       });
 
-      expect(setStatus.statusCode).toBe(204);
+      expect(setStatus.statusCode).toBe(200);
+      expect(setStatus.json()).toMatchObject({
+        status: 'reading',
+        source: 'manual',
+        startedAt: expect.any(String),
+        finishedAt: null,
+        updatedAt: expect.any(String),
+      });
 
       const getFileProgress = await ctx.app.inject({
         method: 'GET',
@@ -360,6 +446,11 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
         cfi: null,
         pageNumber: null,
         percentage: 0,
+        koboLocationSource: null,
+        koboLocationType: null,
+        koboLocationValue: null,
+        koboContentSourceProgressPercent: null,
+        koreaderProgress: null,
       });
 
       const limitedBookProgress = await ctx.app.inject({
@@ -391,6 +482,11 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
           cfi: null,
           pageNumber: null,
           percentage: 0,
+          koboLocationSource: null,
+          koboLocationType: null,
+          koboLocationValue: null,
+          koboContentSourceProgressPercent: null,
+          koreaderProgress: null,
           updatedAt: null,
         },
       ]);
@@ -416,7 +512,7 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
             filename: 'alpha-contract.epub',
           },
         ],
-        collections: [],
+        collections: expect.any(Array),
         readStatus: {
           status: 'reading',
           source: 'manual',
@@ -525,7 +621,7 @@ describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
 
       expect(exportResponse.statusCode).toBe(201);
       expect(exportResponse.headers['content-type']).toContain('application/zip');
-      expect(exportResponse.headers['content-disposition']).toBe('attachment; filename="books.zip"');
+      expect(exportResponse.headers['content-disposition']).toBe('attachment; filename="books.zip"; filename*=UTF-8\'\'books.zip');
 
       const zipEntries = await listZipEntries(exportResponse);
       expect(zipEntries).toEqual(['alpha-contract.epub', 'beta-contract.pdf']);

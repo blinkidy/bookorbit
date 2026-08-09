@@ -17,7 +17,6 @@ fetches run off the UI thread via Trapper so taps never freeze the reader.
 
 local ButtonDialog = require("ui/widget/buttondialog")
 local CenterContainer = require("ui/widget/container/centercontainer")
-local DataStorage = require("datastorage")
 local Device = require("device")
 local Font = require("ui/font")
 local Geom = require("ui/geometry")
@@ -43,7 +42,7 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 
 local BookOrbitApi = require("bookorbit_api")
-local BookOrbitState = require("bookorbit_state")
+local BookOrbitStateManager = require("bookorbit_state_manager")
 local CatalogUtil = require("bookorbit_catalog_util")
 local CatalogWidgets = require("bookorbit_catalog_widgets")
 local CatalogDownload = require("bookorbit_catalog_download")
@@ -59,6 +58,8 @@ local DEFAULT_GRID_COLUMNS = CatalogUtil.DEFAULT_GRID_COLUMNS
 local DEFAULT_GRID_ROWS = CatalogUtil.DEFAULT_GRID_ROWS
 local MAX_RECENT_SEARCHES = CatalogUtil.MAX_RECENT_SEARCHES
 local ON_DEVICE_MAX_IDS = CatalogUtil.ON_DEVICE_MAX_IDS
+local NOT_ON_DEVICE_SCAN_SIZE = CatalogUtil.NOT_ON_DEVICE_SCAN_SIZE
+local scanNotOnDeviceIds = CatalogUtil.scanNotOnDeviceIds
 local SORTS = CatalogUtil.SORTS
 local SORT_LABELS = CatalogUtil.SORT_LABELS
 local NATURAL_ORDER = CatalogUtil.NATURAL_ORDER
@@ -234,10 +235,19 @@ local Menu_onLastPage = Menu.onLastPage
 function BookOrbitCatalog:init()
     self.client = BookOrbitApi.new(self.api)
     self.stack = {}
-    self.thumbnail_cache_dir = DataStorage:getDataDir() .. "/cache/bookorbit"
-    self.thumbnail_generation = 0
-    self.thumbnail_failures = {}
     self.settings = self.settings or {}
+    CatalogWidgets.setAssetIconFiles({
+        on_device = self:pluginAssetFile("bookorbit.on-device.svg"),
+        download = self:pluginAssetFile(DOWNLOAD_ICON_FILE),
+        shuffle = self:pluginAssetFile("bookorbit.shuffle.svg"),
+        in_progress = self:pluginAssetFile("bookorbit.in-progress.svg"),
+        collections = self:pluginAssetFile("bookorbit.collections.svg"),
+        stat_today = self:pluginAssetFile("bookorbit.stat-today.svg"),
+        stat_week = self:pluginAssetFile("bookorbit.stat-week.svg"),
+        stat_streak = self:pluginAssetFile("bookorbit.stat-streak.svg"),
+        stat_goal = self:pluginAssetFile("bookorbit.stat-goal.svg"),
+    })
+    self:initThumbnailCache()
     self:initBulkDownloadState()
     self.view_mode = self.settings.catalog_view_mode == "list" and "list" or "mosaic"
     self.grid_cols = self:sanitizeGridValue(self.settings.catalog_grid_cols, DEFAULT_GRID_COLUMNS)
@@ -247,8 +257,15 @@ function BookOrbitCatalog:init()
     self.list_rows = self:computeListRows()
     self.on_device = {}
     self.on_device_files = {}
-    self:refreshOnDevice()
-    self.item_table, self.current_context = self:dashboardRoot()
+    self.on_device_generation = BookOrbitStateManager.generation()
+    self.on_device_hydrating = false
+    self.on_device_hydration_generation = 0
+    self.on_device_hydration_failures = 0
+    self.dashboard_request_generation = 0
+    self.catalog_closed = false
+    -- Construction stays local: the widget opens on the cached dashboard (or a
+    -- placeholder) and the server refresh starts once it is interactive.
+    self.item_table, self.current_context = self:initialDashboardContext()
     self.subtitle = self.current_context.subtitle
     self.is_borderless = true
     self.title_bar_fm_style = true
@@ -260,17 +277,27 @@ function BookOrbitCatalog:init()
     end
     self.paths = self.stack
     UIManager:nextTick(function()
-        self:cleanLegacyThumbnails()
-        self:pruneThumbnailCache()
+        self:hydrateOnDeviceMaps()
+        if self:shouldRefreshDashboardOnOpen() then
+            self:loadDashboardRoot(true, { invisible = true })
+        end
+        -- One-off cache migration, queued behind the refresh so its directory
+        -- walk cannot delay the first dashboard request.
+        UIManager:scheduleIn(1.0, function()
+            self:cleanLegacyThumbnails()
+        end)
     end)
 end
 
-function BookOrbitCatalog:downloadIconPath()
+function BookOrbitCatalog:pluginAssetFile(name)
     local source_dir = self.path or (self._manager and self._manager.path)
-    if source_dir then
-        local path = source_dir .. "/assets/" .. DOWNLOAD_ICON_FILE
-        if lfs.attributes(path, "mode") == "file" then return path end
-    end
+    if not source_dir then return nil end
+    local path = source_dir .. "/assets/" .. name
+    if lfs.attributes(path, "mode") == "file" then return path end
+end
+
+function BookOrbitCatalog:downloadIconPath()
+    return self:pluginAssetFile(DOWNLOAD_ICON_FILE)
 end
 
 function BookOrbitCatalog:isBulkSelectionActive()
@@ -379,7 +406,7 @@ function BookOrbitCatalog:refreshCurrent()
         self:evictCachedCovers(self.dashboardBooks(context.dashboard))
         self:loadDashboardRoot(true)
     elseif context.kind == "section" then
-        self:loadSection(context.section, { page = context.page, q = context.q, replace = true })
+        self:reloadSection(context.section, { page = context.page })
     elseif context.kind == "detail" and context.detail then
         self:evictCachedCovers(self:detailThumbnailBooks(context.detail))
         self:runConnected(function()
@@ -468,20 +495,96 @@ function BookOrbitCatalog:persistSetting(key, value)
 end
 
 function BookOrbitCatalog:refreshOnDevice()
-    local ok, state = pcall(function()
-        return BookOrbitState.open()
-    end)
-    if ok and state then
-        self.on_device = state:matchedByBookId()
-        self.on_device_files = state:matchedByBookFileId()
+    local cached_ok, cached = pcall(BookOrbitStateManager.hasOnDeviceMaps)
+    if not cached_ok or not cached then
+        self:hydrateOnDeviceMaps()
+        return false
+    end
+    local ok, maps = pcall(BookOrbitStateManager.onDeviceMaps)
+    if ok and maps then
+        self.on_device = maps.byBookId
+        self.on_device_files = maps.byFileId
+        self.on_device_generation = maps.generation
     else
         self.on_device = {}
         self.on_device_files = {}
+        self.on_device_generation = nil
     end
+    return ok and maps ~= nil
+end
+
+-- Scans large matched libraries in a child process. The parent adopts only a
+-- generation-current result and keeps rendering the previous bounded snapshot
+-- while a refresh is in flight.
+function BookOrbitCatalog:hydrateOnDeviceMaps()
+    if self.catalog_closed or self.on_device_hydrating then return end
+    local expected_generation = BookOrbitStateManager.generation()
+    if BookOrbitStateManager.hasOnDeviceMaps() then
+        self:refreshOnDevice()
+        return
+    end
+
+    self.on_device_hydrating = true
+    self.on_device_hydration_generation = self.on_device_hydration_generation + 1
+    local hydration_generation = self.on_device_hydration_generation
+    Trapper:wrap(function()
+        local completed, result = self.client:runInSubprocess(function()
+            return BookOrbitStateManager.computeOnDeviceMaps()
+        end)
+        if self.catalog_closed or hydration_generation ~= self.on_device_hydration_generation then
+            return
+        end
+        self.on_device_hydrating = false
+        local computed = completed and result and result.body or nil
+        if not computed then
+            self.on_device_hydration_failures = self.on_device_hydration_failures + 1
+            local retry_delay = math.min(5, 0.25 * (2 ^ math.min(self.on_device_hydration_failures, 4)))
+            UIManager:scheduleIn(retry_delay, function()
+                self:hydrateOnDeviceMaps()
+            end)
+            return
+        end
+        if computed.generation ~= expected_generation
+                or BookOrbitStateManager.generation() ~= expected_generation then
+            UIManager:nextTick(function()
+                self:hydrateOnDeviceMaps()
+            end)
+            return
+        end
+        local adopted = BookOrbitStateManager.adoptOnDeviceMaps(computed)
+        if not adopted then return end
+        self.on_device_hydration_failures = 0
+        self:refreshOnDevice()
+        if self.current_context and self.updateItems then
+            self:updateItems(nil, true)
+        end
+    end)
+end
+
+-- Render-path guard: a generation change starts one asynchronous refresh
+-- instead of rescanning the matched library inside widget construction.
+function BookOrbitCatalog:ensureOnDeviceCurrent()
+    local ok, generation = pcall(BookOrbitStateManager.generation)
+    if ok and generation == self.on_device_generation then return end
+    if ok and BookOrbitStateManager.hasOnDeviceMaps() then
+        self:refreshOnDevice()
+        return
+    end
+    self:hydrateOnDeviceMaps()
 end
 
 function BookOrbitCatalog:isOnDevice(book)
     return book ~= nil and book.id ~= nil and self.on_device[book.id] ~= nil
+end
+
+-- The local file a Continue-reading tap should resume: only when the
+-- tap-to-resume setting is on and the book is already on the device. Nil sends
+-- the tap to the detail page instead.
+function BookOrbitCatalog:dashboardResumePath(book)
+    if self.settings.catalog_dashboard_tap_resumes == false then return nil end
+    local path = book ~= nil and book.id ~= nil and self.on_device[book.id] or nil
+    if type(path) == "string" and path ~= "" then return path end
+    return nil
 end
 
 function BookOrbitCatalog:onDeviceFilePath(file)
@@ -613,8 +716,12 @@ function BookOrbitCatalog:rootItems()
     end
     table.insert(items, {
         text = _("On device"),
-        mandatory = on_device_count > 0 and tostring(on_device_count) or nil,
+        mandatory = on_device_count > 0 and CatalogUtil.formatCount(on_device_count) or nil,
         kind = "on-device",
+    })
+    table.insert(items, {
+        text = _("Not on device"),
+        kind = "not-on-device",
     })
 
     return items
@@ -650,11 +757,13 @@ function BookOrbitCatalog:switchTo(title, item_table, context, push)
     end
 end
 
--- Runs the blocking request fn() off the UI thread when possible, so the
--- reader stays responsive and the loading message can be tapped to cancel.
+-- Runs the blocking request fn() off the UI thread, so the reader stays
+-- responsive and the loading message can be tapped to cancel. The API client
+-- owns the subprocess, so calls fn makes back into it never fork again.
 -- fn must return (body, err, errbody); they are marshalled back through the
 -- subprocess. Returns nil, "cancelled" when the user dismisses the request.
-function BookOrbitCatalog:fetch(text, fn)
+function BookOrbitCatalog:fetch(text, fn, opts)
+    opts = opts or {}
     if not Trapper:isWrapped() then
         local info = InfoMessage:new{ text = text or _("Loading...") }
         UIManager:show(info)
@@ -663,18 +772,24 @@ function BookOrbitCatalog:fetch(text, fn)
         UIManager:close(info)
         return body, err, errbody
     end
-    local completed, result = Trapper:dismissableRunInSubprocess(function()
-        local ok, body, err, errbody = pcall(fn)
-        if not ok then
-            return { err = tostring(body) }
-        end
-        return { body = body, err = err, errbody = errbody }
-    end, text or _("Loading..."))
+    local trap_widget
+    if not opts.invisible then
+        trap_widget = text or _("Loading...")
+    end
+    local completed, result = self.client:runInSubprocess(fn, trap_widget)
     if not completed then
         return nil, "cancelled"
     end
-    result = result or {}
     return result.body, result.err, result.errbody
+end
+
+-- Wraps work that calls the API outside fetch() (bulk paging, per-book detail
+-- and match checks) so it gets the same non-blocking execution contract.
+function BookOrbitCatalog:runOffThread(fn)
+    if Trapper:isWrapped() then
+        return fn()
+    end
+    Trapper:wrap(fn)
 end
 
 -- Wraps a connected job in a Trapper coroutine so self:fetch can run network
@@ -777,8 +892,14 @@ function BookOrbitCatalog:loadSection(section, opts)
             table.insert(item_table, {
                 text = entry.title,
                 mandatory = entry.count and tostring(entry.count) or nil,
-                kind = "books",
+                kind = opts.dashboard_source_index and "dashboard-source" or "books",
                 params = entry_params,
+                dashboard_source_index = opts.dashboard_source_index,
+                dashboard_source = opts.dashboard_source_index and {
+                    type = section,
+                    sourceName = entry.title,
+                    params = entry_params,
+                } or nil,
             })
         end
 
@@ -797,11 +918,26 @@ function BookOrbitCatalog:loadSection(section, opts)
             paged = paged,
             has_next = body.hasNext == true,
             has_previous = page > 1,
+            dashboard_source_index = opts.dashboard_source_index,
         }, push)
     end)
 end
 
-function BookOrbitCatalog:promptSectionFilter(section, current_q)
+function BookOrbitCatalog:reloadSection(section, overrides)
+    local context = self.current_context or {}
+    local opts = {
+        q = context.q,
+        replace = true,
+        dashboard_source_index = context.dashboard_source_index,
+    }
+    for key, value in pairs(overrides or {}) do
+        if key ~= "clear_q" then opts[key] = value end
+    end
+    if overrides and overrides.clear_q then opts.q = nil end
+    return self:loadSection(section or context.section, opts)
+end
+
+function BookOrbitCatalog:promptSectionFilter(section, current_q, dashboard_source_index)
     local dialog
     dialog = InputDialog:new{
         title = _("Filter"),
@@ -820,7 +956,11 @@ function BookOrbitCatalog:promptSectionFilter(section, current_q)
                     text = _("Clear"),
                     callback = function()
                         UIManager:close(dialog)
-                        self:loadSection(section, { page = 1, q = nil, replace = true })
+                        self:reloadSection(section, {
+                            page = 1,
+                            clear_q = true,
+                            dashboard_source_index = dashboard_source_index,
+                        })
                     end,
                 },
                 {
@@ -829,7 +969,11 @@ function BookOrbitCatalog:promptSectionFilter(section, current_q)
                     callback = function()
                         local value = util.trim(dialog:getInputText() or "")
                         UIManager:close(dialog)
-                        self:loadSection(section, { page = 1, q = value ~= "" and value or nil, replace = true })
+                        self:reloadSection(section, {
+                            page = 1,
+                            q = value ~= "" and value or nil,
+                            dashboard_source_index = dashboard_source_index,
+                        })
                     end,
                 },
             },
@@ -869,27 +1013,33 @@ function BookOrbitCatalog:paramsForEntry(section, entry)
     return params
 end
 
+-- Assumes an already-wrapped Trapper coroutine, so a caller that has its own
+-- requests to make first can reuse it without nesting another wrap.
+function BookOrbitCatalog:fetchBookPage(params, title, push)
+    local query = cloneParams(params)
+    query.page = query.page or 1
+    query.size = self:itemsPerPage()
+    query.sort = query.sort or self.default_sort or "recently_added"
+    query.order = self:effectiveOrder(query)
+
+    local body, err = self:fetch(_("Loading books..."), function()
+        return self.client:catalogBooks(query)
+    end)
+    if not body then
+        if err ~= "cancelled" then
+            self:showRetry(err, function()
+                self:loadBooks(params, title, push)
+            end)
+        end
+        return
+    end
+
+    self:showBookPage(body, query, title or _("Books"), push ~= false)
+end
+
 function BookOrbitCatalog:loadBooks(params, title, push)
     self:runConnected(function()
-        local query = cloneParams(params)
-        query.page = query.page or 1
-        query.size = self:itemsPerPage()
-        query.sort = query.sort or self.default_sort or "recently_added"
-        query.order = self:effectiveOrder(query)
-
-        local body, err = self:fetch(_("Loading books..."), function()
-            return self.client:catalogBooks(query)
-        end)
-        if not body then
-            if err ~= "cancelled" then
-                self:showRetry(err, function()
-                    self:loadBooks(params, title, push)
-                end)
-            end
-            return
-        end
-
-        self:showBookPage(body, query, title or _("Books"), push ~= false)
+        self:fetchBookPage(params, title, push)
     end)
 end
 
@@ -909,6 +1059,55 @@ function BookOrbitCatalog:loadOnDevice()
         capped[i] = ids[i]
     end
     self:loadBooks({ ids = table.concat(capped, ","), sort = "title" }, _("On device"), true)
+end
+
+function BookOrbitCatalog:collectNotOnDeviceIds()
+    return scanNotOnDeviceIds(function(page)
+        return self:fetch(_("Finding books not on device..."), function()
+            return self.client:catalogBooks({
+                page = page,
+                size = NOT_ON_DEVICE_SCAN_SIZE,
+                sort = "recently_added",
+                order = "desc",
+            })
+        end)
+    end, function(book)
+        return self:isOnDevice(book)
+    end)
+end
+
+function BookOrbitCatalog:loadNotOnDevice()
+    self:runConnected(function()
+        -- Without the maps every book reads as absent, which would list books
+        -- that are already here. refreshOnDevice starts the scan; the list is
+        -- worth waiting for rather than showing wrong.
+        if not self:refreshOnDevice() then
+            UIManager:show(InfoMessage:new{
+                text = _("Still checking which books are on this device. Try again in a moment."),
+                timeout = 3,
+            })
+            return
+        end
+        local ids, err = self:collectNotOnDeviceIds()
+        if not ids then
+            if err ~= "cancelled" then
+                self:showRetry(err, function()
+                    self:loadNotOnDevice()
+                end)
+            end
+            return
+        end
+        if #ids == 0 then
+            UIManager:show(InfoMessage:new{
+                text = _("The newest books in your library are already on this device."),
+                timeout = 3,
+            })
+            return
+        end
+        -- The tile says "Not on device"; the list says what it actually holds,
+        -- since the walk covers recent additions rather than the whole library.
+        self:fetchBookPage({ ids = table.concat(ids, ","), sort = "recently_added" }, _("Not on device (recent)"), true)
+    end)
 end
 
 function BookOrbitCatalog:scopeParams(query)
@@ -1347,7 +1546,7 @@ function BookOrbitCatalog:showBookActions()
                 text = context.q and T(_("Filter: %1"), context.q) or _("Filter..."),
                 callback = function()
                     UIManager:close(dialog)
-                    self:promptSectionFilter(context.section, context.q)
+                    self:promptSectionFilter(context.section, context.q, context.dashboard_source_index)
                 end,
             },
             {
@@ -1355,7 +1554,7 @@ function BookOrbitCatalog:showBookActions()
                 enabled = context.q ~= nil,
                 callback = function()
                     UIManager:close(dialog)
-                    self:loadSection(context.section, { page = 1, q = nil, replace = true })
+                    self:reloadSection(context.section, { page = 1, clear_q = true })
                 end,
             },
         })
@@ -1580,7 +1779,8 @@ function BookOrbitCatalog:menuChromeHeight()
     if self:dashboardMode() then
         -- Reserve a deliberate bottom margin so the single-page dashboard does not
         -- run edge-to-edge (the pagination footer that normally fills this is hidden).
-        bottom_height = Screen:scaleBySize(40)
+        -- Kept modest: the rest of the page buys its cover sizes out of this.
+        bottom_height = Screen:scaleBySize(16)
     elseif self:detailMode() then
         local prev_book, next_book, current_idx = self:getAdjacentDetailBooks()
         local parent = self.stack[#self.stack]
@@ -1776,7 +1976,15 @@ end
 function BookOrbitCatalog:finishCustomUpdate(old_dimen, select_number)
     self:updatePageInfo(select_number)
     Menu.mergeTitleBarIntoLayout(self)
+    -- A view may narrow the e-ink refresh to the region it actually changed
+    -- (the dashboard does for row page turns); everything else refreshes the
+    -- whole menu as before.
+    local refresh_region = self.custom_refresh_region
+    self.custom_refresh_region = nil
     UIManager:setDirty(self.show_parent, function()
+        if refresh_region then
+            return "ui", refresh_region
+        end
         local refresh_dimen = old_dimen and old_dimen:combine(self.dimen) or self.dimen
         return "ui", refresh_dimen
     end)
@@ -1938,7 +2146,7 @@ function BookOrbitCatalog:onNextPage()
         end
         local context = self.current_context
         if context.has_next then
-            self:loadSection(context.section, { page = (context.page or 1) + 1, q = context.q, replace = true })
+            self:reloadSection(context.section, { page = (context.page or 1) + 1 })
         end
         return true
     elseif self:detailMode() then
@@ -1970,7 +2178,7 @@ function BookOrbitCatalog:onPrevPage()
         end
         local context = self.current_context
         if (context.page or 1) > 1 then
-            self:loadSection(context.section, { page = (context.page or 1) - 1, q = context.q, replace = true })
+            self:reloadSection(context.section, { page = (context.page or 1) - 1 })
         end
         return true
     elseif self:detailMode() then
@@ -1998,7 +2206,7 @@ function BookOrbitCatalog:onFirstPage()
         end
         local context = self.current_context
         if (context.page or 1) > 1 then
-            self:loadSection(context.section, { page = 1, q = context.q, replace = true })
+            self:reloadSection(context.section, { page = 1 })
         end
         return true
     elseif self:detailMode() then
@@ -2047,19 +2255,39 @@ function BookOrbitCatalog:onMenuSelect(item)
     if item.kind == "section" then
         self:loadSection(item.section)
     elseif item.kind == "dashboard-book" then
-        self:loadBookDetail(item.book_id)
+        -- Continue-reading heroes resume the book directly when it is on the
+        -- device; hold still opens the full action sheet.
+        local resume_path = item.resume and self:dashboardResumePath(item.book) or nil
+        if resume_path then
+            self:openDownloadedFile(resume_path)
+        else
+            self:loadBookDetail(item.book_id)
+        end
     elseif item.kind == "dashboard-highlight" then
         self:loadBookDetail(item.book_id)
     elseif item.kind == "dashboard-search" then
         self:promptSearch({})
     elseif item.kind == "dashboard-reroll" then
-        self:rerollDiscover()
+        self:rerollDiscover(item.section_index)
     elseif item.kind == "section-filter" then
-        self:promptSectionFilter(item.section, item.q)
+        local context = self.current_context or {}
+        self:promptSectionFilter(item.section, item.q, context.dashboard_source_index)
     elseif item.kind == "section-page" then
-        self:loadSection(item.section, { page = item.section_page, q = item.q, replace = true })
+        self:reloadSection(item.section, {
+            page = item.section_page,
+            q = item.q,
+        })
+    elseif item.kind == "dashboard-source" then
+        local source = item.dashboard_source
+        if source and type(source.sourceName) == "string" and source.sourceName ~= "" then
+            self:setDashboardSection(source, item.dashboard_source_index)
+            self:onReturn()
+            if self:dashboardMode() then self:refreshCurrent() end
+        end
     elseif item.kind == "on-device" then
         self:loadOnDevice()
+    elseif item.kind == "not-on-device" then
+        self:loadNotOnDevice()
     elseif item.kind == "books" then
         self:loadBooks(item.params or {}, item.list_title or item.text)
     elseif item.kind == "book" then
@@ -2104,7 +2332,9 @@ function BookOrbitCatalog:onReturn()
             self:scheduleThumbnailDownloads(self.dashboardBooks(self.current_context.dashboard))
         end
     else
-        self.item_table, self.current_context = self:dashboardRoot()
+        -- Returning past the root shows the cached dashboard immediately and
+        -- refreshes it behind the redraw, like opening the catalog does.
+        self.item_table, self.current_context = self:initialDashboardContext()
         self:updateReturnPath()
         if self.bulkHandleContextChange then
             self:bulkHandleContextChange(self.current_context)
@@ -2121,6 +2351,11 @@ function BookOrbitCatalog:onReturn()
         if self.current_context.kind == "dashboard" then
             self:scheduleThumbnailDownloads(self.dashboardBooks(self.current_context.dashboard))
         end
+        if self:shouldRefreshDashboardOnOpen() then
+            UIManager:nextTick(function()
+                self:loadDashboardRoot(true, { invisible = true })
+            end)
+        end
     end
     self:updateLeftIcon()
     if dirty then
@@ -2136,6 +2371,9 @@ function BookOrbitCatalog:onHoldReturn()
 end
 
 function BookOrbitCatalog:onCloseWidget()
+    self.catalog_closed = true
+    self.dashboard_request_generation = self.dashboard_request_generation + 1
+    self.on_device_hydration_generation = self.on_device_hydration_generation + 1
     self:cancelThumbnailJobs()
     if self.bulk_ctx then
         local ctx = self.bulk_ctx

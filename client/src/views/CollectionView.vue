@@ -14,6 +14,8 @@ import BookQuickView from '@/features/book/components/BookQuickView.vue'
 import ViewHeader from '@/components/ViewHeader.vue'
 import SelectionActionBar from '@/components/SelectionActionBar.vue'
 import AddToCollectionSheet from '@/features/collection/components/AddToCollectionSheet.vue'
+import MoveToLibrarySheet from '@/features/book/components/MoveToLibrarySheet.vue'
+import { useMoveToLibraryTarget } from '@/features/book/composables/useMoveToLibraryTarget'
 import BulkEditMetadataDialog from '@/features/book/components/BulkEditMetadataDialog.vue'
 import MetadataExportDialog from '@/features/book/components/MetadataExportDialog.vue'
 import EditCollectionDialog from '@/features/collection/components/EditCollectionDialog.vue'
@@ -218,7 +220,26 @@ const {
   handleEditIndividually,
 } = useBookTableShell({
   books,
+  onMoveToLibrary: (bookId) => openMoveForBook(bookId),
 })
+
+const {
+  open: moveToLibraryOpen,
+  payload: movePayload,
+  count: moveCount,
+  openForSelection: openMoveForSelection,
+  openForBook: openMoveForBook,
+  setOpen: setMoveOpen,
+} = useMoveToLibraryTarget({
+  getSelectionPayload: () => ({ bookIds: [...selectedIds.value] }),
+  selectedCount,
+})
+
+// A moved book keeps its collection and scope membership, so only the stale
+// selection needs clearing here.
+function handleBooksMoved() {
+  exitSelectionMode()
+}
 
 const metadataExportOpen = ref(false)
 const visibleExportColumns = computed(() => {
@@ -239,7 +260,7 @@ async function handleRemoveFromCollection() {
     resetBooks()
     refreshBuckets()
     exitSelectionMode()
-    toast.success(t('views.collection.toast.removed', { count: ids.length }, ids.length))
+    toast.success(t('views.collection.toast.removed', { count: ids.length }))
   } catch {
     toast.error(t('views.collection.toast.removeFailed'))
   } finally {
@@ -385,6 +406,7 @@ defineOptions({ name: 'CollectionView' })
       @set-field="handleBulkSetField"
       @lock-metadata="handleBulkSetMetadataLock"
       @delete="handleDeleteSelected"
+      @move-to-library="openMoveForSelection"
       @exit="exitSelectionMode"
     />
 
@@ -406,6 +428,14 @@ defineOptions({ name: 'CollectionView' })
       :selected-count="selectedCount"
       @update:open="addToCollectionOpen = $event"
       @done="exitSelectionMode"
+    />
+
+    <MoveToLibrarySheet
+      :open="moveToLibraryOpen"
+      :selection-payload="movePayload"
+      :selected-count="moveCount"
+      @update:open="setMoveOpen"
+      @moved="handleBooksMoved"
     />
     <BulkEditMetadataDialog
       :open="bulkEditOpen"
@@ -541,14 +571,14 @@ defineOptions({ name: 'CollectionView' })
 
       <section v-if="mobileControlsExpanded" class="mb-3 rounded-lg border border-border/70 bg-card/70 p-2 sm:hidden">
         <div class="mb-2 flex h-9 items-center rounded-md border border-input bg-background px-2.5">
-          <Search :size="13" class="mr-1.5 shrink-0 text-muted-foreground/85" />
+          <Search :size="13" class="mr-1.5 shrink-0 text-muted-foreground" />
           <input
             v-model="searchQuery"
             type="search"
             :placeholder="t('views.bookView.searchPlaceholder')"
-            class="mobile-search-input h-full w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/85"
+            class="mobile-search-input h-full w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
-          <button v-if="searchQuery.trim()" class="ml-1 text-muted-foreground/85 transition-colors hover:text-foreground" @click="clearSearch">
+          <button v-if="searchQuery.trim()" class="ml-1 text-muted-foreground transition-colors hover:text-foreground" @click="clearSearch">
             <X :size="12" />
           </button>
         </div>
@@ -599,7 +629,7 @@ defineOptions({ name: 'CollectionView' })
 
         <div v-else-if="booksInitialized && !loading && books.length === 0" class="flex flex-col items-center justify-center gap-3 py-24 text-center">
           <div class="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-            <FolderOpen :size="28" class="text-muted-foreground/70" />
+            <FolderOpen :size="28" class="text-muted-foreground" />
           </div>
           <p class="text-sm font-medium text-foreground">
             {{ debouncedQuery ? t('views.collection.empty.noSearchMatch') : t('views.collection.empty.noBooks') }}
@@ -621,6 +651,7 @@ defineOptions({ name: 'CollectionView' })
           :rail-gutter-kind="bucketKind"
           @range="handleRange"
           @first-visible-index="handleFirstVisibleIndex"
+          :allow-move-to-library="true"
           @action="handleBookAction"
           @select="handleSelect"
         />
@@ -632,6 +663,7 @@ defineOptions({ name: 'CollectionView' })
             :book="book"
             :selection-mode="selectionMode"
             :selected="isSelected(book.id)"
+            :allow-move-to-library="true"
             @action="handleBookAction(book, $event)"
             @select="handleSelect(book.id, $event)"
           />
@@ -652,6 +684,7 @@ defineOptions({ name: 'CollectionView' })
           :selected-count="selectedCount"
           :initialized="booksInitialized"
           @update:sort="tableSortModel = $event"
+          :allow-move-to-library="true"
           @action="handleBookAction"
           @select="handleSelect"
           @update:book="handleTableBookUpdate"

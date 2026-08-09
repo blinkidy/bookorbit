@@ -4,7 +4,9 @@ import { CommonModule } from '../../common/common.module';
 import { AchievementModule } from '../achievement/achievement.module';
 import { AppSettingsModule } from '../app-settings/app-settings.module';
 import { AnnotationModule } from '../annotation/annotation.module';
+import { BookmarkModule } from '../bookmark/bookmark.module';
 import { BookModule } from '../book/book.module';
+import { BrowseCountsModule } from '../browse-counts/browse-counts.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
 import { OpdsModule } from '../opds/opds.module';
 import { PositionConverterModule } from '../position-converter/position-converter.module';
@@ -17,6 +19,8 @@ import { KoreaderAudiobookSessionFinalizerJob } from './koreader-audiobook-sessi
 import { KoreaderAudiobookSessionRepository } from './koreader-audiobook-session.repository';
 import { KoreaderAudiobookSessionService } from './koreader-audiobook-session.service';
 import { KoreaderAuthGuard } from './koreader-auth.guard';
+import { KoreaderBookmarkExchangeService } from './koreader-bookmark-exchange.service';
+import { KoreaderBookmarkRepository } from './koreader-bookmark.repository';
 import { KoreaderCatalogController } from './koreader-catalog.controller';
 import { KoreaderCatalogService } from './koreader-catalog.service';
 import { KoreaderPackageService } from './koreader-package.service';
@@ -42,6 +46,8 @@ import { KoreaderStatsService } from './koreader-stats.service';
     AppSettingsModule,
     AnnotationModule,
     BookModule,
+    BookmarkModule,
+    BrowseCountsModule,
     DashboardModule,
     OpdsModule,
     PositionConverterModule,
@@ -64,6 +70,8 @@ import { KoreaderStatsService } from './koreader-stats.service';
     KoreaderPluginRepository,
     KoreaderPluginAnnotationService,
     KoreaderAnnotationExchangeService,
+    KoreaderBookmarkExchangeService,
+    KoreaderBookmarkRepository,
     KoreaderStatsService,
   ],
   exports: [KoreaderService, KoreaderRepository],

@@ -1,10 +1,11 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { SQL, and, asc, count, eq, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { SQL, and, asc, count, eq, gt, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 import { SUPPORTED_BOOK_FORMATS } from '../upload/upload-validator.service';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 import type {
   ContentFilterRules,
+  CustomMetadataFieldTypeMap,
   JumpBucketKind,
   JumpBucketsResponse,
   SortField,
@@ -12,7 +13,8 @@ import type {
   TemporalJumpBucketPrecision,
   TemporalJumpBucketUnit,
 } from '@bookorbit/types';
-import { isAudioFormat, isComicFormat } from '@bookorbit/types';
+import type { BookRecommendation } from '@bookorbit/types';
+import { isAudioFormat, isComicFormat, normalizeCoverAspectRatio } from '@bookorbit/types';
 import { buildContentFilterClauses } from '../../common/utils/content-filter-sql.utils';
 import { accentInsensitiveIlike } from '../../common/utils/accent-insensitive-search.utils';
 import { SeriesIdentityService } from '../../common/services/series-identity.service';
@@ -59,6 +61,7 @@ type JsonObj = Record<string, unknown>;
 type CollapsedRawRow = {
   id: number;
   status: string;
+  cover_aspect_ratio: string;
   primary_file_id: number | null;
   folder_path: string;
   added_at: string;
@@ -535,6 +538,7 @@ export class BookRepository {
       .select({
         id: books.id,
         status: books.status,
+        coverAspectRatio: libraries.coverAspectRatio,
         primaryFileId: books.primaryFileId,
         folderPath: books.folderPath,
         addedAt: books.addedAt,
@@ -559,6 +563,7 @@ export class BookRepository {
         _total: sql<number>`count(*) over()`.as('_total'),
       })
       .from(books)
+      .innerJoin(libraries, eq(libraries.id, books.libraryId))
       .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
       .leftJoin(userBookRatings, and(eq(userBookRatings.bookId, books.id), eq(userBookRatings.userId, userId)))
       .where(visibleWhere)
@@ -572,6 +577,21 @@ export class BookRepository {
     const enrichment = await this.enrichBookIds(bookRefs, userId);
 
     return { rows, ...enrichment, total: Number(total) };
+  }
+
+  async findCardIds(opts: { where: SQL | undefined; orderBy: SQL[]; limit: number; offset: number; userId: number }): Promise<number[]> {
+    const rows = await this.db
+      .select({ id: books.id })
+      .from(books)
+      .innerJoin(libraries, eq(libraries.id, books.libraryId))
+      .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
+      .leftJoin(userBookRatings, and(eq(userBookRatings.bookId, books.id), eq(userBookRatings.userId, opts.userId)))
+      .where(this.visibleWhere(opts.where))
+      .orderBy(...opts.orderBy)
+      .limit(opts.limit)
+      .offset(opts.offset);
+
+    return rows.map((row) => row.id);
   }
 
   private async enrichBookIds(bookRefs: Array<{ id: number; primaryFileId: number | null }>, userId: number) {
@@ -600,6 +620,7 @@ export class BookRepository {
           seriesName: string;
           seriesIndex: number | null;
           displayOrder: number;
+          expectedBookCount: number | null;
         }[],
       };
     }
@@ -639,6 +660,7 @@ export class BookRepository {
             seriesName: bookSeries.name,
             seriesIndex: bookSeriesMemberships.seriesIndex,
             displayOrder: bookSeriesMemberships.displayOrder,
+            expectedBookCount: bookSeries.expectedBookCount,
           })
           .from(bookSeriesMemberships)
           .innerJoin(bookSeries, eq(bookSeries.id, bookSeriesMemberships.seriesId))
@@ -722,10 +744,18 @@ export class BookRepository {
     });
   }
 
-  async findCardsCollapsed(opts: { where: SQL | undefined; sort: SortSpec[]; limit: number; offset: number; userId: number }): Promise<{
+  async findCardsCollapsed(opts: {
+    where: SQL | undefined;
+    sort: SortSpec[];
+    limit: number;
+    offset: number;
+    userId: number;
+    customFieldTypes?: CustomMetadataFieldTypeMap;
+  }): Promise<{
     rows: Array<{
       id: number;
       status: string;
+      coverAspectRatio: string;
       primaryFileId: number | null;
       folderPath: string;
       addedAt: Date;
@@ -770,12 +800,19 @@ export class BookRepository {
       updatedAt: Date;
     }[];
     narratorRows: { bookId: number; name: string }[];
-    seriesMembershipRows: { bookId: number; seriesId: number; seriesName: string; seriesIndex: number | null; displayOrder: number }[];
+    seriesMembershipRows: {
+      bookId: number;
+      seriesId: number;
+      seriesName: string;
+      seriesIndex: number | null;
+      displayOrder: number;
+      expectedBookCount: number | null;
+    }[];
     total: number;
   }> {
     const { where, sort, limit, offset, userId } = opts;
     const whereFragment = this.visibleWhere(where);
-    const orderBy = BookQueryBuilder.buildCollapseOrderBy(sort, userId);
+    const orderBy = BookQueryBuilder.buildCollapseOrderBy(sort, userId, opts.customFieldTypes);
 
     const result = await this.db.execute<CollapsedRawRow>(sql`
       WITH base_rows AS (
@@ -783,6 +820,7 @@ export class BookRepository {
           books.id,
           books.library_id,
           books.status,
+          libraries.cover_aspect_ratio,
           books.primary_file_id,
           books.primary_author_sort_name,
           books.folder_path,
@@ -806,6 +844,7 @@ export class BookRepository {
           book_metadata.metadata_score,
           NULLIF(lower(btrim(book_metadata.series_name)), '') AS norm_series
         FROM books
+        INNER JOIN libraries ON libraries.id = books.library_id
         LEFT JOIN book_metadata ON book_metadata.book_id = books.id
         WHERE ${whereFragment}
       ),
@@ -915,6 +954,7 @@ export class BookRepository {
         SELECT DISTINCT ON (${sql.raw(COLLAPSE_GROUP_KEY_SQL)})
           base.id,
           base.status,
+          base.cover_aspect_ratio,
           base.primary_file_id,
           base.folder_path,
           base.added_at,
@@ -981,6 +1021,7 @@ export class BookRepository {
     const mappedRows = rawRows.map((r) => ({
       id: r.id,
       status: r.status,
+      coverAspectRatio: r.cover_aspect_ratio,
       primaryFileId: r.primary_file_id,
       folderPath: r.folder_path,
       addedAt: new Date(r.added_at),
@@ -1095,11 +1136,12 @@ export class BookRepository {
     sort: SortSpec[];
     userId: number;
     maxBuckets: number;
+    customFieldTypes?: CustomMetadataFieldTypeMap;
   }): Promise<JumpBucketsResponse> {
     const source = collapsedDiscreteSourceParts(opts.field, opts.userId);
     if (!source) return { buckets: [], total: 0, kind: opts.kind, granularity: null };
     const whereFragment = this.visibleWhere(opts.where);
-    const orderBy = BookQueryBuilder.buildCollapseOrderBy(opts.sort, opts.userId);
+    const orderBy = BookQueryBuilder.buildCollapseOrderBy(opts.sort, opts.userId, opts.customFieldTypes);
     const bucketExpr = opts.kind === 'letter' ? letterJumpBucketExpr(source.value) : sql`coalesce((${source.value})::text, '__unknown__')`;
     const isUnknownExpr = opts.kind === 'category' ? sql`${source.value} IS NULL` : sql`false`;
     const result = await this.db.execute<DiscreteJumpBucketRawRow>(
@@ -1321,6 +1363,7 @@ export class BookRepository {
           seriesName: bookSeries.name,
           seriesIndex: bookSeriesMemberships.seriesIndex,
           displayOrder: bookSeriesMemberships.displayOrder,
+          expectedBookCount: bookSeries.expectedBookCount,
         })
         .from(bookSeriesMemberships)
         .innerJoin(bookSeries, eq(bookSeries.id, bookSeriesMemberships.seriesId))
@@ -1631,11 +1674,16 @@ export class BookRepository {
     return this.db.select({ id: books.id, libraryId: books.libraryId }).from(books).where(inArray(books.id, bookIds));
   }
 
-  async findRecommendationTitlesByBookIds(
-    bookIds: number[],
-  ): Promise<
-    { id: number; title: string | null; updatedAt: string | null; hasCover: boolean; authors: string[]; isAudiobook: boolean; isComic: boolean }[]
-  > {
+  async findDeletionAuditBooksByIds(bookIds: number[]): Promise<{ id: number; title: string | null }[]> {
+    if (bookIds.length === 0) return [];
+    return this.db
+      .select({ id: books.id, title: bookMetadata.title })
+      .from(books)
+      .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
+      .where(inArray(books.id, bookIds));
+  }
+
+  async findRecommendationTitlesByBookIds(bookIds: number[]): Promise<BookRecommendation[]> {
     if (bookIds.length === 0) return [];
 
     const [rows, authorRows] = await Promise.all([
@@ -1643,11 +1691,13 @@ export class BookRepository {
         .select({
           id: books.id,
           title: bookMetadata.title,
+          coverAspectRatio: libraries.coverAspectRatio,
           updatedAt: books.updatedAt,
           coverSource: bookMetadata.coverSource,
           primaryFormat: bookFiles.format,
         })
         .from(books)
+        .innerJoin(libraries, eq(libraries.id, books.libraryId))
         .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
         .leftJoin(bookFiles, eq(bookFiles.id, books.primaryFileId))
         .where(inArray(books.id, bookIds)),
@@ -1668,6 +1718,7 @@ export class BookRepository {
     return rows.map((r) => ({
       id: r.id,
       title: r.title,
+      coverAspectRatio: normalizeCoverAspectRatio(r.coverAspectRatio),
       updatedAt: r.updatedAt?.toISOString() ?? null,
       hasCover: r.coverSource !== null,
       authors: authorsByBook.get(r.id) ?? [],
@@ -1721,8 +1772,23 @@ export class BookRepository {
   }
 
   async findIdsByWhere(where: SQL | undefined): Promise<number[]> {
-    const rows = await this.db.select({ id: books.id }).from(books).where(this.visibleWhere(where));
+    const rows = await this.db
+      .select({ id: books.id })
+      .from(books)
+      .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
+      .where(this.visibleWhere(where));
     return rows.map((r) => r.id);
+  }
+
+  async findIdsByWhereAfter(where: SQL | undefined, afterId: number, limit: number): Promise<number[]> {
+    const rows = await this.db
+      .select({ id: books.id })
+      .from(books)
+      .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
+      .where(and(this.visibleWhere(where), gt(books.id, afterId)))
+      .orderBy(asc(books.id))
+      .limit(limit);
+    return rows.map((row) => row.id);
   }
 
   async findPrimaryFile(bookId: number): Promise<{ absolutePath: string; format: string | null } | null> {
@@ -1880,6 +1946,10 @@ export class BookRepository {
     await executor.update(books).set({ updatedAt: new Date() }).where(eq(books.id, bookId));
   }
 
+  async updateAddedAt(bookId: number, addedAt: Date): Promise<void> {
+    await this.db.update(books).set({ addedAt, updatedAt: new Date() }).where(eq(books.id, bookId));
+  }
+
   async replaceCommunityRatings(
     bookId: number,
     ratings: Array<{ provider: string; rating: number; ratingCount: number | null }>,
@@ -1983,9 +2053,11 @@ export class BookRepository {
         bookId: bookFiles.bookId,
         primaryFileId: books.primaryFileId,
         format: bookFiles.format,
+        markAsFinishedPercentComplete: libraries.markAsFinishedPercentComplete,
       })
       .from(bookFiles)
       .innerJoin(books, eq(books.id, bookFiles.bookId))
+      .innerJoin(libraries, eq(libraries.id, books.libraryId))
       .where(eq(bookFiles.id, fileId))
       .limit(1);
 
@@ -2055,7 +2127,7 @@ export class BookRepository {
     const statusInfo = {
       ...(this.asJsonObj(existing?.statusInfo) ?? {}),
       LastModified: nowIso,
-      Status: this.deriveKoboStatus(clampedPercentage),
+      Status: this.deriveKoboStatus(clampedPercentage, file.markAsFinishedPercentComplete),
     };
     const statistics = this.asJsonObj(existing?.statistics) ?? { LastModified: nowIso };
 
@@ -2202,8 +2274,14 @@ export class BookRepository {
     return existingPercent !== null && Math.abs(existingPercent - percentage) < PROGRESS_EPSILON;
   }
 
-  private deriveKoboStatus(percentage: number): string {
-    if (percentage >= 100) return 'Finished';
+  /**
+   * Uses the library's finished threshold so the device agrees with the read status
+   * BookOrbit derives from the same percentage; requiring 100 left books BookOrbit
+   * calls read showing as Reading on Kobo.
+   */
+  private deriveKoboStatus(percentage: number, markAsFinishedPercentComplete: number): string {
+    const threshold = Number.isFinite(markAsFinishedPercentComplete) ? Math.min(100, Math.max(1, markAsFinishedPercentComplete)) : 100;
+    if (percentage >= threshold) return 'Finished';
     return percentage > 0 ? 'Reading' : 'ReadyToRead';
   }
 

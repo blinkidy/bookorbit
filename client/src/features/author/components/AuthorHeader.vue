@@ -72,7 +72,7 @@ watch(resolvedBio, () => {
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-lg border border-border/70 bg-card/80">
+  <section class="shrink-0 overflow-hidden rounded-lg border border-border/70 bg-card/80">
     <div class="bg-gradient-to-b from-primary/8 via-background/0 to-transparent p-4">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
         <div
@@ -138,15 +138,15 @@ watch(resolvedBio, () => {
               v-if="resolvedBio"
               :class="
                 bioExpanded
-                  ? 'text-sm leading-6 text-foreground/90'
-                  : 'text-sm leading-6 text-foreground/90 overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-line-clamp:5] [-webkit-box-orient:vertical]'
+                  ? 'text-sm leading-6 text-foreground'
+                  : 'text-sm leading-6 text-foreground overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-line-clamp:5] [-webkit-box-orient:vertical]'
               "
             >
               {{ resolvedBio }}
             </p>
             <button
               v-if="resolvedBio"
-              class="mt-1 text-xs font-medium text-primary transition-colors hover:text-primary/80"
+              class="mt-1 text-xs font-medium text-primary transition-colors hover:text-primary"
               @click="bioExpanded = !bioExpanded"
             >
               {{ bioExpanded ? t('author.header.showLess') : t('author.header.showMore') }}

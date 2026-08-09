@@ -19,6 +19,7 @@ import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { normalizeMetadataText, normalizeMetadataTextKey } from '../../common/utils/metadata-text-normalize.utils';
 import { normalizePublishedDate, publishedYearFromDateKey } from '../../common/utils/published-date.utils';
 import { formatSeriesIndex } from '../../common/utils/series-index-format.utils';
+import { SeriesExpectedCountService } from '../../common/services/series-expected-count.service';
 import { SeriesMembershipService } from '../../common/services/series-membership.service';
 import { isDateKey, resolveTimeZone, toDateKeyInTimeZone, toTimeZoneStartOfDay } from '../../common/utils/timezone.utils';
 import { extractEpubMetadata } from '../metadata/lib/epub';
@@ -34,7 +35,9 @@ import {
   DEFAULT_DOWNLOAD_PATTERN,
   MetadataProviderKey,
   Permission,
+  customSortFieldIds,
   isAudioFormat,
+  isSortField,
   jumpRailStrategyForSort,
   resolveUploadPath,
 } from '@bookorbit/types';
@@ -45,15 +48,19 @@ import type {
   BookMetadataRefreshPreviewFields,
   BookMetadataRefreshPreviewResponse,
   BookMetadataLockField,
+  BookDeletionAuditMeta,
   BookQuery,
   BookWriteAndRenameResult,
   BooksPage,
+  CustomMetadataFieldTypeMap,
   FileRenameResult,
+  GroupRule,
   JumpBucketsResponse,
   JumpBucketsQuery,
   MetadataFetchDiagnostics,
   MetadataField,
   ReadStatus,
+  SortSpec,
   UserBookStatus,
   WriteResult,
 } from '@bookorbit/types';
@@ -89,10 +96,15 @@ import type { MetadataExportColumnMode } from './dto/metadata-export-options.dto
 import { SaveProgressDto } from './dto/save-progress.dto';
 import { UpsertAudioProgressDto } from './dto/upsert-audio-progress.dto';
 import { UpdateBookMetadataDto } from './dto/update-book-metadata.dto';
+import { UpdateBookAddedAtDto } from './dto/update-book-added-at.dto';
 import { UpdatePersonalNoteDto } from './dto/update-personal-note.dto';
 import type { UpdateBookMetadataAndLocksDto } from './dto/update-book-metadata-and-locks.dto';
 import { buildBookDetailSupplementalFields } from './utils/build-book-detail-supplemental-fields';
 import type { SetStatusDto } from '../user-book-status/dto/set-status.dto';
+
+type SeriesCollapseQueryOptions = {
+  seriesSelectionFilter: GroupRule | undefined;
+};
 
 const METADATA_UPDATE_FAILPOINTS = [
   'afterScalarUpdate',
@@ -132,6 +144,8 @@ const EXPORT_LIMITS = {
   MAX_PROJECTED_BYTES: 8 * 1024 * 1024 * 1024,
   MAX_CONCURRENT_PER_USER: 2,
 } as const;
+
+const MAX_DELETION_AUDIT_BOOKS = 25;
 
 type ExportCandidateFile = {
   bookId: number;
@@ -253,6 +267,7 @@ export class BookService {
     @Optional() private readonly fileRenameService: FileRenameService,
     @Optional() private readonly achievementEvents: AchievementEventsService,
     @Optional() private readonly seriesMemberships?: SeriesMembershipService,
+    @Optional() private readonly seriesExpectedCount?: SeriesExpectedCountService,
   ) {
     this.appDataPath = this.config.get<string>('storage.appDataPath')!;
   }
@@ -516,6 +531,48 @@ export class BookService {
     throw new BadRequestException('Either bookIds or query must be provided');
   }
 
+  async *iterateSelectionIds(dto: BulkSelectionDto, user: RequestUser, batchSize: number): AsyncGenerator<number[]> {
+    if (dto.bookIds && dto.query) {
+      throw new BadRequestException('bookIds and query are mutually exclusive');
+    }
+    if (dto.bookIds) {
+      for (let index = 0; index < dto.bookIds.length; index += batchSize) {
+        const batch = dto.bookIds.slice(index, index + batchSize);
+        await this.verifyLibraryAccessForBookIds(batch, user);
+        yield batch;
+      }
+      return;
+    }
+    if (dto.query) {
+      const libs = await this.libraryService.findAll(user);
+      let accessibleLibraryIds = libs.map((library) => library.id);
+      const timeZone = this.resolveUserTimeZone(user);
+      if (dto.query.libraryId !== undefined) {
+        if (!accessibleLibraryIds.includes(dto.query.libraryId)) {
+          throw new ForbiddenException(`Library ${dto.query.libraryId} is not accessible`);
+        }
+        accessibleLibraryIds = [dto.query.libraryId];
+      }
+      const where = this.queryBuilder.buildWhere(dto.query.filter, {
+        accessibleLibraryIds,
+        implicitLibraryId: dto.query.libraryId,
+        userId: user.id,
+        q: dto.query.q,
+        timeZone,
+        contentFilters: this.isSuperuser(user) ? undefined : user.contentFilters,
+      });
+      let afterId = 0;
+      while (true) {
+        const batch = await this.bookRepo.findIdsByWhereAfter(where, afterId, batchSize);
+        if (batch.length === 0) return;
+        yield batch;
+        afterId = batch[batch.length - 1]!;
+        if (batch.length < batchSize) return;
+      }
+    }
+    throw new BadRequestException('Either bookIds or query must be provided');
+  }
+
   acquireExportSlot(userId: number): () => void {
     const current = this.activeExportCounts.get(userId) ?? 0;
     if (current >= EXPORT_LIMITS.MAX_CONCURRENT_PER_USER) {
@@ -578,10 +635,8 @@ export class BookService {
     if (!Array.isArray(sort)) return [];
     return sort
       .map((entry) => {
-        const field =
-          typeof (entry as { field?: unknown })?.field === 'string'
-            ? ((entry as { field: string }).field as BookQuery['sort'][number]['field'])
-            : null;
+        const rawField = (entry as { field?: unknown })?.field;
+        const field = typeof rawField === 'string' && isSortField(rawField) ? rawField : null;
         const dir =
           typeof (entry as { dir?: unknown })?.dir === 'string' ? ((entry as { dir: string }).dir as BookQuery['sort'][number]['dir']) : null;
         if (!field || !dir) return null;
@@ -1033,10 +1088,28 @@ export class BookService {
     return this.executeBooksQuery(user.id, where, query);
   }
 
-  async executeBooksQuery(userId: number, where: SQL | undefined, query: BookQuery): Promise<BooksPage> {
+  /**
+   * Custom metadata sort tiers reference a field id; the value column depends on the
+   * field's type, so resolve it here. Only hit the database when a sort actually uses one.
+   */
+  private async resolveCustomSortFieldTypes(sort: SortSpec[]): Promise<CustomMetadataFieldTypeMap | undefined> {
+    const fieldIds = customSortFieldIds(sort);
+    if (fieldIds.length === 0) return undefined;
+    return this.customMetadataService.getActiveFieldTypes(fieldIds);
+  }
+
+  async executeBooksQuery(
+    userId: number,
+    where: SQL | undefined,
+    query: BookQuery,
+    collapseOptions?: SeriesCollapseQueryOptions,
+  ): Promise<BooksPage> {
     const start = Date.now();
     const { page, size } = query.pagination;
-    const shouldCollapse = query.collapseSeries === true && !BookQueryBuilder.hasSeriesSelectionFilter(query.filter);
+    const seriesSelectionFilter = collapseOptions ? collapseOptions.seriesSelectionFilter : query.filter;
+    const shouldCollapse = query.collapseSeries === true && !BookQueryBuilder.hasSeriesSelectionFilter(seriesSelectionFilter);
+
+    const customFieldTypes = await this.resolveCustomSortFieldTypes(query.sort);
 
     if (shouldCollapse) {
       const { rows, authorRows, fileRows, genreRows, tagRows, progressRows, statusRows, narratorRows, seriesMembershipRows, total } =
@@ -1046,6 +1119,7 @@ export class BookService {
           limit: size,
           offset: page * size,
           userId,
+          customFieldTypes,
         });
       // Collapsed rows render BookTableCollapsedSeriesCell which does not display custom metadata.
       const result = {
@@ -1073,7 +1147,7 @@ export class BookService {
       return result;
     }
 
-    const orderBy = this.queryBuilder.buildOrderBy(query.sort, userId);
+    const orderBy = this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes);
     const { rows, authorRows, fileRows, genreRows, tagRows, progressRows, statusRows, narratorRows, seriesMembershipRows, total } =
       await this.bookRepo.findCards({
         where,
@@ -1110,6 +1184,18 @@ export class BookService {
     return result;
   }
 
+  async executeBookIdsQuery(userId: number, where: SQL | undefined, query: BookQuery): Promise<number[]> {
+    const customFieldTypes = await this.resolveCustomSortFieldTypes(query.sort);
+    const orderBy = this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes);
+    return this.bookRepo.findCardIds({
+      where,
+      orderBy,
+      limit: query.pagination.size,
+      offset: query.pagination.page * query.pagination.size,
+      userId,
+    });
+  }
+
   async queryJumpBucketsForLibrary(user: RequestUser, libraryId: number, query: JumpBucketsQuery): Promise<JumpBucketsResponse> {
     await this.libraryService.verifyUserAccess(user.id, libraryId, this.isSuperuser(user));
     const timeZone = this.resolveUserTimeZone(user);
@@ -1124,12 +1210,19 @@ export class BookService {
     return this.executeJumpBucketsQuery(user.id, where, query, timeZone);
   }
 
-  async executeJumpBucketsQuery(userId: number, where: SQL | undefined, query: JumpBucketsQuery, timeZone = 'UTC'): Promise<JumpBucketsResponse> {
+  async executeJumpBucketsQuery(
+    userId: number,
+    where: SQL | undefined,
+    query: JumpBucketsQuery,
+    timeZone = 'UTC',
+    collapseOptions?: SeriesCollapseQueryOptions,
+  ): Promise<JumpBucketsResponse> {
     const event = 'book.jump_buckets';
     const strategy = jumpRailStrategyForSort(query.sort);
     const kind = strategy?.kind ?? null;
     const primary = query.sort[0] ?? { field: 'title' as const, dir: 'asc' as const };
-    const shouldCollapse = query.collapseSeries === true && !BookQueryBuilder.hasSeriesSelectionFilter(query.filter);
+    const seriesSelectionFilter = collapseOptions ? collapseOptions.seriesSelectionFilter : query.filter;
+    const shouldCollapse = query.collapseSeries === true && !BookQueryBuilder.hasSeriesSelectionFilter(seriesSelectionFilter);
     if (!strategy) throw new BadRequestException('jump buckets are not available for this sort');
 
     const start = Date.now();
@@ -1156,9 +1249,16 @@ export class BookService {
           userId,
           maxBuckets: query.maxBuckets,
         };
+        // The primary sort decides bucket boundaries, but secondary tiers still order
+        // rows inside a bucket, so they can reference custom fields. The temporal path
+        // never applies the full sort, which is why this only matters here.
+        const customFieldTypes = await this.resolveCustomSortFieldTypes(query.sort);
         response = shouldCollapse
-          ? await this.bookRepo.findJumpBucketsCollapsed({ ...discreteOpts, sort: query.sort })
-          : await this.bookRepo.findJumpBuckets({ ...discreteOpts, orderBy: this.queryBuilder.buildOrderBy(query.sort, userId) });
+          ? await this.bookRepo.findJumpBucketsCollapsed({ ...discreteOpts, sort: query.sort, customFieldTypes })
+          : await this.bookRepo.findJumpBuckets({
+              ...discreteOpts,
+              orderBy: this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes),
+            });
       }
       this.logger.log(
         `[${event}] [end] userId=${userId} kind=${kind} collapse=${shouldCollapse} maxBuckets=${query.maxBuckets} durationMs=${Date.now() - start} bucketCount=${response.buckets.length} total=${response.total} - jump buckets computed`,
@@ -1453,16 +1553,25 @@ export class BookService {
     return this.bookRepo.searchAcrossLibraries(libraryIds, q, limit, contentFilters);
   }
 
-  async deleteBooks(bookIds: number[], user: RequestUser): Promise<void> {
+  async deleteBooks(bookIds: number[], user: RequestUser): Promise<BookDeletionAuditMeta> {
     const event = 'book.delete_books';
     const startedAt = Date.now();
     this.logger.log(`[${event}] [start] count=${bookIds.length} userId=${user.id} - delete books started`);
     try {
       if (bookIds.length === 0) {
         this.logger.log(`[${event}] [end] count=0 durationMs=${Date.now() - startedAt} deletedBooks=0 deletedFiles=0 - delete books completed`);
-        return;
+        return { total: 0, books: [], omitted: 0 };
       }
       const rows = await this.verifyLibraryAccessForBookIds(bookIds, user);
+      const rowIds = new Set(rows.map((row) => row.id));
+      const deletedBookIds = [...new Set(bookIds)].filter((bookId) => rowIds.has(bookId));
+      const auditedBookIds = deletedBookIds.slice(0, MAX_DELETION_AUDIT_BOOKS);
+      const auditRows = await this.bookRepo.findDeletionAuditBooksByIds(auditedBookIds);
+      const auditRowsById = new Map(auditRows.map((row) => [row.id, row]));
+      const auditBooks = auditedBookIds.flatMap((bookId) => {
+        const row = auditRowsById.get(bookId);
+        return row ? [row] : [];
+      });
       const files = await this.bookRepo.findAllFilesByBookIds(bookIds);
       await this.bookRepo.deleteByIds(bookIds);
       const deleteTargets = [
@@ -1491,6 +1600,11 @@ export class BookService {
       this.logger.log(
         `[${event}] [end] count=${bookIds.length} durationMs=${Date.now() - startedAt} deletedBooks=${rows.length} deletedFiles=${files.length} failedDeletes=${failedDeletes} - delete books completed`,
       );
+      return {
+        total: rows.length,
+        books: auditBooks,
+        omitted: Math.max(0, rows.length - auditBooks.length),
+      };
     } catch (err) {
       const errorClass = err instanceof Error ? err.name : 'Error';
       const errorMessage = sanitizeLogValue(err instanceof Error ? err.message : String(err));
@@ -1528,6 +1642,15 @@ export class BookService {
       );
       throw err;
     }
+  }
+
+  async updateAddedAt(id: number, dto: UpdateBookAddedAtDto, user: RequestUser): Promise<BookDetailDto> {
+    await this.verifyBookAccess(id, user);
+    const timeZone = this.resolveUserTimeZone(user);
+    if (!isDateKey(dto.addedAt)) throw new BadRequestException('addedAt must be a valid date');
+    if (dto.addedAt > toDateKeyInTimeZone(new Date(), timeZone)) throw new BadRequestException('addedAt cannot be in the future');
+    await this.bookRepo.updateAddedAt(id, toTimeZoneStartOfDay(dto.addedAt, timeZone));
+    return this.getDetail(id, user);
   }
 
   async updateMetadataAndLocks(
@@ -1652,6 +1775,11 @@ export class BookService {
 
       if (dto.seriesMemberships !== undefined) {
         await this.seriesMemberships?.replaceForBook(id, dto.seriesMemberships, tx);
+        // After replaceForBook, because it is what creates any series row the editor named.
+        for (const membership of dto.seriesMemberships ?? []) {
+          if (membership.expectedBookCount === undefined) continue;
+          await this.seriesExpectedCount?.setManual(membership.seriesName, membership.expectedBookCount ?? null, tx);
+        }
       }
       this.throwIfMetadataUpdateFailpoint('afterSeriesMembershipsReplace');
 
@@ -1737,7 +1865,7 @@ export class BookService {
           this.fileRenameService?.scheduleRename(id, user.id);
         }
       }
-      this.scoreService.calculateAndSave(id).catch((err: Error) => this.logger.warn(`Score calculation failed for book ${id}: ${err.message}`));
+      await this.scoreService.calculateAndSave(id);
     }
 
     const detail = await this.getDetail(id, user);
@@ -2171,7 +2299,7 @@ export class BookService {
     const updatableIds = bookIds.filter((bookId) => !lockedIds.has(bookId));
     if (updatableIds.length > 0) {
       await this.bookRepo.bulkSetRating(updatableIds, rating, user.id);
-      this.triggerPostMetadataUpdateEffects(updatableIds, user.id);
+      await this.triggerPostMetadataUpdateEffects(updatableIds, user.id);
       this.achievementEvents?.emit(ACHIEVEMENT_EVENT_BOOK_RATING_CHANGED, {
         userId: user.id,
         bookIds: updatableIds,
@@ -2238,7 +2366,7 @@ export class BookService {
           }
         });
       }
-      this.triggerPostMetadataUpdateEffects(updatableIds, user.id);
+      await this.triggerPostMetadataUpdateEffects(updatableIds, user.id);
     }
     this.logger.log(
       `[${event}] [end] userId=${user.id} count=${bookIds.length} field=${field} updated=${updatableIds.length} skippedLocked=${lockedIds.size} durationMs=${Date.now() - startedAt} - bulk set metadata completed`,
@@ -2265,7 +2393,7 @@ export class BookService {
         await this.metadataService.replaceTags(bookId, next, { executor: tx });
       }
     });
-    this.triggerPostMetadataUpdateEffects(bookIds, user.id);
+    await this.triggerPostMetadataUpdateEffects(bookIds, user.id);
 
     this.logger.log(
       `[${event}] [end] userId=${user.id} count=${bookIds.length} mode=${mode} tagCount=${tags.length} durationMs=${Date.now() - startedAt} - bulk update tags completed`,
@@ -2460,7 +2588,7 @@ export class BookService {
     }
 
     if (allUpdatedBookIds.size > 0) {
-      this.triggerPostMetadataUpdateEffects([...allUpdatedBookIds], user.id);
+      await this.triggerPostMetadataUpdateEffects([...allUpdatedBookIds], user.id);
     }
 
     const result: BulkEditMetadataResult = {
@@ -2572,6 +2700,8 @@ export class BookService {
         title: meta?.title ?? undefined,
         author: authorRows[0]?.name ?? undefined,
         isbn: meta?.isbn13 ?? meta?.isbn10 ?? undefined,
+        seriesName: meta?.seriesName ?? undefined,
+        seriesIndex: meta?.seriesIndex ?? undefined,
         existingProviderIds: providerIds,
         isAudiobook: (meta?.durationSeconds !== null && meta?.durationSeconds !== undefined) || !!meta?.audibleId || !!meta?.librofmId,
         maxCandidatesPerProvider: 1,
@@ -3250,14 +3380,13 @@ export class BookService {
     );
   }
 
-  private triggerPostMetadataUpdateEffects(bookIds: number[], userId: number): void {
+  private async triggerPostMetadataUpdateEffects(bookIds: number[], userId: number): Promise<void> {
     for (const bookId of bookIds) {
       this.fileWriteService?.scheduleWrite(bookId, 'auto', userId);
       this.fileRenameService?.scheduleRename(bookId, userId);
-      void this.scoreService
-        .calculateAndSave(bookId)
-        .catch((err: Error) => this.logger.warn(`Score calculation failed for book ${bookId}: ${err.message}`));
     }
+
+    await this.scoreService.calculateAndSaveMany(bookIds);
   }
 
   private resolveChapters(

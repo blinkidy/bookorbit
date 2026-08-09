@@ -400,6 +400,76 @@
       "when": 1784420395345,
       "tag": "0056_device-progress-sync-delay",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1785128574339,
+      "tag": "0057_add_audit_search_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1785208780116,
+      "tag": "0058_add_bookmark_sync_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1785215769241,
+      "tag": "0059_add_kindle_file_write_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1785219732532,
+      "tag": "0060_add_fb2_file_write_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1785272589212,
+      "tag": "0061_add_smart_scope_kobo_subscriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1785645905307,
+      "tag": "0062_add_book_move_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1785695009216,
+      "tag": "0063_add_server_fonts",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1785712608966,
+      "tag": "0064_add_series_expected_book_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1785964221973,
+      "tag": "0065_add_dashboard_random_lookup_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1786298257009,
+      "tag": "0066_book_move_case_insensitive_paths",
+      "breakpoints": true
     }
   ]
 }

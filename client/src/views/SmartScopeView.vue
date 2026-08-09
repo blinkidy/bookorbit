@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { formatNumber } from '@/i18n/formatters'
@@ -18,6 +18,7 @@ import {
   Search,
   SlidersHorizontal,
   Square,
+  Tablet,
   X,
 } from '@lucide/vue'
 import VirtualBookGrid from '@/features/book/components/VirtualBookGrid.vue'
@@ -31,6 +32,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import SmartScopeEditorPanel from '@/features/smart-scope/components/SmartScopeEditorPanel.vue'
 import SelectionActionBar from '@/components/SelectionActionBar.vue'
 import AddToCollectionSheet from '@/features/collection/components/AddToCollectionSheet.vue'
+import MoveToLibrarySheet from '@/features/book/components/MoveToLibrarySheet.vue'
+import { useMoveToLibraryTarget } from '@/features/book/composables/useMoveToLibraryTarget'
 import BulkEditMetadataDialog from '@/features/book/components/BulkEditMetadataDialog.vue'
 import MetadataExportDialog from '@/features/book/components/MetadataExportDialog.vue'
 import SendBookDialog from '@/features/email/components/SendBookDialog.vue'
@@ -40,12 +43,13 @@ import { toast } from 'vue-sonner'
 import { useBookViewWindow } from '@/features/book/composables/useBookViewWindow'
 import { useSeriesCollapsePreference } from '@/features/book/composables/useSeriesCollapsePreference'
 import { useSmartScopes } from '@/features/smart-scope/composables/useSmartScopes'
+import { useSmartScopeKoboSync } from '@/features/smart-scope/composables/useSmartScopeKoboSync'
 import { useDisplaySettings } from '@/composables/useDisplaySettings'
 import { useEffectiveViewMode } from '@/composables/useEffectiveViewMode'
 import { useViewDisplaySettings } from '@/composables/useViewDisplaySettings'
 import { useViewSearch } from '@/features/book/composables/useViewSearch'
 import FilterSummary from '@/features/book/components/FilterSummary.vue'
-import { SORT_FIELD_LABELS } from '@/features/book/lib/filter-labels'
+import { sortFieldLabel } from '@/features/book/lib/filter-labels'
 import { DEFAULT_COVER_ASPECT_RATIO } from '@/features/book/lib/cover-aspect-ratio'
 import { usePageTitle } from '@/composables/usePageTitle'
 import { useBookNavigation } from '@/features/book/composables/useBookNavigation'
@@ -85,6 +89,7 @@ watch(prefs, () => {
 
 const { searchQuery, debouncedQuery, clearSearch } = useViewSearch()
 const mainRef = ref<HTMLElement | null>(null)
+const scopeQueryReady = ref(false)
 const {
   booksProxy: books,
   slots,
@@ -121,6 +126,7 @@ const {
   railViewport: mainRef,
   collapseEnabled: collapseEnabledRef,
   q: debouncedQuery,
+  enabled: scopeQueryReady,
 })
 const { setBookContext } = useBookNavigation()
 useScrollRestoreOnActivate(mainRef)
@@ -139,7 +145,7 @@ usePageTitle(pageTitle)
 const sortChip = computed(() => {
   const specs = smartScope.value?.defaultSort
   if (!specs?.length) return null
-  return specs.map((s) => `${SORT_FIELD_LABELS[s.field as SortField] ?? s.field} ${s.dir === 'asc' ? '↑' : '↓'}`).join(', ')
+  return specs.map((s) => `${sortFieldLabel(s.field as SortField)} ${s.dir === 'asc' ? '↑' : '↓'}`).join(', ')
 })
 
 const filterExpanded = smartScopeFilterExpanded
@@ -243,7 +249,26 @@ const {
   handleEditIndividually,
 } = useBookTableShell({
   books,
+  onMoveToLibrary: (bookId) => openMoveForBook(bookId),
 })
+
+const {
+  open: moveToLibraryOpen,
+  payload: movePayload,
+  count: moveCount,
+  openForSelection: openMoveForSelection,
+  openForBook: openMoveForBook,
+  setOpen: setMoveOpen,
+} = useMoveToLibraryTarget({
+  getSelectionPayload: () => ({ bookIds: [...selectedIds.value] }),
+  selectedCount,
+})
+
+// A moved book keeps its collection and scope membership, so only the stale
+// selection needs clearing here.
+function handleBooksMoved() {
+  exitSelectionMode()
+}
 
 const metadataExportOpen = ref(false)
 const visibleExportColumns = computed(() => {
@@ -276,8 +301,12 @@ async function handleBulkEditConfirm(fields: BulkEditFields) {
 
 watch(
   smartScope,
-  (scope) => {
+  async (scope) => {
+    scopeQueryReady.value = false
     tableSort.value = scope?.defaultSort?.length ? [...scope.defaultSort] : [{ field: 'title', dir: 'asc' }]
+    if (!scope) return
+    await nextTick()
+    if (smartScope.value?.id === scope.id) scopeQueryReady.value = true
   },
   { immediate: true },
 )
@@ -285,6 +314,26 @@ watch(
 const editorOpen = ref(false)
 const confirmSmartScopeDelete = ref(false)
 const deleting = ref(false)
+
+const {
+  isOwner: isSmartScopeOwner,
+  enabled: koboSyncEnabled,
+  canToggle: canToggleKoboSync,
+  pending: koboSyncPending,
+  toggle: toggleKoboSync,
+} = useSmartScopeKoboSync(smartScope)
+
+async function handleToggleKoboSync() {
+  const name = smartScope.value?.name ?? t('views.smartScope.defaultName')
+  try {
+    const next = await toggleKoboSync()
+    if (next === null) return
+    toast.success(next ? t('views.smartScope.toast.koboSyncEnabled', { name }) : t('views.smartScope.toast.koboSyncDisabled', { name }))
+  } catch {
+    toast.error(t('views.smartScope.toast.koboSyncFailed', { name }))
+  }
+  collapseMobileControlsIfNeeded()
+}
 
 async function handleDelete() {
   if (!confirmSmartScopeDelete.value) {
@@ -330,6 +379,7 @@ function toggleFilterSummary() {
 }
 
 function openEditor() {
+  if (!isSmartScopeOwner.value) return
   editorOpen.value = true
   confirmSmartScopeDelete.value = false
   collapseMobileControlsIfNeeded()
@@ -428,6 +478,7 @@ defineOptions({ name: 'SmartScopeView' })
       @set-field="handleBulkSetField"
       @lock-metadata="handleBulkSetMetadataLock"
       @delete="handleDeleteSelected"
+      @move-to-library="openMoveForSelection"
       @exit="exitSelectionMode"
     />
 
@@ -449,6 +500,14 @@ defineOptions({ name: 'SmartScopeView' })
       :selected-count="selectedCount"
       @update:open="addToCollectionOpen = $event"
       @done="exitSelectionMode"
+    />
+
+    <MoveToLibrarySheet
+      :open="moveToLibraryOpen"
+      :selection-payload="movePayload"
+      :selected-count="moveCount"
+      @update:open="setMoveOpen"
+      @moved="handleBooksMoved"
     />
     <BulkEditMetadataDialog
       :open="bulkEditOpen"
@@ -536,7 +595,30 @@ defineOptions({ name: 'SmartScopeView' })
             </TooltipTrigger>
             <TooltipContent>{{ t('views.bookView.exportMetadata') }}</TooltipContent>
           </Tooltip>
-          <Tooltip>
+          <Tooltip v-if="canToggleKoboSync">
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="koboSyncEnabled"
+                :disabled="koboSyncPending"
+                class="hidden sm:flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors disabled:opacity-60"
+                :class="
+                  koboSyncEnabled
+                    ? 'border-primary text-primary hover:bg-primary/10'
+                    : 'border-input text-muted-foreground hover:bg-muted hover:text-foreground'
+                "
+                @click="handleToggleKoboSync"
+              >
+                <Tablet :size="13" />
+                <span>{{ t('views.smartScope.koboSync.label') }}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {{ koboSyncEnabled ? t('views.smartScope.koboSync.enabledHint') : t('views.smartScope.koboSync.disabledHint') }}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip v-if="isSmartScopeOwner">
             <TooltipTrigger as-child>
               <button
                 class="hidden sm:flex h-8 items-center gap-1.5 rounded-md border border-input px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -549,7 +631,7 @@ defineOptions({ name: 'SmartScopeView' })
             </TooltipTrigger>
             <TooltipContent>{{ t('views.smartScope.edit') }}</TooltipContent>
           </Tooltip>
-          <Tooltip>
+          <Tooltip v-if="isSmartScopeOwner">
             <TooltipTrigger as-child>
               <button
                 :disabled="deleting"
@@ -613,14 +695,14 @@ defineOptions({ name: 'SmartScopeView' })
 
       <section v-if="mobileControlsExpanded" class="mb-3 rounded-lg border border-border/70 bg-card/70 p-2 sm:hidden">
         <div class="mb-2 flex h-9 items-center rounded-md border border-input bg-background px-2.5">
-          <Search :size="13" class="mr-1.5 shrink-0 text-muted-foreground/85" />
+          <Search :size="13" class="mr-1.5 shrink-0 text-muted-foreground" />
           <input
             v-model="searchQuery"
             type="search"
             :placeholder="t('views.bookView.searchPlaceholder')"
-            class="mobile-search-input h-full w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/85"
+            class="mobile-search-input h-full w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
-          <button v-if="searchQuery.trim()" class="ml-1 text-muted-foreground/85 transition-colors hover:text-foreground" @click="clearSearch">
+          <button v-if="searchQuery.trim()" class="ml-1 text-muted-foreground transition-colors hover:text-foreground" @click="clearSearch">
             <X :size="12" />
           </button>
         </div>
@@ -643,6 +725,20 @@ defineOptions({ name: 'SmartScopeView' })
             <span>{{ t('views.bookView.export') }}</span>
           </button>
           <button
+            v-if="canToggleKoboSync"
+            type="button"
+            role="switch"
+            :aria-checked="koboSyncEnabled"
+            :disabled="koboSyncPending"
+            class="flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors disabled:opacity-60"
+            :class="koboSyncEnabled ? 'border-primary text-primary' : 'border-input text-muted-foreground hover:bg-muted hover:text-foreground'"
+            @click="handleToggleKoboSync"
+          >
+            <Tablet :size="13" />
+            <span>{{ t('views.smartScope.koboSync.label') }}</span>
+          </button>
+          <button
+            v-if="isSmartScopeOwner"
             @click="openEditor"
             class="flex h-8 items-center gap-1.5 rounded-md border border-input px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
@@ -650,6 +746,7 @@ defineOptions({ name: 'SmartScopeView' })
             <span>{{ t('common.edit') }}</span>
           </button>
           <button
+            v-if="isSmartScopeOwner"
             @click="handleDelete"
             :disabled="deleting"
             class="flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors"
@@ -693,8 +790,9 @@ defineOptions({ name: 'SmartScopeView' })
           <!-- Filter summary -->
           <div
             v-if="filterExpanded && (smartScope?.filter || sortChip)"
-            class="flex flex-wrap items-center gap-2 mb-4 cursor-pointer"
-            @click="editorOpen = true"
+            class="flex flex-wrap items-center gap-2 mb-4"
+            :class="isSmartScopeOwner ? 'cursor-pointer' : ''"
+            @click="openEditor"
           >
             <FilterSummary v-if="smartScope?.filter" :node="smartScope.filter as GroupRule" />
             <span v-if="sortChip" class="inline-flex items-center text-xs rounded-md border border-border/60 overflow-hidden">
@@ -712,7 +810,7 @@ defineOptions({ name: 'SmartScopeView' })
             class="flex flex-col items-center justify-center py-24 gap-4 text-center"
           >
             <div class="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-              <Settings2 :size="28" class="text-muted-foreground/70" />
+              <Settings2 :size="28" class="text-muted-foreground" />
             </div>
             <div class="flex flex-col gap-1">
               <p class="text-sm font-medium text-foreground">{{ t('views.smartScope.empty.noRules') }}</p>
@@ -721,7 +819,8 @@ defineOptions({ name: 'SmartScopeView' })
               </p>
             </div>
             <button
-              @click="editorOpen = true"
+              v-if="isSmartScopeOwner"
+              @click="openEditor"
               class="h-9 px-5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               {{ t('views.smartScope.empty.configure') }}
@@ -734,11 +833,13 @@ defineOptions({ name: 'SmartScopeView' })
             class="flex flex-col items-center justify-center py-24 gap-3 text-center"
           >
             <div class="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-              <Aperture :size="28" class="text-muted-foreground/70" />
+              <Aperture :size="28" class="text-muted-foreground" />
             </div>
             <p class="text-sm font-medium text-foreground">{{ t('views.smartScope.empty.noMatch') }}</p>
             <p class="text-xs text-muted-foreground">{{ t('views.smartScope.empty.noMatchHint') }}</p>
-            <button @click="editorOpen = true" class="text-xs text-primary hover:underline">{{ t('views.smartScope.empty.edit') }}</button>
+            <button v-if="isSmartScopeOwner" @click="openEditor" class="text-xs text-primary hover:underline">
+              {{ t('views.smartScope.empty.edit') }}
+            </button>
           </div>
 
           <!-- Grid view -->
@@ -754,6 +855,7 @@ defineOptions({ name: 'SmartScopeView' })
             :rail-gutter-kind="bucketKind"
             @range="handleRange"
             @first-visible-index="handleFirstVisibleIndex"
+            :allow-move-to-library="true"
             @action="handleBookAction"
             @select="handleSelect"
           />
@@ -767,6 +869,7 @@ defineOptions({ name: 'SmartScopeView' })
               :selection-mode="selectionMode"
               :selected="isSelected(book.id)"
               @select="handleSelect(book.id, $event)"
+              :allow-move-to-library="true"
               @action="handleBookAction(book, $event)"
             />
           </div>
@@ -786,6 +889,7 @@ defineOptions({ name: 'SmartScopeView' })
             :selected-count="selectedCount"
             :initialized="booksInitialized"
             @update:sort="tableSort = $event"
+            :allow-move-to-library="true"
             @action="handleBookAction"
             @select="handleSelect"
             @update:book="handleTableBookUpdate"

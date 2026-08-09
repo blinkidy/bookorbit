@@ -26,6 +26,7 @@ import BookQuickView from '@/features/book/components/BookQuickView.vue'
 import DeleteBookDialog from '@/features/book/components/DeleteBookDialog.vue'
 import { useDeleteBook } from '@/features/book/composables/useDeleteBook'
 import SeriesCompletionBar from '../components/SeriesCompletionBar.vue'
+import SeriesOwnershipBar from '../components/SeriesOwnershipBar.vue'
 import SeriesGapBanner from '../components/SeriesGapBanner.vue'
 import { fetchSeriesBooks } from '../api/series'
 import { groupSeriesBooksByMedia } from '../composables/useSeriesBookMediaGroups'
@@ -34,6 +35,7 @@ import { useCoverStack, MAX_VISIBLE as MAX_STACK_VISIBLE } from '../composables/
 import {
   PORTRAIT_STACK_FRAME_ASPECT_RATIO,
   centeredBottomScaleTransform,
+  centeredScaleShiftPercent,
   resolveCoverStackAspectRatio,
   resolveCoverStackDisplayMode,
   resolveCoverStackFrameAspectRatio,
@@ -123,7 +125,7 @@ const hiddenLeadGenres = computed(() => {
   const totalGenres = leadBook.value?.genres.length ?? 0
   return Math.max(0, totalGenres - displayedLeadGenres.value.length)
 })
-const SERIES_AUDIOBOOK_COVER_SCALE = 1.25
+const SERIES_SQUARE_COVER_SCALE = 1.25
 const GROUP_BY_MEDIA_STORAGE_KEY = 'bookorbit:series-detail:group-by-media'
 const seriesBooksCoverSize = computed(() => Math.max(125, portraitCoverSize.value - 20))
 const leadMetaItems = computed(() => {
@@ -135,7 +137,9 @@ const leadMetaItems = computed(() => {
   return items
 })
 
-type BookActionType = 'quick-view' | 'add-to-collection' | 'delete'
+// 'move-to-library' is part of the shared card contract; this view does not
+// opt in, so it never fires here.
+type BookActionType = 'quick-view' | 'add-to-collection' | 'move-to-library' | 'delete'
 
 function loadGroupByMediaPreference(): boolean {
   try {
@@ -249,11 +253,14 @@ const leadCoverDisplayModes = computed(() => visibleLeadCoverBookIds.value.map((
 const scaledLeadCoverStyles = computed(() =>
   leadCoverStyles.value.map((base, index) => {
     const ratio = leadCoverRatioAt(index)
-    const squareScale = resolveSquareCoverScale(ratio, SERIES_AUDIOBOOK_COVER_SCALE)
+    const squareScale = resolveSquareCoverScale(ratio, SERIES_SQUARE_COVER_SCALE)
     const squareTransform = centeredBottomScaleTransform(squareScale)
+    const centerShiftPercent = centeredScaleShiftPercent(squareScale)
     const baseForRatio = {
       ...base,
       aspectRatio: resolveCoverStackAspectRatio(ratio),
+      '--lead-cover-hover-translate-y': `calc(-12px - ${centerShiftPercent}%)`,
+      '--lead-cover-hover-scale': String(1.03 * squareScale),
     }
     if (!squareTransform) return baseForRatio
     return {
@@ -525,7 +532,7 @@ defineOptions({ name: 'SeriesDetailView' })
                 <div class="min-w-0">
                   <h1 class="text-xl font-bold text-foreground">{{ seriesInfo.name }}</h1>
                   <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                    <span>{{ t('series.detail.bookCount', { count: seriesInfo.bookCount }, seriesInfo.bookCount) }}</span>
+                    <span>{{ t('series.detail.bookCount', { count: seriesInfo.bookCount }) }}</span>
                     <span v-if="visibleSeriesAuthors.length > 0">
                       {{ t('series.detail.byAuthors', { authors: visibleSeriesAuthors.join(', ') }) }}
                       <span v-if="hiddenSeriesAuthorsCount > 0"> {{ t('series.detail.moreAuthors', { count: hiddenSeriesAuthorsCount }) }}</span>
@@ -544,12 +551,19 @@ defineOptions({ name: 'SeriesDetailView' })
                 </button>
               </div>
 
-              <SeriesCompletionBar :read-count="seriesInfo.readCount" :total-count="seriesInfo.bookCount" class="mt-3 max-w-xs" />
+              <div class="mt-3 grid max-w-md gap-3 sm:grid-cols-2">
+                <SeriesCompletionBar :read-count="seriesInfo.readCount" :total-count="seriesInfo.bookCount" />
+                <SeriesOwnershipBar
+                  v-if="seriesInfo.expectedBookCount !== null"
+                  :owned-count="seriesInfo.bookCount"
+                  :expected-count="seriesInfo.expectedBookCount"
+                />
+              </div>
               <SeriesGapBanner v-if="seriesInfo.possibleGaps.length > 0" :gaps="seriesInfo.possibleGaps" class="mt-3" />
 
               <div class="mt-4 border-t border-border/60 pt-4">
                 <div class="mb-2">
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/90">{{ t('series.detail.firstInSeries') }}</p>
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{{ t('series.detail.firstInSeries') }}</p>
                   <p v-if="leadBook" class="mt-1 text-base font-semibold leading-tight text-foreground">
                     {{ leadBook.title ?? t('series.detail.untitled') }}
                     <span v-if="leadBook.seriesIndex != null" class="text-muted-foreground">#{{ leadBook.seriesIndex }}</span>
@@ -568,14 +582,14 @@ defineOptions({ name: 'SeriesDetailView' })
                     <span
                       v-for="(genre, index) in displayedLeadGenres"
                       :key="`${genre}-${index}`"
-                      class="rounded-full border border-primary/40 px-2.5 py-0.5 text-xs text-primary/85"
+                      class="rounded-full border border-primary/40 px-2.5 py-0.5 text-xs text-primary"
                     >
                       {{ genre }}
                     </span>
                     <button
                       v-if="hiddenLeadGenres > 0"
                       type="button"
-                      class="whitespace-nowrap text-xs font-medium text-foreground/75 transition-colors hover:text-foreground"
+                      class="whitespace-nowrap text-xs font-medium text-foreground transition-colors hover:text-foreground"
                       @click="toggleLeadGenresExpanded"
                     >
                       {{ leadGenresExpanded ? t('series.detail.showLess') : t('series.detail.moreGenres', { count: hiddenLeadGenres }) }}
@@ -586,7 +600,7 @@ defineOptions({ name: 'SeriesDetailView' })
                     <p class="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{{ t('series.detail.synopsis') }}</p>
                     <div v-if="leadBook.description">
                       <div
-                        class="text-sm leading-relaxed text-foreground/85"
+                        class="text-sm leading-relaxed text-foreground"
                         :class="leadDescriptionExpanded ? '' : 'line-clamp-3'"
                         v-html="safeLeadDescription"
                       />
@@ -678,7 +692,7 @@ defineOptions({ name: 'SeriesDetailView' })
                   :books="group.books"
                   :cover-size="seriesBooksCoverSize"
                   :grid-gap="gridGap"
-                  :audio-cover-scale="SERIES_AUDIOBOOK_COVER_SCALE"
+                  :square-cover-scale="SERIES_SQUARE_COVER_SCALE"
                   :virtualized="false"
                   @action="handleBookAction"
                   @update:book="handleBookUpdate"
@@ -691,7 +705,7 @@ defineOptions({ name: 'SeriesDetailView' })
               :books="books"
               :cover-size="seriesBooksCoverSize"
               :grid-gap="gridGap"
-              :audio-cover-scale="SERIES_AUDIOBOOK_COVER_SCALE"
+              :square-cover-scale="SERIES_SQUARE_COVER_SCALE"
               :virtualized="false"
               @action="handleBookAction"
               @update:book="handleBookUpdate"
@@ -747,7 +761,8 @@ defineOptions({ name: 'SeriesDetailView' })
 }
 
 .series-cover-stack-item:hover {
-  transform: perspective(1000px) rotateY(0deg) translateY(-12px) translateZ(40px) scale(1.03) !important;
+  transform: perspective(1000px) rotateY(0deg) translateY(var(--lead-cover-hover-translate-y, -12px)) translateZ(40px)
+    scale(var(--lead-cover-hover-scale, 1.03)) !important;
   z-index: 50 !important;
   box-shadow:
     0 20px 25px -5px rgba(0, 0, 0, 0.4),

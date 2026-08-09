@@ -8,6 +8,7 @@ function makeBook(overrides: Partial<BookCard> = {}): BookCard {
   return {
     id: 1,
     status: 'present',
+    coverAspectRatio: '2/3',
     title: 'Book One',
     authors: ['Author A'],
     seriesName: null,
@@ -77,7 +78,7 @@ describe('BookTableCellDispatcher lock row', () => {
     const button = wrapper.get('button')
 
     expect(button.attributes('aria-label')).toBe('Lock all fields')
-    expect(button.classes()).toContain('text-muted-foreground/70')
+    expect(button.classes()).toContain('text-muted-foreground')
 
     await button.trigger('click')
     expect(wrapper.emitted('lockAll')).toBeTruthy()
@@ -115,7 +116,7 @@ describe('BookTableCellDispatcher lock row', () => {
     const button = wrapper.get('button')
 
     expect(button.attributes('aria-label')).toBe('Unlock all fields')
-    expect(button.classes()).toContain('text-primary/90')
+    expect(button.classes()).toContain('text-primary')
 
     await button.trigger('click')
     expect(wrapper.emitted('unlockAll')).toBeTruthy()
