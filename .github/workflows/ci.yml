@@ -222,7 +222,9 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          pnpm exec commitlint --config commitlint.config.cjs --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
+          while IFS= read -r commit_sha; do
+            git show -s --format=%B "$commit_sha" | pnpm exec commitlint --config commitlint.config.cjs --verbose
+          done < <(git rev-list --first-parent "$PR_BASE_SHA..$PR_HEAD_SHA")
 
   detect-changes:
     name: Detect Changed Paths

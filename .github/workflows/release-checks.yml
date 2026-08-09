@@ -54,7 +54,11 @@ jobs:
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: pnpm exec commitlint --config commitlint.config.cjs --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
+        run: |
+          set -euo pipefail
+          while IFS= read -r commit_sha; do
+            git show -s --format=%B "$commit_sha" | pnpm exec commitlint --config commitlint.config.cjs --verbose
+          done < <(git rev-list --first-parent "$PR_BASE_SHA..$PR_HEAD_SHA")
 
       - name: Validate referenced issues exist
         if: github.event.pull_request.user.login != 'dependabot[bot]' && vars.ENABLE_ISSUE_PR_CONVENTIONS == 'true'
