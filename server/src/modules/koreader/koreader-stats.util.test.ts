@@ -96,9 +96,22 @@ describe('deriveKoreaderSessions', () => {
     expect(sessions).toHaveLength(0);
   });
 
+  it('drops sessions without at least 0.1 percent forward progress', () => {
+    expect(deriveKoreaderSessions([event(1000, 60, 10, 100)], DEVICE_ID, FILE_ID)).toHaveLength(0);
+    expect(deriveKoreaderSessions([event(1000, 60, 10, 2000), event(1100, 60, 11, 2000)], DEVICE_ID, FILE_ID)).toHaveLength(0);
+    expect(deriveKoreaderSessions([event(1000, 60, 10, 100), event(1100, 60, 9, 100)], DEVICE_ID, FILE_ID)).toHaveLength(0);
+  });
+
+  it('keeps sessions with exactly 0.1 percent forward progress', () => {
+    const sessions = deriveKoreaderSessions([event(1000, 60, 10, 1000), event(1100, 60, 11, 1000)], DEVICE_ID, FILE_ID);
+
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.progressDelta).toBe(0.1);
+  });
+
   it('merges two sessions when a late gap-filling event arrives, keeping the earlier session id', () => {
     const early = [event(1000, 60, 10), event(2000, 60, 12)];
-    const late = [event(5000, 60, 20)];
+    const late = [event(5000, 60, 20), event(5100, 60, 21)];
 
     const before = deriveKoreaderSessions([...early, ...late], DEVICE_ID, FILE_ID);
     expect(before).toHaveLength(2);
@@ -108,7 +121,7 @@ describe('deriveKoreaderSessions', () => {
     const after = deriveKoreaderSessions([...early, ...late, filler], DEVICE_ID, FILE_ID);
     expect(after).toHaveLength(1);
     expect(after[0]!.sessionId).toBe(buildSessionId(DEVICE_ID, FILE_ID, 1000));
-    expect(after[0]!.durationSeconds).toBe(240);
+    expect(after[0]!.durationSeconds).toBe(300);
   });
 
   it('builds a prefix that scopes ids per device and file', () => {
