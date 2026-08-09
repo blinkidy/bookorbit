@@ -28,6 +28,7 @@ type SeriesDetailRow = {
   name: string;
   bookCount: number;
   readCount: number;
+  expectedBookCount: number | null;
   authors: string[];
   indices: number[];
 };
@@ -165,6 +166,20 @@ export class SeriesRepository {
     return { items, total, page: params.page, size: params.size };
   }
 
+  async countSeries(params: { libraryIds: number[]; contentFilters?: ContentFilterRules }): Promise<number> {
+    if (params.libraryIds.length === 0) return 0;
+
+    const filterClauses = params.contentFilters ? buildContentFilterClauses(params.contentFilters, this.db) : [];
+
+    const [row] = await this.db
+      .select({ total: sql<number>`count(distinct ${bookSeriesMemberships.seriesId})::int` })
+      .from(bookSeriesMemberships)
+      .innerJoin(books, eq(books.id, bookSeriesMemberships.bookId))
+      .where(and(this.buildLibraryFilter(params.libraryIds), ...filterClauses));
+
+    return Number(row?.total ?? 0);
+  }
+
   async findDetail(params: {
     seriesId: number;
     userId: number;
@@ -178,6 +193,7 @@ export class SeriesRepository {
       .select({
         id: bookSeries.id,
         name: bookSeries.name,
+        expectedBookCount: bookSeries.expectedBookCount,
         bookCount: sql<number>`count(distinct ${books.id})::int`,
         readCount: sql<number>`count(distinct CASE WHEN ${userBookStatus.status} = 'read' THEN ${books.id} END)::int`,
       })
@@ -187,7 +203,7 @@ export class SeriesRepository {
       .innerJoin(bookSeries, eq(bookSeries.id, bookSeriesMemberships.seriesId))
       .leftJoin(userBookStatus, and(eq(userBookStatus.bookId, books.id), eq(userBookStatus.userId, params.userId)))
       .where(and(eq(bookSeries.id, params.seriesId), libraryFilter, ...filterClauses))
-      .groupBy(bookSeries.id, bookSeries.name);
+      .groupBy(bookSeries.id, bookSeries.name, bookSeries.expectedBookCount);
 
     if (rows.length === 0) return null;
 
@@ -211,6 +227,7 @@ export class SeriesRepository {
       name: row.name,
       bookCount: row.bookCount,
       readCount: row.readCount,
+      expectedBookCount: row.expectedBookCount ?? null,
       authors: authorsMap.get(params.seriesId) ?? [],
       indices,
     };

@@ -19,8 +19,9 @@ local util = require("util")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
-local BookOrbitState = require("bookorbit_state")
+local BookOrbitStateManager = require("bookorbit_state_manager")
 local CatalogUtil = require("bookorbit_catalog_util")
+local Transfer = require("bookorbit_download_transfer")
 
 local formatBytes = CatalogUtil.formatBytes
 local safeFilenameBase = CatalogUtil.safeFilenameBase
@@ -36,6 +37,30 @@ local function sanitizeDevicePath(device_path)
     end
     if #segments == 0 then return nil end
     return table.concat(segments, "/")
+end
+
+local function joinDownloadPath(download_dir, relative_path)
+    return (download_dir ~= "/" and download_dir or "") .. "/" .. relative_path
+end
+
+local function resolveRelativeDownloadPath(download_dir, filename, filetype, device_path, filename_override)
+    local relative = sanitizeDevicePath(device_path)
+    if relative and not filename_override then return relative end
+
+    local parent = relative and relative:match("^(.*)/[^/]+$")
+    local safe_filename = util.getSafeFilename(filename .. "." .. string.lower(filetype or "bin"), download_dir)
+    return parent and parent ~= "" and parent .. "/" .. safe_filename or safe_filename
+end
+
+local function splitDownloadPreview(download_dir, relative_path, filetype)
+    local parent, filename = relative_path:match("^(.*)/([^/]+)$")
+    local folder = parent and parent ~= "" and joinDownloadPath(download_dir, parent) or download_dir
+    filename = filename or relative_path
+    local extension = "." .. string.lower(filetype or "bin")
+    if filename:sub(-#extension):lower() == extension then
+        filename = filename:sub(1, #filename - #extension)
+    end
+    return folder, filename
 end
 
 function CatalogDownload.install(Catalog)
@@ -88,17 +113,39 @@ function CatalogDownload.install(Catalog)
         return G_reader_settings:readSetting("download_dir") or G_reader_settings:readSetting("lastdir")
     end
 
-    function Catalog:getLocalDownloadPath(filename, filetype, device_path)
+    -- Single and bulk downloads share one destination, KOReader's own
+    -- download_dir, so the chooser is shared too rather than each dialog
+    -- keeping its own idea of where files land.
+    function Catalog:chooseDownloadDir(on_chosen)
+        require("ui/downloadmgr"):new{
+            onConfirm = function(path)
+                logger.dbg("BookOrbit: download folder set to", path)
+                if self._manager and self._manager.ui and self._manager.ui.folder_shortcuts
+                    and self._manager.ui.folder_shortcuts.updateShortcut then
+                    self._manager.ui.folder_shortcuts:updateShortcut("download_dir", path)
+                end
+                G_reader_settings:saveSetting("download_dir", path)
+                if on_chosen then
+                    UIManager:nextTick(function()
+                        on_chosen(path)
+                    end)
+                end
+            end,
+        }:chooseDir(self:getCurrentDownloadDir())
+    end
+
+    function Catalog:getLocalDownloadPath(filename, filetype, device_path, filename_override)
         local download_dir = self:getCurrentDownloadDir()
-        local relative = sanitizeDevicePath(device_path)
-        if relative then
-            local parent = relative:match("^(.*)/[^/]+$")
-            if parent and parent ~= "" then util.makePath(download_dir .. "/" .. parent) end
-            return (download_dir ~= "/" and download_dir or "") .. "/" .. relative
-        end
-        filename = filename .. "." .. string.lower(filetype or "bin")
-        filename = util.getSafeFilename(filename, download_dir)
-        return (download_dir ~= "/" and download_dir or "") .. "/" .. filename
+        local relative = resolveRelativeDownloadPath(download_dir, filename, filetype, device_path, filename_override)
+        local parent = relative:match("^(.*)/[^/]+$")
+        if parent and parent ~= "" then util.makePath(joinDownloadPath(download_dir, parent)) end
+        return joinDownloadPath(download_dir, relative)
+    end
+
+    function Catalog:getLocalDownloadPreview(filename, filetype, device_path, filename_override)
+        local download_dir = self:getCurrentDownloadDir()
+        local relative = resolveRelativeDownloadPath(download_dir, filename, filetype, device_path, filename_override)
+        return splitDownloadPreview(download_dir, relative, filetype)
     end
 
     function Catalog:downloadDefaultFile(detail, file)
@@ -141,9 +188,13 @@ function CatalogDownload.install(Catalog)
         UIManager:show(dialog)
     end
 
-    function Catalog:showDownloadDialog(detail, file)
-        local filename = safeFilenameBase(detail)
+    function Catalog:showDownloadDialog(detail, file, initial_filename_override)
+        local filename = initial_filename_override or safeFilenameBase(detail)
         local filetype = string.lower(file.format or "bin")
+        local filename_overridden = initial_filename_override ~= nil
+
+        local folder
+        folder, filename = self:getLocalDownloadPreview(filename, filetype, file.devicePath, filename_overridden)
 
         local function createTitle(path, name)
             return T(_("Download folder:\n%1\n\nDownload filename:\n%2\n\nDownload file type:\n%3"),
@@ -152,14 +203,14 @@ function CatalogDownload.install(Catalog)
 
         local dialog
         dialog = ButtonDialog:new{
-            title = createTitle(self:getCurrentDownloadDir(), filename),
+            title = createTitle(folder, filename),
             buttons = {
                 {
                     {
                         text = _("Download"),
                         callback = function()
                             UIManager:close(dialog)
-                            local local_path = self:getLocalDownloadPath(filename, filetype, file.devicePath)
+                            local local_path = self:getLocalDownloadPath(filename, filetype, file.devicePath, filename_overridden)
                             self:checkDownloadFile(local_path, detail, file)
                         end,
                     },
@@ -170,19 +221,9 @@ function CatalogDownload.install(Catalog)
                         text = _("Choose folder"),
                         callback = function()
                             UIManager:close(dialog)
-                            require("ui/downloadmgr"):new{
-                                onConfirm = function(path)
-                                    logger.dbg("BookOrbit: download folder set to", path)
-                                    if self._manager and self._manager.ui and self._manager.ui.folder_shortcuts
-                                        and self._manager.ui.folder_shortcuts.updateShortcut then
-                                        self._manager.ui.folder_shortcuts:updateShortcut("download_dir", path)
-                                    end
-                                    G_reader_settings:saveSetting("download_dir", path)
-                                    UIManager:nextTick(function()
-                                        self:showDownloadDialog(detail, file)
-                                    end)
-                                end,
-                            }:chooseDir(self:getCurrentDownloadDir())
+                            self:chooseDownloadDir(function()
+                                self:showDownloadDialog(detail, file, filename_overridden and filename or nil)
+                            end)
                         end,
                     },
                     {
@@ -206,9 +247,12 @@ function CatalogDownload.install(Catalog)
                                             is_enter_default = true,
                                             callback = function()
                                                 local value = util.trim(input_dialog:getInputText() or "")
-                                                if value ~= "" then filename = value end
+                                                if value ~= "" then
+                                                    filename_overridden = true
+                                                    folder, filename = self:getLocalDownloadPreview(value, filetype, file.devicePath, true)
+                                                end
                                                 UIManager:close(input_dialog)
-                                                dialog:setTitle(createTitle(self:getCurrentDownloadDir(), filename))
+                                                dialog:setTitle(createTitle(folder, filename))
                                             end,
                                         },
                                     },
@@ -242,55 +286,109 @@ function CatalogDownload.install(Catalog)
         end
     end
 
+    -- Cancelling bumps the generation. The child keeps running until its socket
+    -- work ends, but its result is discarded and its temporary file removed, so
+    -- a late completion can never publish over a cancelled download.
+    function Catalog:nextDownloadGeneration()
+        self.download_generation = (self.download_generation or 0) + 1
+        return self.download_generation
+    end
+
+    function Catalog:downloadProgressText(filename, received, total)
+        if total and total > 0 then
+            local pct = math.min(100, math.floor(received / total * 100))
+            return T(_("Downloading:\n%1\n\n%2"), filename, pct .. "%"), math.floor(pct / 5)
+        end
+        return T(_("Downloading:\n%1\n\n%2"), filename, formatBytes(received)),
+            math.floor(received / (256 * 1024))
+    end
+
     function Catalog:downloadFile(local_path, detail, file)
         local filename = local_path:match("[^/]+$") or safeFilenameBase(detail)
         local total = file.sizeBytes
-        local info = InfoMessage:new{ text = T(_("Downloading:\n%1"), filename) }
-        UIManager:show(info)
-        UIManager:forceRePaint()
+        local root = self:getCurrentDownloadDir()
+        local generation = self:nextDownloadGeneration()
+        Transfer.sweepStale(root)
 
-        local last_bucket = -1
-        local function on_progress(received)
-            local text, bucket
-            if total and total > 0 then
-                local pct = math.min(100, math.floor(received / total * 100))
-                bucket = math.floor(pct / 5)
-                if bucket == last_bucket then return end
-                text = T(_("Downloading:\n%1\n\n%2"), filename, pct .. "%")
+        local dialog
+        local function closeDialog()
+            if not dialog then return end
+            UIManager:close(dialog)
+            dialog = nil
+        end
+        local function showStatus(text)
+            if dialog then
+                dialog:setTitle(text)
             else
-                bucket = math.floor(received / (256 * 1024))
-                if bucket == last_bucket then return end
-                text = T(_("Downloading:\n%1\n\n%2"), filename, formatBytes(received))
+                dialog = ButtonDialog:new{
+                    title = text,
+                    buttons = {
+                        {
+                            {
+                                text = _("Cancel"),
+                                callback = function()
+                                    self:nextDownloadGeneration()
+                                    closeDialog()
+                                    UIManager:show(InfoMessage:new{ text = _("Download cancelled."), timeout = 2 })
+                                end,
+                            },
+                        },
+                    },
+                }
+                UIManager:show(dialog)
             end
-            last_bucket = bucket
-            UIManager:close(info)
-            info = InfoMessage:new{ text = text }
-            UIManager:show(info)
             UIManager:forceRePaint()
         end
 
-        local ok, err = self.client:downloadCatalogFile(file.id, local_path, on_progress)
-        UIManager:close(info)
-        if not ok then
-            self:showRetry(err, function()
-                self:downloadFile(local_path, detail, file)
-            end)
-            return
+        local last_bucket = -1
+        local function onProgress(received)
+            -- A poll that lands after cancellation must not resurrect the
+            -- dialog the user just dismissed.
+            if self.download_generation ~= generation then return end
+            local text, bucket = self:downloadProgressText(filename, received or 0, total)
+            if bucket == last_bucket then return end
+            last_bucket = bucket
+            showStatus(text)
         end
 
-        local linked = self:linkDownloadedFile(local_path)
-        if linked then
-            self:refreshOnDevice()
-            if self.markStackDirty then self:markStackDirty() end
-            local on_catalog_page = (self.bookMode and self:bookMode())
-                or (self.dashboardMode and self:dashboardMode())
-            if self.detailMode and self:detailMode() then
-                self:refreshDetailView()
-            elseif self.updateItems and on_catalog_page then
-                self:updateItems()
+        showStatus(T(_("Downloading:\n%1"), filename))
+        self:runOffThread(function()
+            local ok, err = Transfer.run{
+                root = root,
+                destination = local_path,
+                generation = generation,
+                expected_bytes = total,
+                on_progress = onProgress,
+                is_current = function()
+                    return self.download_generation == generation
+                end,
+                perform = function(download_opts)
+                    return self.client:downloadCatalogFile(file.id, local_path, download_opts)
+                end,
+            }
+            closeDialog()
+            if not ok then
+                if err == "cancelled" then return end
+                self:showRetry(err, function()
+                    self:downloadFile(local_path, detail, file)
+                end)
+                return
             end
-        end
-        self:showDownloadedDialog(local_path, linked)
+
+            local linked = self:linkDownloadedFile(local_path)
+            if linked then
+                self:refreshOnDevice()
+                if self.markStackDirty then self:markStackDirty() end
+                local on_catalog_page = (self.bookMode and self:bookMode())
+                    or (self.dashboardMode and self:dashboardMode())
+                if self.detailMode and self:detailMode() then
+                    self:refreshDetailView()
+                elseif self.updateItems and on_catalog_page then
+                    self:updateItems()
+                end
+            end
+            self:showDownloadedDialog(local_path, linked)
+        end)
     end
 
     function Catalog:linkDownloadedFile(local_path)
@@ -305,18 +403,24 @@ function CatalogDownload.install(Catalog)
             logger.warn("BookOrbit: downloaded file match-check failed", err)
             return false
         end
+        BookOrbitStateManager.applyLibraryVersion(body.libraryVersion)
 
-        local state = BookOrbitState.open()
-        state:rememberFile(local_path, digest)
         for _, match in ipairs(body.matches or {}) do
             if match.hash == digest then
-                state:setMatched(digest, match.bookFileId, match.bookId, local_path)
-                state:flush()
+                -- Patches the cached on-device maps forward instead of forcing
+                -- a full matched-library rescan per downloaded file.
+                BookOrbitStateManager.linkFile(digest, match.bookFileId, match.bookId, local_path)
                 return true
             end
         end
-        state:setUnmatched(digest)
-        state:flush()
+        BookOrbitStateManager.mutateScoped({
+            digests = { digest },
+            files = { local_path },
+            global = false,
+        }, function(state)
+            state:rememberFile(local_path, digest)
+            state:setUnmatched(digest)
+        end)
         return false
     end
 

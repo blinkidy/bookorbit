@@ -34,6 +34,7 @@ function makeBook(overrides: Partial<BookCard> = {}): BookCard {
   return {
     id: 1,
     status: 'present',
+    coverAspectRatio: '2/3',
     title: 'Dune',
     authors: [],
     seriesName: null,
@@ -110,6 +111,7 @@ describe('tableColumnSchema', () => {
     const book = {
       id: 1,
       status: 'present',
+      coverAspectRatio: '2/3',
       title: 'Dune',
       authors: ['Frank Herbert'],
       seriesName: null,
@@ -362,8 +364,8 @@ describe('buildCustomColumnDef', () => {
     expect(buildCustomColumnDef(makeField()).lockField).toBeUndefined()
   })
 
-  it('has no sortField', () => {
-    expect(buildCustomColumnDef(makeField()).sortField).toBeNull()
+  it('sorts by the custom field reference', () => {
+    expect(buildCustomColumnDef(makeField({ id: 42 })).sortField).toBe('custom:42')
   })
 
   it('accessor returns the value from book.customMetadata for the matching fieldId', () => {

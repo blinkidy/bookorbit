@@ -107,6 +107,7 @@ function makeBook(overrides: Partial<BookCard> = {}): BookCard {
   return {
     id: 1,
     status: 'present',
+    coverAspectRatio: '2/3',
     title: 'Series Book',
     authors: ['Author'],
     seriesId: 42,
@@ -137,7 +138,7 @@ function makeBook(overrides: Partial<BookCard> = {}): BookCard {
   }
 }
 
-function makeSeriesInfo(): SeriesDetail {
+function makeSeriesInfo(overrides: Partial<SeriesDetail> = {}): SeriesDetail {
   return {
     id: 42,
     name: 'The Series',
@@ -145,6 +146,8 @@ function makeSeriesInfo(): SeriesDetail {
     readCount: 0,
     authors: ['Author'],
     possibleGaps: [],
+    expectedBookCount: null,
+    ...overrides,
   }
 }
 
@@ -304,6 +307,27 @@ describe('SeriesDetailView', () => {
     expect(wrapper.get('[data-testid="series-books-section-heading"]').text()).toBe('Books')
   })
 
+  it('shows the ownership bar only once a provider has supplied a series total', async () => {
+    mocks.seriesInfo = ref(makeSeriesInfo({ bookCount: 4, expectedBookCount: 7 }))
+
+    const wrapper = mountView()
+    await nextTick()
+
+    const bar = wrapper.get('[role="progressbar"]')
+    expect(bar.attributes('aria-valuenow')).toBe('4')
+    expect(bar.attributes('aria-valuemax')).toBe('7')
+    expect(wrapper.text()).toContain('4 of 7')
+  })
+
+  it('hides the ownership bar when no provider total is known', async () => {
+    mocks.seriesInfo = ref(makeSeriesInfo({ bookCount: 4, expectedBookCount: null }))
+
+    const wrapper = mountView()
+    await nextTick()
+
+    expect(wrapper.find('[role="progressbar"]').exists()).toBe(false)
+  })
+
   it('shows grouped media sections with labels and counts when enabled', async () => {
     localStorage.setItem(GROUP_BY_MEDIA_STORAGE_KEY, 'true')
     mocks.items = ref([
@@ -446,6 +470,8 @@ describe('SeriesDetailView', () => {
     expect(style).toContain('transform-origin: center bottom')
     expect(style).toContain('translateY(-12.5%)')
     expect(style).toContain('aspect-ratio: 1 / 1')
+    expect(style).toContain('--lead-cover-hover-translate-y: calc(-12px - 12.5%)')
+    expect(style).toContain('--lead-cover-hover-scale: 1.2875')
     expect(wrapper.get('[data-testid="lead-cover-artwork"]').attributes('data-mode')).toBe('natural-bottom')
     expect(wrapper.get('[data-testid="lead-cover-artwork"]').attributes('data-frame-aspect-ratio')).toBe('1/1')
 

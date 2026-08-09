@@ -1,6 +1,10 @@
 export type OrganizationMode = "book_per_file" | "book_per_folder";
 export type CoverAspectRatio = "2/3" | "1/1";
 
+export function normalizeCoverAspectRatio(value: unknown): CoverAspectRatio {
+  return value === "1/1" ? "1/1" : "2/3";
+}
+
 export const DEFAULT_FORMAT_PRIORITY = [
   "epub",
   "kepub",
@@ -66,10 +70,14 @@ export interface Library {
   fileWriteWriteCover: boolean;
   fileWriteEpubEnabled: boolean;
   fileWriteEpubMaxFileSizeMb: number;
+  fileWriteFb2Enabled: boolean;
+  fileWriteFb2MaxFileSizeMb: number;
   fileWritePdfEnabled: boolean;
   fileWritePdfMaxFileSizeMb: number;
   fileWriteCbxEnabled: boolean;
   fileWriteCbxMaxFileSizeMb: number;
+  fileWriteKindleEnabled: boolean;
+  fileWriteKindleMaxFileSizeMb: number;
   fileWriteAudioEnabled: boolean;
   fileWriteAudioMaxFileSizeMb: number;
   fileRenameEnabled: boolean;

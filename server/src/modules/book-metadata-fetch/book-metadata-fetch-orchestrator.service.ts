@@ -221,6 +221,8 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
         title: meta?.title ?? undefined,
         author: authorRows[0]?.name ?? undefined,
         isbn: meta?.isbn13 ?? meta?.isbn10 ?? undefined,
+        seriesName: meta?.seriesName ?? undefined,
+        seriesIndex: meta?.seriesIndex ?? undefined,
         existingProviderIds: this.collectProviderIds(meta ?? {}),
         isAudiobook: (meta?.durationSeconds !== null && meta?.durationSeconds !== undefined) || !!meta?.audibleId || !!meta?.librofmId,
         maxCandidatesPerProvider: 1,
@@ -257,13 +259,7 @@ export class BookMetadataFetchOrchestratorService implements OnApplicationBootst
 
       await this.persistResolved(bookId, resolved, providerIds, authorRows, genreRows, narratorRows);
 
-      this.scoreService
-        .calculateAndSave(bookId)
-        .catch((err: Error) =>
-          this.logger.warn(
-            `[book.metadata_fetch.score_recalc] [fail] bookId=${bookId} errorClass=${err.name} error="${sanitizeLogValue(err.message)}" - metadata score recalculation failed`,
-          ),
-        );
+      await this.scoreService.calculateAndSave(bookId);
 
       this.logger.debug(`[book.metadata_fetch] [end] bookId=${bookId} durationMs=${Date.now() - startedAt} - metadata fetch completed`);
       await this.queueRepo.markDone(bookId);

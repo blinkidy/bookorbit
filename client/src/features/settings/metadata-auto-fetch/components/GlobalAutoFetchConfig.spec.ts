@@ -11,6 +11,7 @@ const mockStatus = ref<BookMetadataFetchStatusEvent>({
   queued: 0,
   processing: 0,
   failed: 0,
+  latestFailureAt: null,
   paused: false,
   sessionTotal: 0,
   sessionDone: 0,
@@ -67,7 +68,7 @@ function makeConfig(overrides: Partial<BookMetadataFetchConfig> = {}): BookMetad
 }
 
 function idleStatus(): BookMetadataFetchStatusEvent {
-  return { queued: 0, processing: 0, failed: 0, paused: false, sessionTotal: 0, sessionDone: 0, currentItemName: null }
+  return { queued: 0, processing: 0, failed: 0, latestFailureAt: null, paused: false, sessionTotal: 0, sessionDone: 0, currentItemName: null }
 }
 
 describe('GlobalAutoFetchConfig', () => {
@@ -157,7 +158,7 @@ describe('GlobalAutoFetchConfig', () => {
     await wrapper.find('button.settings-btn-outline').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.hidden.md\\:flex span').text()).toBe('Queued 2048 books')
+    expect(wrapper.find('.hidden.md\\:flex span').text()).toBe('Queued 2,048 books')
   })
 
   it('shows "No eligible books found" when trigger returns 0', async () => {

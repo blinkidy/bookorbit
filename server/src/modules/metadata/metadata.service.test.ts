@@ -86,7 +86,9 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { Logger } from '@nestjs/common';
 
 import { authors, bookAuthors, bookGenres, bookMetadata, books, bookTags, genres, tags } from '../../db/schema';
+import { extractCbzMetadata, type ParsedCbzMetadata } from './lib/cbz-metadata';
 import { generateThumbnail, imageExt } from './lib/cover';
+import { extractCbzCover } from './lib/cover-cbz';
 import { extractEpubCover } from './lib/cover-epub';
 import { extractEpubMetadata } from './lib/epub';
 import { parseBookFilename } from './lib/filename-parser';
@@ -109,6 +111,8 @@ const mockParseMobiFile = parseMobiFile as MockedFunction<typeof parseMobiFile>;
 const mockParsePdfFile = parsePdfFile as MockedFunction<typeof parsePdfFile>;
 const mockExtractEpubCover = extractEpubCover as MockedFunction<typeof extractEpubCover>;
 const mockExtractEpubMetadata = extractEpubMetadata as MockedFunction<typeof extractEpubMetadata>;
+const mockExtractCbzMetadata = extractCbzMetadata as MockedFunction<typeof extractCbzMetadata>;
+const mockExtractCbzCover = extractCbzCover as MockedFunction<typeof extractCbzCover>;
 const mockExtractAudioMetadata = extractAudioMetadata as MockedFunction<typeof extractAudioMetadata>;
 const mockParseAudioDuration = parseAudioDuration as MockedFunction<typeof parseAudioDuration>;
 
@@ -176,6 +180,8 @@ describe('MetadataService', () => {
     mockParseBookFilename.mockReturnValue({ title: 'Fallback Title', publishedYear: 2001 });
     mockParseMobiFile.mockResolvedValue(null);
     mockParsePdfFile.mockResolvedValue(null);
+    mockExtractCbzMetadata.mockResolvedValue(null);
+    mockExtractCbzCover.mockResolvedValue(null);
     mockExtractEpubMetadata.mockResolvedValue(null);
     mockExtractEpubCover.mockResolvedValue(null);
     mockExtractAudioMetadata.mockResolvedValue({
@@ -210,6 +216,7 @@ describe('MetadataService', () => {
         filterAutomatedBookUpdate: ReturnType<typeof vi.fn>;
       };
       embedder?: { embedBook: ReturnType<typeof vi.fn> } | null;
+      seriesExpectedCount?: { record: ReturnType<typeof vi.fn> };
     },
   ) {
     return new MetadataService(
@@ -225,6 +232,9 @@ describe('MetadataService', () => {
       }) as never,
       (overrides?.embedder ?? embedder) as never,
       metadataEvents as never,
+      undefined,
+      undefined,
+      overrides?.seriesExpectedCount as never,
     );
   }
 
@@ -452,7 +462,7 @@ describe('MetadataService', () => {
     await expect(service.extractAndSave(15, '/books/a.pdf', 'pdf')).rejects.toThrow('bad metadata');
   });
 
-  it('extractAndSave logs warning when score calculation or embedding fails', async () => {
+  it('extractAndSave propagates score calculation failures after persisting metadata', async () => {
     const { db } = makeDb();
     const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const scoreService = {
@@ -492,12 +502,12 @@ describe('MetadataService', () => {
       coverBuffer: null,
     });
 
-    await service.extractAndSave(44, '/tmp/warn-book.pdf', 'pdf');
+    await expect(service.extractAndSave(44, '/tmp/warn-book.pdf', 'pdf')).rejects.toThrow('score failed');
     await Promise.resolve();
 
     expect(scoreService.calculateAndSave).toHaveBeenCalledWith(44);
     expect(failingEmbedder.embedBook).toHaveBeenCalledWith(44);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[metadata.score_calculation] [fail]'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[metadata.extract_and_save] [fail]'));
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[metadata.embedding] [fail]'));
   });
 
@@ -618,6 +628,126 @@ describe('MetadataService', () => {
     expect(replaceGenresSpy).toHaveBeenCalledWith(22, ['Fantasy']);
     expect(replaceTagsSpy).toHaveBeenCalledWith(22, ['Shelf']);
     expect(embedder.embedBook).toHaveBeenCalledWith(22);
+  });
+
+  it('extractAndSave(cbz) persists comicvineId parsed from the embedded ComicInfo.xml', async () => {
+    const { db, updateSet } = makeDb();
+    const service = makeService(db);
+    vi.spyOn(service, 'replaceAuthors').mockResolvedValue(undefined);
+    vi.spyOn(service, 'replaceGenres').mockResolvedValue(undefined);
+
+    mockExtractCbzMetadata.mockResolvedValue({
+      title: 'Amazing Series',
+      subtitle: null,
+      seriesName: 'Amazing Series',
+      seriesIndex: 1,
+      seriesTotalBooks: null,
+      description: null,
+      publisher: null,
+      publishedDate: null,
+      publishedYear: null,
+      language: null,
+      pageCount: null,
+      rating: null,
+      isbn10: null,
+      isbn13: null,
+      authors: [],
+      genres: [],
+      tags: [],
+      googleBooksId: null,
+      goodreadsId: null,
+      amazonId: null,
+      hardcoverId: null,
+      hardcoverEditionId: null,
+      openLibraryId: null,
+      ranobedbId: null,
+      koboId: null,
+      comicvineId: '140529',
+      lubimyczytacId: null,
+      aladinId: null,
+      itunesId: null,
+      comicMetadata: null,
+    });
+
+    await service.extractAndSave(23, '/tmp/book.cbz', 'cbz');
+
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comicvineId: '140529',
+      }),
+    );
+  });
+
+  describe('extractAndSave(cbz) series length from ComicInfo Count', () => {
+    function comicMetadata(overrides: Partial<ParsedCbzMetadata> = {}): ParsedCbzMetadata {
+      return {
+        title: 'Amazing Series',
+        subtitle: null,
+        seriesName: 'Amazing Series',
+        seriesIndex: 1,
+        seriesTotalBooks: null,
+        description: null,
+        publisher: null,
+        publishedDate: null,
+        publishedYear: null,
+        language: null,
+        pageCount: null,
+        rating: null,
+        isbn10: null,
+        isbn13: null,
+        authors: [],
+        genres: [],
+        tags: [],
+        googleBooksId: null,
+        goodreadsId: null,
+        amazonId: null,
+        hardcoverId: null,
+        hardcoverEditionId: null,
+        openLibraryId: null,
+        ranobedbId: null,
+        koboId: null,
+        comicvineId: null,
+        lubimyczytacId: null,
+        aladinId: null,
+        itunesId: null,
+        comicMetadata: null,
+        ...overrides,
+      };
+    }
+
+    async function scanWith(metadata: ParsedCbzMetadata) {
+      const { db } = makeDb();
+      const seriesExpectedCount = { record: vi.fn().mockResolvedValue(1) };
+      const service = makeService(db, undefined, { seriesExpectedCount });
+      vi.spyOn(service, 'replaceAuthors').mockResolvedValue(undefined);
+      vi.spyOn(service, 'replaceGenres').mockResolvedValue(undefined);
+      mockExtractCbzMetadata.mockResolvedValue(metadata);
+
+      await service.extractAndSave(24, '/tmp/book.cbz', 'cbz');
+      return seriesExpectedCount;
+    }
+
+    it('records the series length the file declared', async () => {
+      const seriesExpectedCount = await scanWith(comicMetadata({ seriesTotalBooks: 12 }));
+
+      expect(seriesExpectedCount.record).toHaveBeenCalledWith('Amazing Series', 12);
+    });
+
+    it('passes the absent length through so no series is annotated', async () => {
+      const seriesExpectedCount = await scanWith(comicMetadata({ seriesTotalBooks: null }));
+
+      expect(seriesExpectedCount.record).toHaveBeenCalledWith('Amazing Series', null);
+    });
+
+    it('scans without error when the expected-count service is not provided', async () => {
+      const { db } = makeDb();
+      const service = makeService(db);
+      vi.spyOn(service, 'replaceAuthors').mockResolvedValue(undefined);
+      vi.spyOn(service, 'replaceGenres').mockResolvedValue(undefined);
+      mockExtractCbzMetadata.mockResolvedValue(comicMetadata({ seriesTotalBooks: 12 }));
+
+      await expect(service.extractAndSave(25, '/tmp/book.cbz', 'cbz')).resolves.toBeUndefined();
+    });
   });
 
   it('extractAndSave(mobi) ignores malformed publishedDate values from providers', async () => {

@@ -45,11 +45,13 @@ import { SaveProgressDto } from './dto/save-progress.dto';
 import { UpsertAudioProgressDto } from './dto/upsert-audio-progress.dto';
 import { UpdateBookMetadataAndLocksDto } from './dto/update-book-metadata-and-locks.dto';
 import { UpdateBookMetadataDto } from './dto/update-book-metadata.dto';
+import { UpdateBookAddedAtDto } from './dto/update-book-added-at.dto';
 import { UpdatePersonalNoteDto } from './dto/update-personal-note.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
 import { UpdateBookFileDto } from './dto/update-book-file.dto';
 import { SetStatusDto } from '../user-book-status/dto/set-status.dto';
 import { Permission, AuditAction, AuditResource } from '@bookorbit/types';
+import type { BookDeletionAuditMeta } from '@bookorbit/types';
 import type { BookQuery } from '@bookorbit/types';
 import { UpdateBookMetadataLocksDto } from '../book-metadata-lock/dto/update-book-metadata-locks.dto';
 
@@ -108,9 +110,25 @@ export class BookController {
   @Auditable({
     action: AuditAction.BookBulkDelete,
     resource: AuditResource.Book,
-    description: (req) => {
-      const count = (req.body as { bookIds?: number[] })?.bookIds?.length ?? 0;
-      return `Deleted ${count} book${count !== 1 ? 's' : ''}`;
+    getResourceId: (_req, responseBody) => {
+      const result = responseBody as BookDeletionAuditMeta;
+      return result.total === 1 ? result.books[0]?.id : undefined;
+    },
+    getMeta: (_req, responseBody) => {
+      const result = responseBody as BookDeletionAuditMeta;
+      return {
+        total: result.total,
+        books: result.books,
+        omitted: result.omitted,
+      };
+    },
+    description: (_req, responseBody) => {
+      const result = responseBody as BookDeletionAuditMeta;
+      if (result.total === 1) {
+        const book = result.books[0];
+        return book?.title ? `Deleted "${book.title}" (#${book.id})` : `Deleted book #${book?.id ?? 'unknown'}`;
+      }
+      return `Deleted ${result.total} books`;
     },
   })
   async deleteBooks(@Body() dto: DeleteBooksDto, @CurrentUser() user: RequestUser) {
@@ -509,6 +527,18 @@ export class BookController {
     const sync = shouldSyncFileWrite(syncFileWrite);
     const result = await this.bookService.updateMetadata(id, dto, user, { postSaveMode: sync ? 'sync' : 'schedule' });
     return sync ? result : result.book;
+  }
+
+  @Patch(':id/added-at')
+  @RequirePermission(Permission.LibraryEditMetadata)
+  @Auditable({
+    action: AuditAction.BookMetadataUpdate,
+    resource: AuditResource.Book,
+    getResourceId: (req) => parseInt(req.params['id'] as string, 10),
+    description: (req) => `Updated added date for book #${req.params['id']}`,
+  })
+  updateAddedAt(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateBookAddedAtDto, @CurrentUser() user: RequestUser) {
+    return this.bookService.updateAddedAt(id, dto, user);
   }
 
   @Patch(':id/metadata-and-locks')

@@ -70,8 +70,8 @@
         "empty": "Geen beheerder heeft je gedeelde leesprofiel bekeken.",
         "paginationLabel": "Pagina's met profieltoegangsgeschiedenis"
       },
-      "durationMinutes": "{count} minuut | {count} minuten",
-      "durationHours": "{count} uur",
+      "durationMinutes": "{count, plural, one {# minuut} other {# minuten}}",
+      "durationHours": "{count, plural, one {# uur} other {# uur}}",
       "unknownTitle": "Boek zonder titel",
       "errors": {
         "load": "Deelinstellingen konden niet worden geladen.",
@@ -92,14 +92,17 @@
       "mobileSummary": "Thema: {theme} • Accent: {accent} • Achtergrond: {background}",
       "themeMode": {
         "light": "Licht",
-        "dark": "Donker",
-        "system": "System"
+        "dark": "Donker"
       },
       "theme": {
         "title": "Thema",
         "colorScheme": {
           "label": "Kleurenschema",
           "hint": "Lichte of donkere interface"
+        },
+        "accents": {
+          "iris": "Iris",
+          "purple": "Paars"
         },
         "accentColor": {
           "label": "Accentkleur",
@@ -335,13 +338,13 @@
       "icons": {
         "title": "Aangepaste pictogrammen",
         "uploadIcons": "Pictogrammen uploaden",
-        "uploadedCount": "geen pictogrammen geüpload | {count} pictogram geüpload | {count} pictogrammen geüpload",
+        "uploadedCount": "{count, plural, =0 {geen pictogrammen geüpload} one {# pictogram geüpload} other {# pictogrammen geüpload}}",
         "searchPlaceholder": "Pictogrammen zoeken",
         "sort": {
           "newest": "Nieuwste",
           "name": "Naam"
         },
-        "selectedCount": "{count} geselecteerd",
+        "selectedCount": "{count, plural, one {# geselecteerd} other {# geselecteerd}}",
         "clear": "Wissen",
         "deleteSelected": "Selectie verwijderen",
         "loading": "Pictogrammen laden...",
@@ -354,19 +357,19 @@
         "rename": "Hernoemen",
         "replace": "Vervangen",
         "usage": {
-          "libraries": "geen bibliotheken | {count} bibliotheek | {count} bibliotheken",
-          "collections": "geen collecties | {count} collectie | {count} collecties",
-          "smartScopes": "geen smart scopes | {count} smart scope | {count} smart scopes"
+          "libraries": "{count, plural, =0 {geen bibliotheken} one {# bibliotheek} other {# bibliotheken}}",
+          "collections": "{count, plural, =0 {geen collecties} one {# collectie} other {# collecties}}",
+          "smartScopes": "{count, plural, =0 {geen smart scopes} one {# smart scope} other {# smart scopes}}"
         },
         "confirm": {
           "deleteOne": "\"{name}\" verwijderen? Bestaand gebruik valt terug op het standaardpictogram.",
-          "deleteMany": "Geen pictogrammen verwijderen? | {count} pictogram verwijderen? Bestaand gebruik valt terug op het standaardpictogram. | {count} pictogrammen verwijderen? Bestaand gebruik valt terug op het standaardpictogram."
+          "deleteMany": "{count, plural, =0 {Geen pictogrammen verwijderen?} one {# pictogram verwijderen? Bestaand gebruik valt terug op het standaardpictogram.} other {# pictogrammen verwijderen? Bestaand gebruik valt terug op het standaardpictogram.}}"
         },
         "toasts": {
           "saved": "Pictogram opgeslagen",
           "updated": "Pictogram bijgewerkt",
           "deleted": "Pictogram verwijderd",
-          "bulkDeleted": "Geen pictogrammen verwijderd | {count} pictogram verwijderd | {count} pictogrammen verwijderd",
+          "bulkDeleted": "{count, plural, =0 {Geen pictogrammen verwijderd} one {# pictogram verwijderd} other {# pictogrammen verwijderd}}",
           "bulkDeletePartial": "{deleted} verwijderd, {failed} mislukt"
         },
         "errors": {
@@ -400,8 +403,7 @@
         "notice": "Demo-beperkt account: het bewerken van profiel, wachtwoord, avatar en gekoppelde identiteiten is uitgeschakeld."
       },
       "feedback": {
-        "unsavedChanges": "Niet-opgeslagen wijzigingen",
-        "allSaved": "Alle wijzigingen opgeslagen"
+        "unsavedChanges": "Niet-opgeslagen wijzigingen"
       },
       "profile": {
         "securityHeading": "Profiel & Beveiliging",
@@ -516,7 +518,7 @@
       "expiresOn": "Verloopt {date}",
       "revokedOn": "Ingetrokken {date}",
       "expiredOn": "Verlopen {date}",
-      "usesCount": "geen keer gebruikt | een keer gebruikt | {count} keer gebruikt",
+      "usesCount": "{count, plural, =0 {geen keer gebruikt} one {een keer gebruikt} other {# keer gebruikt}}",
       "copied": "Gekopieerd!",
       "copyLink": "Link kopieren",
       "pause": "Pauzeren",
@@ -530,7 +532,6 @@
         "createdBy": "Gemaakt door",
         "expires": "Verloopt",
         "uses": "Gebruik",
-        "lastUsed": "Laatst gebruikt",
         "created": "Gemaakt",
         "status": "Status",
         "totalUses": "Totaal gebruik"
@@ -689,7 +690,7 @@
         "viewDetails": "Details bekijken",
         "refreshRecommendationIndex": "Aanbevelingsindex vernieuwen",
         "refreshRecommendationHint": "Werk de aanbevelingsengine bij met je laatste bibliotheekwijzigingen. Dit proces draait op de achtergrond.",
-        "booksQueuedForProcessing": "geen boeken in de wachtrij voor verwerking | {count} boek in de wachtrij voor verwerking | {count} boeken in de wachtrij voor verwerking",
+        "booksQueuedForProcessing": "{count, plural, =0 {geen boeken in de wachtrij voor verwerking} one {# boek in de wachtrij voor verwerking} other {# boeken in de wachtrij voor verwerking}}",
         "run": "Uitvoeren",
         "running": "Bezig...",
         "backfillAchievements": "Prestaties aanvullen",
@@ -701,7 +702,7 @@
         "updateChecksEnabled": "Updatecontroles ingeschakeld",
         "updateChecksDisabled": "Updatecontroles uitgeschakeld",
         "updateSettingFailed": "Instelling bijwerken mislukt",
-        "booksQueuedForEmbedding": "geen boeken in de wachtrij voor embedding | {count} boek in de wachtrij voor embedding | {count} boeken in de wachtrij voor embedding",
+        "booksQueuedForEmbedding": "{count, plural, =0 {geen boeken in de wachtrij voor embedding} one {# boek in de wachtrij voor embedding} other {# boeken in de wachtrij voor embedding}}",
         "failed": "Mislukt",
         "unknownError": "Onbekende fout",
         "rebuildEmbeddingsFailed": "Opnieuw opbouwen van embeddings mislukt: {error}",
@@ -881,7 +882,7 @@
         "ofCount": "van {count}",
         "targetBookNum": "Doelboek #{id}",
         "recommended": "Aanbevolen",
-        "resolveDuplicatesButton": "{count} duplicaat oplossen | {count} duplicaat oplossen | {count} duplicaten oplossen",
+        "resolveDuplicatesButton": "{count, plural, =0 {# duplicaat oplossen} one {# duplicaat oplossen} other {# duplicaten oplossen}}",
         "preflightChecks": "Preflight-controles",
         "allChecksPassed": "Alle controles geslaagd - klaar om te migreren",
         "checkSourceValidated": "Bron gevalideerd",
@@ -957,11 +958,11 @@
         "refreshCovers": "Omslagen vernieuwen",
         "syncMetadataToFiles": "Metadata naar bestanden synchroniseren",
         "deleteLibrary": "Bibliotheek verwijderen",
-        "bookCount": "geen boeken | {count} boek | {count} boeken",
+        "bookCount": "{count, plural, =0 {geen boeken} one {# boek} other {# boeken}}",
         "addedDate": "Toegevoegd {date}",
         "fileMode": "Bestandsmodus",
         "folderMode": "Mapmodus",
-        "folderCount": "geen mappen | {count} map | {count} mappen",
+        "folderCount": "{count, plural, =0 {geen mappen} one {# map} other {# mappen}}",
         "watching": "Bewaken",
         "fileWrite": "Bestand schrijven",
         "fileRename": "Bestand hernoemen",
@@ -984,7 +985,7 @@
         "scanStartFailed": "Scan starten mislukt voor \"{name}\"",
         "refreshCoversFailed": "Omslagen vernieuwen mislukt voor \"{name}\"",
         "scanStartedAll": "Scan gestart voor alle bibliotheken",
-        "librariesFailedToStart": "geen bibliotheken konden worden gestart | {count} bibliotheek kon niet worden gestart | {count} bibliotheken konden niet worden gestart",
+        "librariesFailedToStart": "{count, plural, =0 {geen bibliotheken konden worden gestart} one {# bibliotheek kon niet worden gestart} other {# bibliotheken konden niet worden gestart}}",
         "scansStartFailed": "Scans starten mislukt",
         "libraryCreated": "Bibliotheek \"{name}\" aangemaakt",
         "libraryUpdated": "Bibliotheek \"{name}\" bijgewerkt",
@@ -1123,7 +1124,7 @@
           "eligible": "~{count} in aanmerking"
         },
         "trigger": {
-          "queued": "{count} boek in wachtrij geplaatst | {count} boeken in wachtrij geplaatst",
+          "queued": "{count, plural, one {# boek in wachtrij geplaatst} other {# boeken in wachtrij geplaatst}}",
           "noneFound": "Geen in aanmerking komende boeken gevonden"
         },
         "lastRun": {
@@ -1131,7 +1132,7 @@
           "minutesAgo": "{count}m geleden",
           "hoursAgo": "{count}u geleden",
           "yesterday": "gisteren",
-          "daysAgo": "{count} dagen geleden",
+          "daysAgo": "{count, plural, one {# dag geleden} other {# dagen geleden}}",
           "label": "Laatste uitvoering: {when}",
           "labelQueued": "Laatste uitvoering: {when} - {count} boeken in wachtrij geplaatst",
           "labelNoneEligible": "Laatste uitvoering: {when} - geen in aanmerking komende boeken"
@@ -1154,7 +1155,7 @@
           "missingFields": {
             "label": "Ontbrekende velden",
             "hint": "Ophalen als een van de geselecteerde velden leeg is.",
-            "summary": "{count} veld ontbreekt | {count} velden ontbreken"
+            "summary": "{count, plural, one {# veld ontbreekt} other {# velden ontbreken}}"
           }
         },
         "library": {
@@ -1258,7 +1259,7 @@
         },
         "library": {
           "primary": "Primair:",
-          "overrideCount": "{count} overschrijving | {count} overschrijvingen",
+          "overrideCount": "{count, plural, one {# overschrijving} other {# overschrijvingen}}",
           "unsavedSuffix": "(niet opgeslagen)",
           "unsavedChanges": "Niet-opgeslagen wijzigingen",
           "globalDefaults": "Globale standaardinstellingen",
@@ -1318,7 +1319,7 @@
         "duplicate": "Dit genre is al geblokkeerd.",
         "add": "Toevoegen",
         "filterPlaceholder": "Blokkeerlijst filteren",
-        "entryCount": "{count} vermelding | {count} vermeldingen",
+        "entryCount": "{count, plural, one {# vermelding} other {# vermeldingen}}",
         "filteredCount": "{shown} van {total}",
         "noFilterMatch": "Geen geblokkeerde genres komen overeen met het huidige filter.",
         "emptyTitle": "Geen geblokkeerde genres",
@@ -1331,7 +1332,7 @@
         "labelTooLong": "Label mag maximaal 255 tekens bevatten",
         "labelDuplicate": "Er bestaat al een veld met dit label",
         "type": "Type",
-        "usage": "Gebruikt door {count} boek | Gebruikt door {count} boeken",
+        "usage": "{count, plural, one {Gebruikt door # boek} other {Gebruikt door # boeken}}",
         "newField": {
           "title": "Nieuw veld",
           "hint": "Definieer een aangepast metadataveld en kies welke bibliotheken het gebruiken."
@@ -1353,7 +1354,7 @@
         "unsaved": "Niet opgeslagen",
         "archive": "Archiveren",
         "archivedFields": "Gearchiveerde velden",
-        "archivedSummary": "{count} gearchiveerd veld - herstellen of permanent verwijderen. | {count} gearchiveerde velden - herstellen of permanent verwijderen.",
+        "archivedSummary": "{count, plural, one {# gearchiveerd veld - herstellen of permanent verwijderen.} other {# gearchiveerde velden - herstellen of permanent verwijderen.}}",
         "archivedAt": "Gearchiveerd {when}",
         "restore": "Herstellen",
         "deleteForever": "Definitief verwijderen",
@@ -1556,7 +1557,7 @@
         "fontsUsed": "{count} / {max} gebruikt",
         "noFontsYet": "Nog geen lettertypen geüpload",
         "noFontsHint": "Sleep hierboven een lettertypebestand om te beginnen.",
-        "fileCount": "geen bestanden | {count} bestand | {count} bestanden",
+        "fileCount": "{count, plural, =0 {geen bestanden} one {# bestand} other {# bestanden}}",
         "pangram": "Wazig glimt het jonge vosje bij de kachel",
         "renameFamily": "Familie hernoemen",
         "deleteFamily": "Familie verwijderen",
@@ -1623,9 +1624,6 @@
         "subtitle": "Bepaal hoe bestanden op de schijf worden georganiseerd bij het uploaden en hoe ze worden benoemd bij het downloaden met behulp van placeholdertokens.",
         "copy": "Kopiëren",
         "previewLabel": "Voorbeeld:",
-        "fileAsBookPreview": "Voorbeeld Bestand als Boek",
-        "folderAsBookPreview": "Voorbeeld Map als Boek",
-        "downloadPreview": "Voorbeeld download",
         "globalDefaults": "Algemene standaardwaarden",
         "crossPlatform": "Platformonafhankelijke padopschoning",
         "crossPlatformHint": "Maak gegenereerde bestands- en mapnamen veilig op Windows door ongeldige tekens en gereserveerde namen te vervangen en volgpunten en spaties te verwijderen. Schakel dit alleen uit voor Linux-only-configuraties die die tekens bewust behouden.",
@@ -1642,15 +1640,10 @@
         "orgFolderAsBook": "Map als Boek",
         "orgFileAsBook": "Bestand als Boek",
         "resetToDefault": "Standaardwaarde herstellen",
-        "patternReference": "Patroonreferentie",
-        "placeholderReference": "Placeholderreferentie",
-        "placeholderReferenceHint": "- gids voor het maken van aangepaste naamgevingspatronen",
         "tokens": "Tokens",
-        "tokensHint": "Kopieer placeholders snel",
         "clickTokenHint": "Klik op een token om het naar je klembord te kopiëren.",
         "copyValue": "Kopieer {value}",
         "modifiers": "Modificaties",
-        "modifiersHint": "Tokenwaarden transformeren",
         "modifiersExplain": "Voeg een modificatie toe binnen een token om de waarde te transformeren:",
         "modFirst": "Alleen eerste waarde",
         "modSort": "Achternaam, voornaam-notatie",
@@ -1659,14 +1652,10 @@
         "folderOnlyPrefix": "Beëindig een patroon met",
         "folderOnlySuffix": "om alleen een map op te geven. De oorspronkelijke bestandsnaam blijft daarbinnen behouden.",
         "conditionalLogic": "Voorwaardelijke logica",
-        "conditionalLogicHint": "Optionele segmenten en terugvallen",
         "conditionalPart1": "Zet tussen",
         "conditionalPart2": "om een segment over te slaan wanneer het token leeg is. Gebruik",
         "conditionalPart3": "voor een standaardwaarde.",
         "examples": "Voorbeelden",
-        "patternExamples": "Patroonvoorbeelden",
-        "patternExamplesHint": "Kant-en-klare patronen voor veelvoorkomende bibliotheekstijlen",
-        "copyPatternTooltip": "Patroon naar klembord kopiëren",
         "exCalibre": "Calibre-achtige standaard",
         "exSeriesReader": "Reekslezer",
         "exCleanDownload": "Nette downloadbestandsnaam",
@@ -1694,7 +1683,10 @@
         "patternCopied": "Patroon gekopieerd naar klembord",
         "copyPatternFailed": "Kan patroon niet kopiëren",
         "labelCopied": "{label} gekopieerd naar klembord",
-        "copyLabelFailed": "Kan {label} niet kopiëren"
+        "copyLabelFailed": "Kan {label} niet kopiëren",
+        "tokenTitle": "Titel",
+        "tokenIsbn": "ISBN-13",
+        "tokenLanguage": "Taal"
       },
       "kobo": {
         "title": "Kobo-synchronisatie",
@@ -1761,7 +1753,7 @@
           "never": "Nooit",
           "none": "Geen",
           "unknown": "Onbekend",
-          "failureCount": "{count} fout | {count} fouten",
+          "failureCount": "{count, plural, one {# fout} other {# fouten}}",
           "noActivityRecorded": "Er is geen Kobo-synchronisatieactiviteit vastgelegd.",
           "lastSuccess": "Laatste succes {time}",
           "lastFailure": "Laatste fout {time}",
@@ -1795,7 +1787,7 @@
           "chip": {
             "morePending": "Meer in behandeling",
             "noUpdatesPending": "Geen updates in behandeling",
-            "bookCount": "{count} boek | {count} boeken",
+            "bookCount": "{count, plural, one {# boek} other {# boeken}}",
             "deletedAnnotations": "{count} verwijderde annotaties",
             "deviceAlreadyCurrent": "Apparaat al actueel",
             "freshHighlightData": "Nieuwe markeringsgegevens",
@@ -1807,31 +1799,31 @@
           "readingPositionSyncedTitle": "Leespositie gesynchroniseerd: {title}",
           "readingPositionSynced": "Leespositie gesynchroniseerd",
           "labelWithTitle": "{label}: {title}",
-          "updateCount": "{count} update | {count} updates",
+          "updateCount": "{count, plural, one {# update} other {# updates}}",
           "directionToKobo": "BookOrbit -> Kobo",
           "directionToBookOrbit": "Kobo -> BookOrbit",
           "twoWaySyncEnabled": "Tweerichtingssynchronisatie ingeschakeld",
           "deviceProgressSaved": "Voortgang van apparaat opgeslagen",
           "summary": {
             "noLibraryUpdatesPending": "Er zijn geen bibliotheekupdates in behandeling voor dit apparaat",
-            "libraryUpdatesPrepared": "{count} bibliotheekupdate voorbereid voor het apparaat | {count} bibliotheekupdates voorbereid voor het apparaat",
+            "libraryUpdatesPrepared": "{count, plural, one {# bibliotheekupdate voorbereid voor het apparaat} other {# bibliotheekupdates voorbereid voor het apparaat}}",
             "bookDownloadedBy": "{title} is gedownload door {device}",
-            "booksDownloaded": "{count} boek gedownload | {count} boeken gedownload",
-            "progressUpdatesSyncedFor": "{count} voortgangsupdate gesynchroniseerd voor {title} | {count} voortgangsupdates gesynchroniseerd voor {title}",
-            "progressUpdatesSynced": "{count} voortgangsupdate gesynchroniseerd | {count} voortgangsupdates gesynchroniseerd",
+            "booksDownloaded": "{count, plural, one {# boek gedownload} other {# boeken gedownload}}",
+            "progressUpdatesSyncedFor": "{count, plural, one {# voortgangsupdate gesynchroniseerd voor {title}} other {# voortgangsupdates gesynchroniseerd voor {title}}}",
+            "progressUpdatesSynced": "{count, plural, one {# voortgangsupdate gesynchroniseerd} other {# voortgangsupdates gesynchroniseerd}}",
             "newReadingPositionFor": "Kobo meldde een nieuwe leespositie voor {title}",
             "newReadingPosition": "Kobo meldde een nieuwe leespositie",
             "noHighlightChangesNeededFor": "Geen markeringswijzigingen nodig voor {title}",
             "noHighlightChangesNeeded": "Geen markeringswijzigingen nodig",
-            "highlightsSentToKoboFor": "{count} markering naar Kobo verzonden voor {title} | {count} markeringen naar Kobo verzonden voor {title}",
-            "highlightsSentToKobo": "{count} markering naar Kobo verzonden | {count} markeringen naar Kobo verzonden",
+            "highlightsSentToKoboFor": "{count, plural, one {# markering naar Kobo verzonden voor {title}} other {# markeringen naar Kobo verzonden voor {title}}}",
+            "highlightsSentToKobo": "{count, plural, one {# markering naar Kobo verzonden} other {# markeringen naar Kobo verzonden}}",
             "noKoboHighlightChangesFor": "Geen Kobo-markeringswijzigingen voor {title}",
             "noKoboHighlightChanges": "Geen Kobo-markeringswijzigingen",
-            "highlightsImportedFromKoboFor": "{count} markering geïmporteerd van Kobo voor {title} | {count} markeringen geïmporteerd van Kobo voor {title}",
-            "highlightsImportedFromKobo": "{count} markering geïmporteerd van Kobo | {count} markeringen geïmporteerd van Kobo"
+            "highlightsImportedFromKoboFor": "{count, plural, one {# markering geïmporteerd van Kobo voor {title}} other {# markeringen geïmporteerd van Kobo voor {title}}}",
+            "highlightsImportedFromKobo": "{count, plural, one {# markering geïmporteerd van Kobo} other {# markeringen geïmporteerd van Kobo}}"
           },
           "timeRange": "{from} tot {to}",
-          "eventsGrouped": "{count} gebeurtenis gegroepeerd | {count} gebeurtenissen gegroepeerd",
+          "eventsGrouped": "{count, plural, one {# gebeurtenis gegroepeerd} other {# gebeurtenissen gegroepeerd}}",
           "removedDevice": "Verwijderd apparaat",
           "loadMoreFailed": "Meer geschiedenis laden mislukt",
           "historyRefreshed": "Kobo-synchronisatiegeschiedenis vernieuwd",
@@ -1930,9 +1922,9 @@
         "progressSyncHint": "Sta KOReader-apparaten toe voortgang, leesactiviteit, markeringen en annotatieverwijderingen te synchroniseren met BookOrbit.",
         "lastSync": "Laatste synchronisatie",
         "syncedBooks": "Gesynchroniseerde boeken",
-        "bookCount": "geen boeken | {count} boek | {count} boeken",
+        "bookCount": "{count, plural, =0 {geen boeken} one {# boek} other {# boeken}}",
         "devices": "Apparaten",
-        "deviceCount": "geen apparaten | {count} apparaat | {count} apparaten",
+        "deviceCount": "{count, plural, =0 {geen apparaten} one {# apparaat} other {# apparaten}}",
         "credentialsCreatedLabel": "Inloggegevens aangemaakt",
         "setup": "Instellen",
         "pluginServerUrl": "Plug-in-server-URL",
@@ -1958,8 +1950,8 @@
         "highlights": "Markeringen",
         "syncedTotals": "Gesynchroniseerde totalen",
         "trashedHighlights": "Verwijderde markeringen",
-        "pendingDeletes": "geen verwijderde markeringen wachten op bevestiging door de KOReader-plug-in. | {count} verwijderde markering wacht op bevestiging door de KOReader-plug-in. | {count} verwijderde markeringen wachten op bevestiging door de KOReader-plug-in.",
-        "failedPositions": "geen markeringsposities vereisen aandacht. | {count} markeringspositie vereist aandacht. | {count} markeringsposities vereisen aandacht.",
+        "pendingDeletes": "{count, plural, =0 {geen verwijderde markeringen wachten op bevestiging door de KOReader-plug-in.} one {# verwijderde markering wacht op bevestiging door de KOReader-plug-in.} other {# verwijderde markeringen wachten op bevestiging door de KOReader-plug-in.}}",
+        "failedPositions": "{count, plural, =0 {geen markeringsposities vereisen aandacht.} one {# markeringspositie vereist aandacht.} other {# markeringsposities vereisen aandacht.}}",
         "setupGuide": "Installatiegids",
         "setupSteps": "KOReader-installatiestappen",
         "setupStepsHint": "Gebruik de BookOrbit-plug-in voor catalogus bladeren, downloads, voortgang, leesgebeurtenissen en markeringen. Gebruik de standaard-plug-in voor alleen voortgang.",
@@ -2030,7 +2022,7 @@
             "unlinkFailed": "Boek ontkoppelen mislukt",
             "unmatchedDismissed": "Niet-gekoppeld boek genegeerd",
             "dismissFailed": "Negeren van niet-gekoppeld boek mislukt",
-            "allDismissed": "Geen niet-gekoppelde boeken genegeerd | {count} niet-gekoppeld boek genegeerd | {count} niet-gekoppelde boeken genegeerd",
+            "allDismissed": "{count, plural, =0 {Geen niet-gekoppelde boeken genegeerd} one {# niet-gekoppeld boek genegeerd} other {# niet-gekoppelde boeken genegeerd}}",
             "dismissAllFailed": "Negeren van alle niet-gekoppelde boeken mislukt"
           },
           "modal": {
@@ -2065,7 +2057,7 @@
           "unlinkConfirmBody": "Toekomstige synchronisaties voor deze hash verwijzen niet langer naar {title} totdat deze opnieuw wordt gekoppeld. Reeds gesynchroniseerde statistieken blijven bij hun huidige BookOrbit-boek.",
           "dismissConfirmTitle": "{title} negeren?",
           "dismissConfirmBody": "Dit verwijdert het uit je lijst met niet-gekoppelde boeken. Als een apparaat deze hash opnieuw meldt, verschijnt het als een nieuwe vermelding.",
-          "dismissAllConfirmTitle": "geen niet-gekoppelde boeken | Alle {count} niet-gekoppelde boek negeren? | Alle {count} niet-gekoppelde boeken negeren?",
+          "dismissAllConfirmTitle": "{count, plural, =0 {geen niet-gekoppelde boeken} one {Alle # niet-gekoppelde boek negeren?} other {Alle # niet-gekoppelde boeken negeren?}}",
           "dismissAllConfirmBody": "Dit wist je volledige lijst met niet-gekoppelde boeken, niet alleen de huidige pagina. Als een apparaat een van deze hashes opnieuw meldt, verschijnt het als een nieuwe vermelding.",
           "changeLinkTitle": "KOReader-koppeling wijzigen",
           "linkBookTitle": "KOReader-boek koppelen",
@@ -2255,8 +2247,8 @@
       "auditNotice": "Toegang tot dit profiel wordt geregistreerd en is zichtbaar voor de gebruiker.",
       "period": "Rapportageperiode",
       "periodDays": "Afgelopen {count} dagen",
-      "durationMinutes": "{count} minuut | {count} minuten",
-      "durationHours": "{count} uur",
+      "durationMinutes": "{count, plural, one {# minuut} other {# minuten}}",
+      "durationHours": "{count, plural, one {# uur} other {# uur}}",
       "metrics": {
         "sessions": "Sessies",
         "readingTime": "Leestijd",
@@ -2267,7 +2259,6 @@
       "trend": "Dagelijkse leestrend",
       "emptyTitle": "Geen leesactiviteit in deze periode",
       "noData": "Er zijn geen leesgegevens vastgelegd voor deze periode.",
-      "sessionCount": "{count} sessie | {count} sessies",
       "sourceNames": {
         "web": "Weblezer",
         "koreader": "KOReader",
@@ -2383,13 +2374,8 @@
     },
     "usersPage": {
       "usersTitle": "Gebruikers",
-      "magicLinksTitle": "Magic Links",
       "usersSubtitle": "Beheer gebruikersaccounts en rechtentoewijzingen.",
-      "magicLinksSubtitle": "Maak deelbare inloglinks voor gedeelde accounts.",
       "createUser": "Gebruiker aanmaken",
-      "createLink": "Link aanmaken",
-      "usersTab": "Gebruikers",
-      "magicLinksTab": "Magic Links",
       "columns": {
         "name": "Naam",
         "username": "Gebruikersnaam",
@@ -2398,7 +2384,7 @@
         "status": "Status"
       },
       "adminBadge": "Beheer",
-      "permissionCount": "geen rechten | één recht | {count} rechten",
+      "permissionCount": "{count, plural, =0 {geen rechten} one {één recht} other {# rechten}}",
       "filteredBadge": "Gefilterd",
       "contentRestrictionsActive": "Inhoudsbeperkingen actief",
       "statusActive": "Actief",
@@ -2413,11 +2399,9 @@
       "deleteDialogBody": "Gebruiker \"{username}\" verwijderen. Deze actie kan niet ongedaan worden gemaakt.",
       "deleting": "Verwijderen...",
       "errors": {
-        "loadData": "Gegevens laden mislukt",
         "load": "Laden mislukt",
         "deleteUser": "Gebruiker verwijderen mislukt"
       },
-      "currentUsers": "Huidige gebruikers",
       "defaultLibraryAccess": {
         "title": "Standaard bibliotheektoegang",
         "subtitle": "Kijktoegang voor zelf-geregistreerde en via OIDC aangemaakte gebruikers.",
@@ -2425,8 +2409,10 @@
         "noLibraries": "Geen bibliotheken beschikbaar.",
         "save": "Standaardwaarden opslaan",
         "saving": "Opslaan...",
-        "saved": "Standaard bibliotheektoegang opgeslagen.",
         "saveError": "Opslaan van standaard bibliotheektoegang mislukt"
+      },
+      "pagination": {
+        "page": "Pagina {page} van {totalPages}"
       }
     }
   },
@@ -2447,7 +2433,7 @@
       "noBooksFound": "Geen boeken gevonden"
     },
     "bulk": {
-      "countSelected": "{count} geselecteerd",
+      "countSelected": "{count, plural, one {# geselecteerd} other {# geselecteerd}}",
       "pageSelected": "Pagina geselecteerd",
       "selectPage": "Pagina selecteren",
       "clear": "Wissen",
@@ -2533,8 +2519,8 @@
     "hub": {
       "title": "Annotaties",
       "totalCount": "{count} totaal",
-      "bookCount": "geen boeken | {count} boek | {count} boeken",
-      "noteCount": "geen notities | {count} notitie | {count} notities",
+      "bookCount": "{count, plural, =0 {geen boeken} one {# boek} other {# boeken}}",
+      "noteCount": "{count, plural, =0 {geen notities} one {# notitie} other {# notities}}",
       "export": "Exporteren",
       "exportMarkdown": "Markdown",
       "exportCsv": "CSV",
@@ -2559,10 +2545,10 @@
         "annotationRestored": "Annotatie hersteld",
         "annotationDeletedForever": "Annotatie definitief verwijderd",
         "failedToDelete": "Verwijderen mislukt",
-        "bulkTrashed": "Geen annotaties naar prullenbak verplaatst | {count} annotatie naar prullenbak verplaatst | {count} annotaties naar prullenbak verplaatst",
-        "bulkRestored": "Geen annotaties hersteld | {count} annotatie hersteld | {count} annotaties hersteld",
-        "bulkRecolored": "Geen annotaties verkleurd | {count} annotatie verkleurd | {count} annotaties verkleurd",
-        "bulkRestyled": "Geen annotaties gerestyled | {count} annotatie gerestyled | {count} annotaties gerestyled"
+        "bulkTrashed": "{count, plural, =0 {Geen annotaties naar prullenbak verplaatst} one {# annotatie naar prullenbak verplaatst} other {# annotaties naar prullenbak verplaatst}}",
+        "bulkRestored": "{count, plural, =0 {Geen annotaties hersteld} one {# annotatie hersteld} other {# annotaties hersteld}}",
+        "bulkRecolored": "{count, plural, =0 {Geen annotaties verkleurd} one {# annotatie verkleurd} other {# annotaties verkleurd}}",
+        "bulkRestyled": "{count, plural, =0 {Geen annotaties gerestyled} one {# annotatie gerestyled} other {# annotaties gerestyled}}"
       }
     }
   },
@@ -2577,6 +2563,8 @@
     "showLess": "Minder tonen",
     "details": "Details",
     "hideDetails": "Details verbergen",
+    "loadError": "Kan geen audit gebeurtenissen laden.",
+    "bookImpact": "{count, plural, one {# book} other {# books}}",
     "detailAction": "Actie: {value}",
     "detailIp": "IP: {value}",
     "showing": "{from}-{to} van {total} weergegeven",
@@ -2782,7 +2770,7 @@
         "deleteSelected": "Selectie verwijderen",
         "deleting": "Verwijderen...",
         "exitSelection": "Selectie afsluiten",
-        "confirmDeleteCount": "{count} auteur verwijderen? | {count} auteur verwijderen? | {count} auteurs verwijderen?"
+        "confirmDeleteCount": "{count, plural, =0 {# auteur verwijderen?} one {# auteur verwijderen?} other {# auteurs verwijderen?}}"
       },
       "toast": {
         "refreshed": "Auteurmetadata vernieuwd",
@@ -2791,7 +2779,7 @@
         "bulkRefreshPartial": "{updated} auteur(s) vernieuwd, {failed} mislukt",
         "bulkRefreshSuccess": "Metadata vernieuwd voor {updated} auteur(s)",
         "bulkRefreshFailed": "Vernieuwen van geselecteerde auteurs mislukt",
-        "deleteSuccess": "{count} auteur verwijderd; {books} boeken beïnvloed | {count} auteur verwijderd; {books} boeken beïnvloed | {count} auteurs verwijderd; {books} boeken beïnvloed",
+        "deleteSuccess": "{count, plural, =0 {# auteur verwijderd; {books} boeken beïnvloed} one {# auteur verwijderd; {books} boeken beïnvloed} other {# auteurs verwijderd; {books} boeken beïnvloed}}",
         "deleteFailed": "Verwijderen van auteur(s) mislukt"
       }
     },
@@ -2818,7 +2806,7 @@
       "merge": {
         "searchPlaceholder": "Auteurs zoeken om samen te voegen met deze auteur",
         "searching": "Zoeken...",
-        "bookCount": "geen boeken | {count} boek | {count} boeken",
+        "bookCount": "{count, plural, =0 {geen boeken} one {# boek} other {# boeken}}",
         "selectedSummary": "{count} auteur(s) geselecteerd, ca. {books} boeken beïnvloed.",
         "merging": "Samenvoegen...",
         "mergeSelected": "Selectie samenvoegen",
@@ -2875,7 +2863,7 @@
     "unknownFormat": "onbekend",
     "collapsedSeries": {
       "label": "Reeks",
-      "bookCount": "geen boeken | {count} boek | {count} boeken",
+      "bookCount": "{count, plural, =0 {geen boeken} one {# boek} other {# boeken}}",
       "readCount": "{count} gelezen"
     },
     "card": {
@@ -2965,7 +2953,7 @@
       "description": "Hiermee worden het boek en alle bijbehorende metadata, bestanden, leesvoortgang en bladwijzers permanent verwijderd. Dit kan niet ongedaan worden gemaakt."
     },
     "bulkEdit": {
-      "title": "Metadata bewerken - {count} boek | Metadata bewerken - {count} boek | Metadata bewerken - {count} boeken",
+      "title": "{count, plural, =0 {Metadata bewerken - # boek} one {Metadata bewerken - # boek} other {Metadata bewerken - # boeken}}",
       "instructions": "Schakel velden in om te bewerken en stel vervolgens waarden in. Alleen ingeschakelde velden worden gewijzigd.",
       "invalidYear": "Voer een geldig jaar in (alleen cijfers)",
       "clearWarning": "Hiermee worden alle {field} van de geselecteerde boeken verwijderd.",
@@ -3005,8 +2993,8 @@
       "estimatedSize": "Geschatte grootte:",
       "fileLabel": "Bestand: {fileName}",
       "exportAction": "Exporteren",
-      "selectedRowsSummary": "{count} geselecteerde rij | {count} geselecteerde rij | {count} geselecteerde rijen",
-      "matchingRowsSummary": "{count} overeenkomende rij | {count} overeenkomende rij | {count} overeenkomende rijen",
+      "selectedRowsSummary": "{count, plural, =0 {# geselecteerde rij} one {# geselecteerde rij} other {# geselecteerde rijen}}",
+      "matchingRowsSummary": "{count, plural, =0 {# overeenkomende rij} one {# overeenkomende rij} other {# overeenkomende rijen}}",
       "prepareFailed": "Voorbereiden van export mislukt",
       "exportStarted": "Metadata-export gestart: {fileName}",
       "exportFailed": "Metadata-export mislukt"
@@ -3064,16 +3052,14 @@
     },
     "jumpRail": {
       "jumpToSection": "Naar sectie springen",
-      "jumpTo": "Naar {label} springen",
-      "unknownDate": "Unknown date",
-      "unknownValue": "Unknown value"
+      "jumpTo": "Naar {label} springen"
     },
     "quickView": {
       "title": "Snelweergave boek",
       "titleFor": "Snelweergave voor {title}",
       "description": "Bekijk boekdetails en voer snelle acties uit.",
       "openIn": "Openen in {provider}",
-      "pages": "{count} pagina | {count} pagina | {count} pagina's",
+      "pages": "{count, plural, =0 {# pagina} one {# pagina} other {# pagina's}}",
       "primaryFile": "Primair bestand",
       "fileNumber": "Bestand #{id}",
       "showLess": "Minder tonen",
@@ -3089,7 +3075,7 @@
       "openBookDetails": "Boekdetails openen",
       "openSeries": "Reeks openen",
       "metadataRefreshFailed": "Metadata vernieuwen mislukt",
-      "booksSelected": "{count} boek geselecteerd | {count} boek geselecteerd | {count} boeken geselecteerd",
+      "booksSelected": "{count, plural, =0 {# boek geselecteerd} one {# boek geselecteerd} other {# boeken geselecteerd}}",
       "loadingMoreBooks": "Meer boeken laden",
       "sort": "Sorteren",
       "refreshingMetadata": "Metadata vernieuwen {processed} / {total}",
@@ -3104,7 +3090,7 @@
       "selectedStatus": "{count} geselecteerd",
       "filtered": "Gefilterd",
       "loadedStatus": "{loaded} van {total} geladen",
-      "bookCount": "{count} boek | {count} boek | {count} boeken",
+      "bookCount": "{count, plural, =0 {# boek} one {# boek} other {# boeken}}",
       "keyboardShortcutsTitle": "Sneltoetsen (?)",
       "showKeyboardShortcuts": "Sneltoetsen voor tabel tonen",
       "copyHint": "Cel kopiëren: Ctrl/Cmd+C · Rij kopiëren: Ctrl/Cmd+Shift+C"
@@ -3137,7 +3123,7 @@
         "moreInSeries": "Meer in de reeks {series}"
       },
       "writeRename": {
-        "written": "geen velden geschreven | Geschreven (één veld) | Geschreven ({count} velden)",
+        "written": "{count, plural, =0 {geen velden geschreven} one {Geschreven (één veld)} other {Geschreven (# velden)}}",
         "writeFailed": "Schrijven mislukt",
         "skipped": "Overgeslagen",
         "renamedTo": "Hernoemd naar {name}",
@@ -3158,11 +3144,11 @@
           "hint": "epub, pdf, mobi, cbz, m4b en meer - tot {size} MB per stuk"
         },
         "addMore": "Meer bestanden toevoegen",
-        "fileCount": "geen bestanden | één bestand | {count} bestanden",
+        "fileCount": "{count, plural, =0 {geen bestanden} one {één bestand} other {# bestanden}}",
         "clearAll": "Alles wissen",
         "done": "Klaar",
         "retry": "Opnieuw proberen",
-        "filesAdded": "geen bestanden toegevoegd | één bestand toegevoegd | {count} bestanden toegevoegd",
+        "filesAdded": "{count, plural, =0 {geen bestanden toegevoegd} one {één bestand toegevoegd} other {# bestanden toegevoegd}}",
         "uploadedFailed": "{done} geüpload, {failed} mislukt",
         "uploadingProgress": "{done} van {total} uploaden...",
         "renameAfter": "Alle boekbestanden hernoemen na uploaden",
@@ -3284,7 +3270,7 @@
         "filesNotFoundDescription": "De bestanden voor dit boek zijn niet meer op schijf te vinden. De metadata is nog beschikbaar. Voer een bibliotheekscan uit om dit te bevestigen, of verwijder het record."
       },
       "editMetadata": {
-        "fieldCount": "geen velden | één veld | {count} velden",
+        "fieldCount": "{count, plural, =0 {geen velden} one {één veld} other {# velden}}",
         "bookFilesTarget": "boekbestanden",
         "formatFilesTarget": "{formats}-bestanden",
         "noPrimaryFile": "Geen primair bestand beschikbaar",
@@ -3296,8 +3282,8 @@
         "writeManualLibraryDisabled": "Schrijf metadata naar bestand en hernoem op schijf; automatisch terugschrijven is uitgeschakeld voor deze bibliotheek",
         "writeManualTooltip": "Schrijf {fields} naar {target} en hernoem op schijf",
         "applyResult": "{skipped}, {updated}",
-        "skippedLockedFields": "Geen vergrendelde velden overgeslagen | Eén vergrendeld veld overgeslagen | {count} vergrendelde velden overgeslagen",
-        "updatedFields": "geen velden bijgewerkt | één veld bijgewerkt | {count} velden bijgewerkt",
+        "skippedLockedFields": "{count, plural, =0 {Geen vergrendelde velden overgeslagen} one {Eén vergrendeld veld overgeslagen} other {# vergrendelde velden overgeslagen}}",
+        "updatedFields": "{count, plural, =0 {geen velden bijgewerkt} one {één veld bijgewerkt} other {# velden bijgewerkt}}",
         "wroteFieldsToFile": "{fields} naar bestand geschreven",
         "fileWriteFailedReason": "Schrijven naar bestand mislukt: {reason}",
         "fileWriteFailed": "Schrijven naar bestand mislukt",
@@ -3310,7 +3296,7 @@
         "savedWriteSkippedReason": "Metadata opgeslagen, schrijven naar bestand overgeslagen: {reason}",
         "savedWriteSkipped": "Metadata opgeslagen, schrijven naar bestand overgeslagen",
         "loadFromFileFailed": "Laden van metadata uit bestand mislukt",
-        "loadedFieldsFromFile": "Geen velden uit bestand geladen | Eén veld uit bestand geladen | {count} velden uit bestand geladen",
+        "loadedFieldsFromFile": "{count, plural, =0 {Geen velden uit bestand geladen} one {Eén veld uit bestand geladen} other {# velden uit bestand geladen}}",
         "noMetadataInFile": "Geen metadata gevonden in bestand",
         "loadFromFile": "Laden uit bestand",
         "loadFromFileTooltip": "Metadata laden uit het primaire boekbestand",
@@ -3371,7 +3357,7 @@
         "diffPanel": {
           "untitled": "Zonder titel",
           "noFieldsSelected": "Geen velden geselecteerd",
-          "fieldsSelected": "geen velden geselecteerd | één veld geselecteerd | {count} velden geselecteerd",
+          "fieldsSelected": "{count, plural, =0 {geen velden geselecteerd} one {één veld geselecteerd} other {# velden geselecteerd}}",
           "results": "Resultaten",
           "providerMatches": "Overeenkomsten van {provider}",
           "selectedOf": "{selected} van {total} geselecteerd",
@@ -3432,7 +3418,7 @@
       },
       "files": {
         "title": "Boekbestanden",
-        "fileCount": "geen bestanden | {count} bestand | {count} bestanden",
+        "fileCount": "{count, plural, =0 {geen bestanden} one {# bestand} other {# bestanden}}",
         "synced": "Gesynchroniseerd {time}",
         "sortAria": "Bestanden sorteren",
         "syncHistory": "Synchronisatiegeschiedenis",
@@ -3459,7 +3445,7 @@
         "hideLog": "Logboek verbergen",
         "viewSyncLog": "Synchronisatielogboek bekijken",
         "noWriteHistory": "Nog geen schrijfgeschiedenis.",
-        "fieldsWritten": "geen velden | één veld | {count} velden",
+        "fieldsWritten": "{count, plural, =0 {geen velden} one {één veld} other {# velden}}",
         "track": "Track {number}",
         "primary": "Primair",
         "read": "Lezen",
@@ -3501,9 +3487,9 @@
           "oldest": "Oudste eerst"
         },
         "summary": {
-          "highlights": "geen markeringen | één markering | {count} markeringen",
-          "notes": "geen notities | één notitie | {count} notities",
-          "chapters": "geen hoofdstukken | één hoofdstuk | {count} hoofdstukken"
+          "highlights": "{count, plural, =0 {geen markeringen} one {één markering} other {# markeringen}}",
+          "notes": "{count, plural, =0 {geen notities} one {één notitie} other {# notities}}",
+          "chapters": "{count, plural, =0 {geen hoofdstukken} one {één hoofdstuk} other {# hoofdstukken}}"
         },
         "filterByChapter": "Filteren op hoofdstuk",
         "allChapters": "Alle hoofdstukken",
@@ -3547,7 +3533,6 @@
           "dec": "dec"
         },
         "heatmap": {
-          "subtitle": "{count} actieve dag · {ratio}% consistentie | {count} actieve dag · {ratio}% consistentie | {count} actieve dagen · {ratio}% consistentie",
           "minutesUnit": "min",
           "title": "Activiteit",
           "empty": "Geen leesactiviteit in deze periode.",
@@ -3561,8 +3546,8 @@
             "minutes": "{count}m geleden",
             "hours": "{count}u geleden",
             "days": "{count}d geleden",
-            "months": "{count} maand geleden | {count} maand geleden | {count} maanden geleden",
-            "years": "{count} jaar geleden | {count} jaar geleden | {count} jaar geleden"
+            "months": "{count, plural, =0 {# maand geleden} one {# maand geleden} other {# maanden geleden}}",
+            "years": "{count, plural, =0 {# jaar geleden} one {# jaar geleden} other {# jaar geleden}}"
           },
           "noSessions": "Geen sessies",
           "dateErrors": {
@@ -3753,7 +3738,7 @@
         "unread": "Ongelezen"
       },
       "series": {
-        "bookCount": "(geen boeken) | ({count} boek) | ({count} boeken)",
+        "bookCount": "{count, plural, =0 {(geen boeken)} one {(# boek)} other {(# boeken)}}",
         "readOfCount": "{read} van {total} gelezen"
       },
       "text": {
@@ -3786,7 +3771,7 @@
       "confirm": "Annuleren bevestigen",
       "keepRunning": "Doorgaan"
     },
-    "viewFailed": "Bekijk een mislukt item | Bekijk {count} mislukte items",
+    "viewFailed": "{count, plural, one {Bekijk een mislukt item} other {Bekijk # mislukte items}}",
     "card": {
       "fetchingMetadata": "Metadata ophalen",
       "enrichingAuthors": "Auteurs verrijken",
@@ -3843,12 +3828,9 @@
     "commaSeparated": "kommagescheiden",
     "destinationLibrary": "Doelbibliotheek",
     "destinationFolder": "Doelmap",
-    "nSelected": "geen bestanden geselecteerd | {count} geselecteerd | {count} geselecteerd",
     "nFailed": "{count} mislukt",
     "updatedOfFiles": "{updated} van {total} bestanden bijgewerkt",
     "errorStatus": "Fout {status}",
-    "applyFetchedTooltip": "Automatisch opgehaalde providermetadata toepassen op {count} bestanden | Automatisch opgehaalde providermetadata toepassen op {count} bestand | Automatisch opgehaalde providermetadata toepassen op {count} bestanden",
-    "retryErrorsTooltip": "Metadata opnieuw ophalen voor {count} bestanden met fouten | Metadata opnieuw ophalen voor {count} bestand met fout | Metadata opnieuw ophalen voor {count} bestanden met fouten",
     "tab": {
       "all": "Alles",
       "pending": "In afwachting",
@@ -3916,21 +3898,21 @@
       "results": "Resultaten"
     },
     "bulkEdit": {
-      "title": "Bulkbewerking geen bestanden | Bulkbewerking {count} bestand | Bulkbewerking {count} bestanden",
+      "title": "{count, plural, =0 {Bulkbewerking geen bestanden} one {Bulkbewerking # bestand} other {Bulkbewerking # bestanden}}",
       "resultTitle": "Resultaten bulkbewerking",
       "instructions": "Schakel de velden in die je wilt bijwerken. Alleen ingeschakelde velden worden toegepast.",
       "mergeArrays": "Arrays samenvoegen (toevoegen aan bestaande waarden in plaats van vervangen)",
       "failed": "Bulkbewerking mislukt"
     },
     "setDestination": {
-      "title": "Bestemming instellen voor geen bestanden | Bestemming instellen voor {count} bestand | Bestemming instellen voor {count} bestanden",
+      "title": "{count, plural, =0 {Bestemming instellen voor geen bestanden} one {Bestemming instellen voor # bestand} other {Bestemming instellen voor # bestanden}}",
       "resultTitle": "Bestemming bijgewerkt",
       "failed": "Bestemming instellen mislukt"
     },
     "finalizeDialog": {
-      "title": "Afronden geen bestanden | Afronden {count} bestand | Afronden {count} bestanden",
+      "title": "{count, plural, =0 {Afronden geen bestanden} one {Afronden # bestand} other {Afronden # bestanden}}",
       "resultTitle": "Resultaten afronden",
-      "needDestination": "{without} van {count} geselecteerde bestanden hebben een bestemming nodig | {without} van {count} geselecteerd bestand heeft een bestemming nodig | {without} van {count} geselecteerde bestanden hebben een bestemming nodig",
+      "needDestination": "{count, plural, =0 {{without} van # geselecteerde bestanden hebben een bestemming nodig} one {{without} van # geselecteerd bestand heeft een bestemming nodig} other {{without} van # geselecteerde bestanden hebben een bestemming nodig}}",
       "allHaveDestination": "Alle geselecteerde bestanden hebben al een bestemming ingesteld",
       "defaultDestinationLibrary": "Standaard doelbibliotheek",
       "defaultDestinationFolder": "Standaard doelmap",
@@ -3939,18 +3921,17 @@
       "start": "Starten",
       "filesFinalized": "{succeeded} van {total} bestanden afgerond",
       "checking": "Geselecteerde bestanden controleren...",
-      "readyCount": "geen bestanden gereed | {count} bestand gereed | {count} bestanden gereed",
-      "duplicateCount": "geen al in de bibliotheek | {count} al in de bibliotheek | {count} al in de bibliotheek",
-      "conflictCount": "geen bestandsnaamconflicten | {count} bestandsnaamconflict | {count} bestandsnaamconflicten",
-      "missingDestinationCount": "geen ontbrekende bestemmingen | {count} ontbrekende bestemming | {count} ontbrekende bestemmingen",
-      "blockedCount": "geen bestanden geblokkeerd | {count} bestand geblokkeerd | {count} bestanden geblokkeerd",
+      "readyCount": "{count, plural, =0 {geen bestanden gereed} one {# bestand gereed} other {# bestanden gereed}}",
+      "duplicateCount": "{count, plural, =0 {geen al in de bibliotheek} one {# al in de bibliotheek} other {# al in de bibliotheek}}",
+      "conflictCount": "{count, plural, =0 {geen bestandsnaamconflicten} one {# bestandsnaamconflict} other {# bestandsnaamconflicten}}",
+      "missingDestinationCount": "{count, plural, =0 {geen ontbrekende bestemmingen} one {# ontbrekende bestemming} other {# ontbrekende bestemmingen}}",
+      "blockedCount": "{count, plural, =0 {geen bestanden geblokkeerd} one {# bestand geblokkeerd} other {# bestanden geblokkeerd}}",
       "moreDuplicates": "+{count} meer al in de bibliotheek",
       "discardDuplicates": "Duplicaten verwijderen",
-      "failedCount": "geen bestanden mislukt | {count} bestand mislukt | {count} bestanden mislukt",
-      "failedWithDuplicates": "{failed} mislukt ({count} duplicaten) | {failed} mislukt ({count} duplicaat) | {failed} mislukt ({count} duplicaten)",
+      "failedCount": "{count, plural, =0 {geen bestanden mislukt} one {# bestand mislukt} other {# bestanden mislukt}}",
+      "failedWithDuplicates": "{count, plural, =0 {{failed} mislukt (# duplicaten)} one {{failed} mislukt (# duplicaat)} other {{failed} mislukt (# duplicaten)}}",
       "view": "Bekijken",
       "viewExisting": "Bestaande bekijken",
-      "importAnyway": "Toch importeren",
       "hide": "Verbergen",
       "details": "Details",
       "alreadyExistsSaveAs": "Bestaat al - opslaan als:",
@@ -3986,7 +3967,7 @@
     },
     "addToSheet": {
       "title": "Collecties beheren",
-      "selectedCount": "geen boeken geselecteerd | een boek geselecteerd | {count} boeken geselecteerd",
+      "selectedCount": "{count, plural, =0 {geen boeken geselecteerd} one {een boek geselecteerd} other {# boeken geselecteerd}}",
       "newCollection": "Nieuwe collectie",
       "namePlaceholder": "Collectienaam",
       "create": "Aanmaken",
@@ -3998,15 +3979,15 @@
       "inCollection": "In deze collectie",
       "allInCollection": "Alle {total} in deze collectie",
       "partialInCollection": "{partial} van {total} in deze collectie",
-      "bookCount": "geen boeken | een boek | {count} boeken",
+      "bookCount": "{count, plural, =0 {geen boeken} one {een boek} other {# boeken}}",
       "loadFailed": "Collecties laden mislukt",
-      "createdAndAdded": "\"{name}\" aangemaakt en geen boeken toegevoegd | \"{name}\" aangemaakt en een boek toegevoegd | \"{name}\" aangemaakt en {count} boeken toegevoegd",
+      "createdAndAdded": "{count, plural, =0 {\"{name}\" aangemaakt en geen boeken toegevoegd} one {\"{name}\" aangemaakt en een boek toegevoegd} other {\"{name}\" aangemaakt en # boeken toegevoegd}}",
       "createdButAddFailed": "\"{name}\" aangemaakt maar boeken toevoegen mislukt",
       "createFailed": "Collectie aanmaken mislukt",
-      "addedNewWithExisting": "Een nieuw boek toegevoegd aan \"{name}\" ({alreadyHad} al aanwezig) | Een nieuw boek toegevoegd aan \"{name}\" ({alreadyHad} al aanwezig) | {count} nieuwe boeken toegevoegd aan \"{name}\" ({alreadyHad} al aanwezig)",
-      "addedToCollection": "Geen boeken toegevoegd aan \"{name}\" | Een boek toegevoegd aan \"{name}\" | {count} boeken toegevoegd aan \"{name}\"",
+      "addedNewWithExisting": "{count, plural, =0 {Een nieuw boek toegevoegd aan \"{name}\" ({alreadyHad} al aanwezig)} one {Een nieuw boek toegevoegd aan \"{name}\" ({alreadyHad} al aanwezig)} other {# nieuwe boeken toegevoegd aan \"{name}\" ({alreadyHad} al aanwezig)}}",
+      "addedToCollection": "{count, plural, =0 {Geen boeken toegevoegd aan \"{name}\"} one {Een boek toegevoegd aan \"{name}\"} other {# boeken toegevoegd aan \"{name}\"}}",
       "addFailed": "Toevoegen aan collectie mislukt",
-      "removedFromCollection": "Geen boeken verwijderd uit \"{name}\" | Een boek verwijderd uit \"{name}\" | {count} boeken verwijderd uit \"{name}\"",
+      "removedFromCollection": "{count, plural, =0 {Geen boeken verwijderd uit \"{name}\"} one {Een boek verwijderd uit \"{name}\"} other {# boeken verwijderd uit \"{name}\"}}",
       "removeFailed": "Verwijderen uit collectie mislukt"
     }
   },
@@ -4017,9 +3998,9 @@
       "noResults": "Geen resultaten",
       "loadingMore": "Meer laden...",
       "loadMore": "Meer laden ({loaded}/{total})",
-      "allMatchesShown": "Alle 1 resultaat getoond | Alle 1 resultaat getoond | Alle {count} resultaten getoond",
-      "bookCount": "geen boeken | {count} boek | {count} boeken",
-      "fileCount": "geen bestanden | {count} bestand | {count} bestanden",
+      "allMatchesShown": "{count, plural, =0 {Alle 1 resultaat getoond} one {Alle 1 resultaat getoond} other {Alle # resultaten getoond}}",
+      "bookCount": "{count, plural, =0 {geen boeken} one {# boek} other {# boeken}}",
+      "fileCount": "{count, plural, =0 {geen bestanden} one {# bestand} other {# bestanden}}",
       "uploadedToast": "{uploaded} geüpload",
       "uploadFailedToast": "Uploaden mislukt voor {failed}",
       "uploadPartialToast": "{uploaded} geüpload, {failed} mislukt",
@@ -4050,14 +4031,12 @@
       }
     },
     "sidebar": {
-      "tagline": "Jouw leesruimte",
       "dashboard": "Dashboard",
       "authors": "Auteurs",
       "series": "Reeksen",
       "tools": "Hulpmiddelen",
       "libraries": "Bibliotheken",
       "newLibrary": "Nieuwe bibliotheek",
-      "libraryScanning": "{name} - Scannen {pct}%",
       "scanProgress": "{processed} / {total} boeken",
       "smartScopes": "Smart Scopes",
       "newSmartScope": "Nieuwe Smart Scope",
@@ -4065,10 +4044,8 @@
       "collections": "Collecties",
       "newCollection": "Nieuwe collectie",
       "noCollections": "Nog geen collecties",
-      "latest": "Nieuwste {version}",
       "newReleaseNotes": "Nieuwe release-opmerkingen beschikbaar",
       "support": "BookOrbit ondersteunen",
-      "supportShort": "Ondersteunen",
       "supportAria": "BookOrbit ondersteunen op Ko-fi",
       "sectionHeader": {
         "add": "Toevoegen",
@@ -4105,7 +4082,7 @@
       "apply": "Toepassen",
       "fieldPlaceholder": "Laat leeg om te wissen",
       "fieldPlaceholderArray": "Komma-gescheiden (laat leeg om te wissen)",
-      "deleteConfirm": "{count} boek verwijderen? | {count} boek verwijderen? | {count} boeken verwijderen?",
+      "deleteConfirm": "{count, plural, =0 {# boek verwijderen?} one {# boek verwijderen?} other {# boeken verwijderen?}}",
       "typeDelete": "Typ DELETE"
     },
     "viewHeader": {
@@ -4129,7 +4106,6 @@
         "display": "Weergave",
         "coverSize": "Omslaggrootte",
         "gridGap": "Rasterafstand",
-        "showJumpRails": "Show jump rails",
         "columnsHint": "Gebruik het paneel voor kolomzichtbaarheid in de tabelkop om kolommen te tonen of te verbergen.",
         "coverShape": "Omslagvorm",
         "circle": "Cirkel",
@@ -4156,8 +4132,7 @@
     },
     "themePicker": {
       "light": "Licht",
-      "dark": "Donker",
-      "system": "System"
+      "dark": "Donker"
     },
     "userAvatar": {
       "profilePicture": "Profielfoto",
@@ -4195,9 +4170,9 @@
     "uploadCount": "{count} uploaden",
     "onlySvgSupported": "Alleen SVG-bestanden worden ondersteund",
     "maxStaged": "Je kunt maximaal {max} iconen tegelijk klaarzetten",
-    "onlyMoreCanStage": "Er kunnen geen iconen meer worden klaargezet | Er kan nog maar {count} icoon worden klaargezet | Er kunnen nog maar {count} iconen worden klaargezet",
+    "onlyMoreCanStage": "{count, plural, =0 {Er kunnen geen iconen meer worden klaargezet} one {Er kan nog maar # icoon worden klaargezet} other {Er kunnen nog maar # iconen worden klaargezet}}",
     "readFailed": "Lezen van SVG-bestanden mislukt",
-    "uploadedCount": "Geen iconen geüpload | {count} icoon geüpload | {count} iconen geüpload",
+    "uploadedCount": "{count, plural, =0 {Geen iconen geüpload} one {# icoon geüpload} other {# iconen geüpload}}",
     "uploadedPartial": "{created} geüpload, {failed} mislukt",
     "noIconsUploaded": "Geen iconen geüpload",
     "uploadFailed": "Uploaden van iconen mislukt",
@@ -4252,7 +4227,7 @@
       "diversityScore": {
         "title": "Diversiteitsscore",
         "notEnoughData": "Lees minstens 3 boeken om je diversiteitsscore te zien",
-        "booksAnalyzed": "geen boeken geanalyseerd | {count} boek geanalyseerd | {count} boeken geanalyseerd",
+        "booksAnalyzed": "{count, plural, =0 {geen boeken geanalyseerd} one {# boek geanalyseerd} other {# boeken geanalyseerd}}",
         "subScores": {
           "genre": "Genre",
           "author": "Auteur",
@@ -4279,7 +4254,7 @@
         "title": "Het lange wachten",
         "empty": "Geen boeken in de wacht. Je bent overal aan begonnen!",
         "daysWaiting": "dagen wachten",
-        "pages": "geen pagina's | {count} pagina | {count} pagina's",
+        "pages": "{count, plural, =0 {geen pagina's} one {# pagina} other {# pagina's}}",
         "startReading": "Begin met lezen"
       },
       "monthlyChallenge": {
@@ -4298,7 +4273,7 @@
       "readingDna": {
         "title": "Lees-DNA",
         "notEnoughData": "Lees minstens 5 boeken om je Lees-DNA te ontgrendelen",
-        "basedOn": "Gebaseerd op geen boeken | Gebaseerd op {count} boek | Gebaseerd op {count} boeken",
+        "basedOn": "{count, plural, =0 {Gebaseerd op geen boeken} one {Gebaseerd op # boek} other {Gebaseerd op # boeken}}",
         "traits": {
           "length": "Lengte",
           "variety": "Variatie",
@@ -4319,15 +4294,15 @@
       "readingRhythm": {
         "title": "Leesritme",
         "empty": "Begin met lezen om je ritme vorm te zien krijgen",
-        "activeDays": "geen actieve dagen | {count} actieve dag | {count} actieve dagen",
+        "activeDays": "{count, plural, =0 {geen actieve dagen} one {# actieve dag} other {# actieve dagen}}",
         "consistency": "{activeDays} · {percent}% consistentie",
         "avgPerDay": "gem. {time}/dag"
       },
       "readingStreak": {
         "title": "Leesreeks",
         "empty": "Lees vandaag om je reeks te starten",
-        "streakLabel": "dag reeks | dag reeks | dagen reeks",
-        "best": "Beste: {count} dag | Beste: {count} dag | Beste: {count} dagen",
+        "streakLabel": "{count, plural, =0 {dag reeks} one {dag reeks} other {dagen reeks}}",
+        "best": "{count, plural, =0 {Beste: # dag} one {Beste: # dag} other {Beste: # dagen}}",
         "lastSevenDays": "Laatste 7 dagen"
       },
       "yearProjection": {
@@ -4445,7 +4420,7 @@
       "namePlaceholder": "bijv. Boekenclub",
       "creating": "Aanmaken...",
       "empty": "Nog geen groepen. Maak een groep aan om naar meerdere ontvangers tegelijk te versturen.",
-      "memberCount": "geen leden | één lid | {count} leden",
+      "memberCount": "{count, plural, =0 {geen leden} one {één lid} other {# leden}}",
       "deleteTooltip": "Groep verwijderen",
       "noMembers": "Nog geen leden.",
       "removeMember": "Verwijderen",
@@ -4514,7 +4489,7 @@
     },
     "send": {
       "title": "Versturen via e-mail",
-      "bookCount": "geen boeken | één boek | {count} boeken",
+      "bookCount": "{count, plural, =0 {geen boeken} one {één boek} other {# boeken}}",
       "recipients": "Ontvangers",
       "noRecipients": "Geen ontvangers geconfigureerd. Voeg er een toe in E-mailinstellingen.",
       "groups": "Groepen",
@@ -4528,7 +4503,7 @@
       "default": "Standaard",
       "send": "Versturen",
       "sending": "Versturen...",
-      "queued": "geen e-mails in wachtrij | één e-mail in wachtrij | {count} e-mails in wachtrij",
+      "queued": "{count, plural, =0 {geen e-mails in wachtrij} one {één e-mail in wachtrij} other {# e-mails in wachtrij}}",
       "failed": "Versturen mislukt"
     }
   },
@@ -4624,8 +4599,8 @@
       "lastSynced": {
         "justNow": "Zojuist",
         "minutesAgo": "{count} min geleden",
-        "hoursAgo": "{count} uur geleden | {count} uur geleden | {count} uur geleden",
-        "daysAgo": "{count} dag geleden | {count} dag geleden | {count} dagen geleden"
+        "hoursAgo": "{count, plural, =0 {# uur geleden} one {# uur geleden} other {# uur geleden}}",
+        "daysAgo": "{count, plural, =0 {# dag geleden} one {# dag geleden} other {# dagen geleden}}"
       }
     },
     "import": {
@@ -4636,9 +4611,9 @@
       "importProgress": "Voortgang importeren",
       "reviewMatches": "Overeenkomsten bekijken",
       "importReady": "Klaar importeren",
-      "exactMatches": "geen exacte overeenkomsten kunnen zonder controle worden geïmporteerd | {count} exacte overeenkomst kan zonder controle worden geïmporteerd | {count} exacte overeenkomsten kunnen zonder controle worden geïmporteerd",
-      "progressAvailable": "geen voortgangsupdates beschikbaar | {count} voortgangsupdate beschikbaar | {count} voortgangsupdates beschikbaar",
-      "progressConflicts": "geen conflicten | {count} conflict | {count} conflicten",
+      "exactMatches": "{count, plural, =0 {geen exacte overeenkomsten kunnen zonder controle worden geïmporteerd} one {# exacte overeenkomst kan zonder controle worden geïmporteerd} other {# exacte overeenkomsten kunnen zonder controle worden geïmporteerd}}",
+      "progressAvailable": "{count, plural, =0 {geen voortgangsupdates beschikbaar} one {# voortgangsupdate beschikbaar} other {# voortgangsupdates beschikbaar}}",
+      "progressConflicts": "{count, plural, =0 {geen conflicten} one {# conflict} other {# conflicten}}",
       "unavailable": {
         "permissionDenied": "Je hebt geen toestemming om Hardcover-synchronisatie te gebruiken.",
         "missingToken": "Verbind Hardcover voordat je importeert.",
@@ -4657,8 +4632,8 @@
       },
       "toast": {
         "importFailed": "Importeren van Hardcover-leesstatus mislukt",
-        "imported": "geen leesstatussen geïmporteerd{progress} | {count} leesstatus geïmporteerd{progress} | {count} leesstatussen geïmporteerd{progress}",
-        "progressUpdates": "geen voortgangsupdates | {count} voortgangsupdate | {count} voortgangsupdates"
+        "imported": "{count, plural, =0 {geen leesstatussen geïmporteerd{progress}} one {# leesstatus geïmporteerd{progress}} other {# leesstatussen geïmporteerd{progress}}}",
+        "progressUpdates": "{count, plural, =0 {geen voortgangsupdates} one {# voortgangsupdate} other {# voortgangsupdates}}"
       }
     },
     "review": {
@@ -4672,7 +4647,7 @@
       "noRows": "Geen rijen komen overeen met de huidige filters.",
       "selectRowAriaLabel": "{title} selecteren",
       "selectionSummary": "{count} geselecteerd: {ready} klaar, {reviewed} gecontroleerd.",
-      "selectedProgress": "geen voortgangsupdates | {count} voortgangsupdate | {count} voortgangsupdates",
+      "selectedProgress": "{count, plural, =0 {geen voortgangsupdates} one {# voortgangsupdate} other {# voortgangsupdates}}",
       "selectReady": "Klaar selecteren",
       "selectPage": "Pagina selecteren",
       "clearPage": "Pagina wissen",
@@ -4777,10 +4752,8 @@
         "pathNotAccessible": "Pad is niet toegankelijk op de server.",
         "pathAccessible": "Pad is toegankelijk.",
         "pathNotAccessibleShort": "Pad is niet toegankelijk",
-        "bookFilesFound": "geen boekbestanden gevonden | {count} boekbestand gevonden | {count} boekbestanden gevonden",
         "overlapsWith": "Overlapt met \"{library}\"",
         "noneAdded": "Nog geen mappen toegevoegd",
-        "totalFilesFound": "geen boekbestanden gevonden | {count} boekbestand gevonden - het werkelijke aantal boeken kan lager zijn als er meerdere formaten van hetzelfde boek bestaan | {count} boekbestanden gevonden - het werkelijke aantal boeken kan lager zijn als er meerdere formaten van hetzelfde boek bestaan",
         "runPrescanHint": "Voer een prescan uit om paden te valideren voordat u opslaat.",
         "scanning": "Scannen…",
         "prescan": "Prescan"
@@ -4945,7 +4918,7 @@
       "empty": "Deze map is leeg",
       "emptyHint": "U kunt de huidige map selecteren of een nieuwe maken.",
       "openFolderAria": "{name} openen",
-      "selectedCount": "geen mappen geselecteerd | {count} map geselecteerd | {count} mappen geselecteerd",
+      "selectedCount": "{count, plural, =0 {geen mappen geselecteerd} one {# map geselecteerd} other {# mappen geselecteerd}}",
       "noFolders": "Geen mappen gevonden",
       "selectFolder": "Deze map selecteren",
       "errors": {
@@ -4966,8 +4939,8 @@
       "upload": "Uploaden",
       "uploadWithCount": "Uploaden ({count})",
       "viewInLibrary": "Bekijken in bibliotheek",
-      "fileCount": "geen bestanden | {count} bestand | {count} bestanden",
-      "booksAdded": "geen boeken toegevoegd | {count} boek toegevoegd | {count} boeken toegevoegd",
+      "fileCount": "{count, plural, =0 {geen bestanden} one {# bestand} other {# bestanden}}",
+      "booksAdded": "{count, plural, =0 {geen boeken toegevoegd} one {# boek toegevoegd} other {# boeken toegevoegd}}",
       "uploadedFailed": "{done} geüpload, {failed} mislukt",
       "progress": "{done} van {total} uploaden...",
       "header": {
@@ -4983,7 +4956,7 @@
     }
   },
   "metadataScore": {
-    "missingFields": "geen velden ontbreken - metadata bewerken | {count} veld ontbreekt - metadata bewerken | {count} velden ontbreken - metadata bewerken"
+    "missingFields": "{count, plural, =0 {geen velden ontbreken - metadata bewerken} one {# veld ontbreekt - metadata bewerken} other {# velden ontbreken - metadata bewerken}}"
   },
   "migration": {
     "sidebarTitle": "Booklore-import",
@@ -5113,7 +5086,7 @@
       "ofCount": "van {total}",
       "targetBookId": "Doelboek #{id}",
       "recommended": "Aanbevolen",
-      "resolveButton": "{count} duplicaat oplossen | {count} duplicaat oplossen | {count} duplicaten oplossen",
+      "resolveButton": "{count, plural, =0 {# duplicaat oplossen} one {# duplicaat oplossen} other {# duplicaten oplossen}}",
       "sourceRecordId": "Bronrecord-ID #{id}",
       "byAuthor": "door {author} (ID: {id})",
       "byFilePath": "{filePath} (ID: {id})",
@@ -5339,47 +5312,22 @@
     "settings": {
       "title": "Instellingen",
       "ariaLabel": "Lezerinstellingen",
-      "tabs": {
-        "appearance": "Weergave",
-        "text": "Tekst",
-        "layout": "Indeling"
-      },
-      "appearance": {
-        "mode": "Modus",
+      "mode": {
         "light": "Licht",
-        "dark": "Donker",
-        "colorTheme": "Kleurthema"
+        "dark": "Donker"
       },
-      "text": {
-        "fontSize": "Lettergrootte",
-        "fontSizeRange": "Bereik: 10-32px",
-        "lineHeight": "Regelhoogte",
-        "lineHeightRange": "Bereik: 0,8-3,0",
-        "fontFamily": "Lettertype",
-        "fontFamilyDescription": "Kies ingebouwde of geüploade lettertypen voor de tekst.",
-        "builtIn": "Ingebouwd",
-        "yourFonts": "Jouw lettertypen"
-      },
-      "layout": {
-        "pageSpreads": "Paginaspreads",
-        "pageSpreadsDescription": "Kies hoe deze op afbeeldingen gebaseerde EPUB pagina's koppelt.",
+      "fontBuiltIn": "Ingebouwd",
+      "fontYours": "Jouw lettertypen",
+      "readingFlow": "Leesstroom",
+      "pageSpreads": "Paginaspreads",
+      "pageSpreadsHint": "Kies hoe deze op afbeeldingen gebaseerde EPUB pagina's koppelt.",
+      "spread": {
         "bookDefault": "Standaard van boek",
-        "singlePage": "Enkele pagina",
-        "readingFlow": "Leesstroom",
-        "readingFlowDescription": "Wissel tussen gepagineerd en doorlopend scrollen.",
-        "paginated": "Gepagineerd",
-        "scrolled": "Scrollend",
-        "textColumns": "Tekstkolommen",
-        "textColumnsRange": "Bereik: 1-10",
-        "columnGap": "Kolomtussenruimte",
-        "columnGapRange": "Bereik: 0-50%",
-        "maxWidth": "Maximale breedte",
-        "maxWidthRange": "Bereik: 400-1600",
-        "justifyText": "Tekst uitvullen",
-        "justifyTextDescription": "Uitlijning over de volledige breedte inschakelen.",
-        "hyphenation": "Woordafbreking",
-        "hyphenationDescription": "Automatische woordafbreking inschakelen."
-      }
+        "singlePage": "Enkele pagina"
+      },
+      "columnGap": "Kolomtussenruimte",
+      "justifyText": "Tekst uitvullen",
+      "hyphenation": "Woordafbreking"
     },
     "search": {
       "placeholder": "Zoeken in boek (min. {min} tekens)...",
@@ -5387,7 +5335,7 @@
       "tooShort": "Typ minstens {min} tekens",
       "noResults": "Geen resultaten gevonden",
       "prompt": "Typ om te zoeken",
-      "resultCount": "geen resultaten | {count} resultaat | {count} resultaten"
+      "resultCount": "{count, plural, =0 {geen resultaten} one {# resultaat} other {# resultaten}}"
     },
     "sidebar": {
       "tabs": {
@@ -5468,27 +5416,15 @@
       "cycleFooterMode": "Voettekstinfo wisselen"
     },
     "cbz": {
-      "tabs": {
-        "view": "Weergave",
-        "reading": "Lezen",
-        "layout": "Indeling"
-      },
       "fitMode": "Passingsmodus",
       "background": "Achtergrond",
       "scrollMode": "Scrollmodus",
       "scrollModeHint": "Gebruik \"Geen tussenruimte\" voor webtoons en verticale stroken.",
       "readingDirection": "Leesrichting",
       "pageView": "Paginaweergave",
-      "autoFallback": "Auto-terugval",
       "spreadAlignmentLabel": "Spreaduitlijning",
-      "spreadAlignmentHint": "Spreaduitlijning is niet beschikbaar in de auto-terugvalmodus.",
-      "focusTwoPageToggle": "Focus op tweepaginaschakelaar",
       "forceTwoPage": "Twee pagina's forceren",
-      "off": "Uit",
-      "on": "Aan",
       "widePages": "Brede pagina's",
-      "resetBookViewSettings": "Weergave-instellingen van boek herstellen",
-      "resetConfirm": "Weergave-instellingen voor dit boek herstellen naar je algemene standaardwaarden?",
       "firstPage": "Eerste pagina",
       "lastPage": "Laatste pagina",
       "fit": {
@@ -5537,7 +5473,7 @@
       "sleep": "Slaap",
       "chapterAbbrev": "Hfst.",
       "sleepTimer": "Slaaptimer",
-      "minutes": "{count} minuten",
+      "minutes": "{count, plural, one {# minuut} other {# minuten}}",
       "endOfChapter": "Einde van hoofdstuk",
       "noChaptersAvailable": "Geen hoofdstukken beschikbaar",
       "extend15": "+ 15 minuten",
@@ -5553,7 +5489,7 @@
   },
   "scanner": {
     "filesProgress": "{processed}/{total} bestanden",
-    "booksFound": "geen boeken gevonden | {count} boek gevonden | {count} boeken gevonden"
+    "booksFound": "{count, plural, =0 {geen boeken gevonden} one {# boek gevonden} other {# boeken gevonden}}"
   },
   "series": {
     "completion": {
@@ -5597,7 +5533,7 @@
       "pageTitleNamed": "Reeks · {name}",
       "pageTitleWithId": "Reeks #{id}",
       "entityName": "Reeks",
-      "bookCount": "geen boeken | {count} boek | {count} boeken",
+      "bookCount": "{count, plural, =0 {geen boeken} one {# boek} other {# boeken}}",
       "byAuthors": "door {authors}",
       "moreAuthors": "+{count} meer",
       "preparingEditor": "Editor voorbereiden...",
@@ -5649,7 +5585,6 @@
     },
     "createDialog": {
       "title": "Nieuwe Smart Scope",
-      "visibleToAll": "Zichtbaar voor alle gebruikers",
       "createFailed": "Smart Scope aanmaken mislukt"
     },
     "saveAsDialog": {
@@ -5661,7 +5596,7 @@
       "untitled": "Naamloze SmartScope",
       "subtitle": "Smart scope-instellingen configureren",
       "counting": "tellen...",
-      "bookCount": "geen boeken | een boek | {count} boeken",
+      "bookCount": "{count, plural, =0 {geen boeken} one {een boek} other {# boeken}}",
       "identity": "Identiteit",
       "filters": "Filters",
       "noFilters": "Geen filters ingesteld. Alle toegankelijke boeken worden opgenomen in deze smart scope.",
@@ -5713,7 +5648,7 @@
       "loadError": "Laden van gegevens mislukt",
       "emptyTitle": "Nog geen gegevens",
       "emptyDescription": "Geen gegevens beschikbaar voor deze grafiek",
-      "unknownField": "geen gegevens voor dit veld | {count} boek heeft geen gegevens voor dit veld | {count} boeken hebben geen gegevens voor dit veld"
+      "unknownField": "{count, plural, =0 {geen gegevens voor dit veld} one {# boek heeft geen gegevens voor dit veld} other {# boeken hebben geen gegevens voor dit veld}}"
     },
     "breakdown": {
       "ariaLabel": "Uitsplitsen op bron of formaat"
@@ -5862,8 +5797,7 @@
   "tools": {
     "header": {
       "entityManager": "Entiteitenbeheer",
-      "bulkRename": "Bulk hernoemen",
-      "duplicateBooks": "Duplicate Books"
+      "bulkRename": "Bulk hernoemen"
     },
     "entityTypes": {
       "authors": "Auteurs",
@@ -5875,8 +5809,6 @@
       "series": "Reeksen"
     },
     "bulkRename": {
-      "previewToolbar": "Rename preview",
-      "renameSettings": "Rename settings",
       "library": "Bibliotheek",
       "selectLibraryPlaceholder": "Selecteer een bibliotheek...",
       "noEligibleLibraries": "Geen bibliotheken hebben bestand hernoemen ingeschakeld. Schakel het in bij Bibliotheekinstellingen.",
@@ -5909,8 +5841,8 @@
         "label": "Samenvatting",
         "toRename": "{count} te hernoemen",
         "unchanged": "{count} ongewijzigd",
-        "collisions": "{count} conflicten | {count} conflict | {count} conflicten",
-        "errors": "{count} fouten | {count} fout | {count} fouten"
+        "collisions": "{count, plural, =0 {# conflicten} one {# conflict} other {# conflicten}}",
+        "errors": "{count, plural, =0 {# fouten} one {# fout} other {# fouten}}"
       },
       "empty": {
         "title": "Kies een bibliotheek om te beginnen",
@@ -5926,94 +5858,21 @@
       },
       "confirmDialog": {
         "title": "Bulk hernoemen bevestigen",
-        "body": "Hiermee wordt {count} boek op schijf hernoemd. Bestanden met conflicten of fouten worden overgeslagen. Deze actie kan niet ongedaan worden gemaakt. | Hiermee wordt {count} boek op schijf hernoemd. Bestanden met conflicten of fouten worden overgeslagen. Deze actie kan niet ongedaan worden gemaakt. | Hiermee worden {count} boeken op schijf hernoemd. Bestanden met conflicten of fouten worden overgeslagen. Deze actie kan niet ongedaan worden gemaakt.",
-        "renameButton": "{count} boek hernoemen | {count} boek hernoemen | {count} boeken hernoemen"
+        "body": "{count, plural, =0 {Hiermee wordt # boek op schijf hernoemd. Bestanden met conflicten of fouten worden overgeslagen. Deze actie kan niet ongedaan worden gemaakt.} one {Hiermee wordt # boek op schijf hernoemd. Bestanden met conflicten of fouten worden overgeslagen. Deze actie kan niet ongedaan worden gemaakt.} other {Hiermee worden # boeken op schijf hernoemd. Bestanden met conflicten of fouten worden overgeslagen. Deze actie kan niet ongedaan worden gemaakt.}}",
+        "renameButton": "{count, plural, =0 {# boek hernoemen} one {# boek hernoemen} other {# boeken hernoemen}}"
       }
     },
     "bookDuplicates": {
-      "scanSettings": "Scan settings",
-      "title": "Duplicate Books",
-      "description": "Scan files and metadata for potential duplicate records. Nothing is deleted during a scan.",
-      "scope": "Library scope",
-      "allLibraries": "All accessible libraries",
-      "similarity": "Similar-title threshold",
-      "explainSimilarity": "Explain the similar-title threshold",
-      "similarityHelp": "Only for Similar title and author matches. At least one author and the book type must also match. Lower finds more possible duplicates; higher requires closer titles. Identical files, ISBN, and exact metadata are checked separately.",
-      "runScan": "Run scan",
-      "rescan": "Rescan",
-      "status": {
-        "queued": "Scan queued",
-        "running": "Scanning books"
-      },
-      "groupsFound": "No duplicate groups | One duplicate group | {count} duplicate groups",
-      "filter": "Match type",
-      "allReasons": "All match types",
-      "reasons": {
-        "file_hash": "Identical file set",
-        "isbn": "Same ISBN",
-        "exact_metadata": "Exact title and authors",
-        "fuzzy_metadata": "Similar title and author"
-      },
-      "similarityValue": "{percent}% title similarity",
-      "notDuplicates": "Not duplicates",
-      "keepThis": "Keep this book",
-      "discardThis": "Discard this book",
-      "selectKeeperFirst": "Select a keeper first",
-      "noDirectMatch": "No direct match with keeper",
-      "moreFiles": "+{count} more",
-      "showDetails": "Show details",
-      "hideDetails": "Hide details",
-      "deleteSelected": "Delete {count} selected",
-      "openBook": "Open details for {title}",
-      "unknownAuthor": "Unknown author",
-      "unknown": "Unknown",
-      "none": "None",
-      "accessDenied": "You do not have permission to use the duplicate book tool.",
-      "pairDetails": "Match details",
-      "pairLabel": "{first} and {second}",
-      "fields": {
-        "library": "Library",
-        "isbn": "ISBN",
-        "formats": "Formats",
-        "fileLocation": "File",
-        "files": "Files",
-        "readingStatus": "Reading status",
-        "progress": "Progress",
-        "path": "Library path",
-        "collections": "Collections",
-        "added": "Added",
-        "updated": "Updated"
-      },
-      "initial": {
-        "title": "Find duplicate books",
-        "description": "Choose a library scope and similarity level, then run a scan. No books are changed until you explicitly confirm a deletion."
-      },
-      "empty": {
-        "title": "No duplicate groups found",
-        "description": "No books matched the current scope, similarity level, and match filter."
-      },
+      "groupsFound": "{count, plural, =0 {No duplicate groups} one {One duplicate group} other {# duplicate groups}}",
       "deleteDialog": {
-        "title": "Permanently delete duplicate books?",
-        "description": "This will permanently delete {count} selected book and its files. | This will permanently delete {count} selected book and its files. | This will permanently delete {count} selected books and their files.",
-        "warning": "Metadata, collections, reading data, and device state are not transferred to the kept book. Associated data for other users is also removed.",
-        "confirm": "Delete {count} book | Delete {count} book | Delete {count} books",
-        "success": "No books deleted | One duplicate book deleted | {count} duplicate books deleted"
-      },
-      "errors": {
-        "start": "Could not start the duplicate scan.",
-        "status": "Could not load scan progress.",
-        "scan": "The duplicate scan failed. Try running it again.",
-        "results": "Could not load duplicate groups.",
-        "delete": "Could not delete the selected duplicate books."
-      },
-      "pagination": {
-        "label": "Duplicate groups pages",
-        "page": "Page {page} of {total}"
+        "description": "{count, plural, =0 {This will permanently delete # selected book and its files.} one {This will permanently delete # selected book and its files.} other {This will permanently delete # selected books and their files.}}",
+        "confirm": "{count, plural, =0 {Delete # book} one {Delete # book} other {Delete # books}}",
+        "success": "{count, plural, =0 {No books deleted} one {One duplicate book deleted} other {# duplicate books deleted}}"
       }
     },
     "entityManager": {
       "unknown": "Onbekend",
-      "bookCount": "geen boeken | {count} boek | {count} boeken",
+      "bookCount": "{count, plural, =0 {geen boeken} one {# boek} other {# boeken}}",
       "sortPrefix": "· sorteer: {sortName}",
       "selectTargetToKeep": "Selecteer doel om te behouden",
       "writeToFiles": "Naar bestanden schrijven",
@@ -6040,8 +5899,8 @@
         "emptyDescription": "Pas de gelijkenisdrempel aan en klik op Scannen om mogelijke duplicaten te detecteren.",
         "noneFoundTitle": "Geen duplicaten gevonden",
         "noneFoundDescription": "Er zijn geen mogelijke duplicaten gedetecteerd met de huidige instellingen.",
-        "clustersFound": "geen clusters gevonden | {count} cluster gevonden | {count} clusters gevonden",
-        "plusOthers": "+ {count} andere | + {count} andere | + {count} andere",
+        "clustersFound": "{count, plural, =0 {geen clusters gevonden} one {# cluster gevonden} other {# clusters gevonden}}",
+        "plusOthers": "{count, plural, =0 {+ # andere} one {+ # andere} other {+ # andere}}",
         "percentSimilar": "{percent}% gelijk",
         "pairDetails": "Paardetails",
         "dismissEntityTitle": "Alle paren voor deze entiteit negeren",
@@ -6098,7 +5957,7 @@
       },
       "bulkDeleteModal": {
         "title": "Bulk verwijderen",
-        "confirm": "Weet je zeker dat je {count} geselecteerde entiteit wilt verwijderen? | Weet je zeker dat je {count} geselecteerde entiteit wilt verwijderen? | Weet je zeker dat je {count} geselecteerde entiteiten wilt verwijderen?",
+        "confirm": "{count, plural, =0 {Weet je zeker dat je # geselecteerde entiteit wilt verwijderen?} one {Weet je zeker dat je # geselecteerde entiteit wilt verwijderen?} other {Weet je zeker dat je # geselecteerde entiteiten wilt verwijderen?}}",
         "deleteButton": "{count} verwijderen"
       },
       "mergeModal": {
@@ -6176,12 +6035,12 @@
       },
       "retry": {
         "noneToRetry": "Geen bestanden met fouten om opnieuw te proberen",
-        "retrying": "Eén bestand opnieuw proberen | Eén bestand opnieuw proberen | {count} bestanden opnieuw proberen"
+        "retrying": "{count, plural, =0 {Eén bestand opnieuw proberen} one {Eén bestand opnieuw proberen} other {# bestanden opnieuw proberen}}"
       },
       "applyFetched": {
-        "applied": "Op geen bestanden toegepast | Op één bestand toegepast | Op {count} bestanden toegepast",
-        "skippedEdited": "één bestand overgeslagen omdat het handmatige bewerkingen bevat | één bestand overgeslagen omdat het handmatige bewerkingen bevat | {count} bestanden overgeslagen omdat ze handmatige bewerkingen bevatten",
-        "skippedNoMetadata": "één bestand overgeslagen omdat het geen opgehaalde metadata heeft | één bestand overgeslagen omdat het geen opgehaalde metadata heeft | {count} bestanden overgeslagen omdat ze geen opgehaalde metadata hebben",
+        "applied": "{count, plural, =0 {Op geen bestanden toegepast} one {Op één bestand toegepast} other {Op # bestanden toegepast}}",
+        "skippedEdited": "{count, plural, =0 {één bestand overgeslagen omdat het handmatige bewerkingen bevat} one {één bestand overgeslagen omdat het handmatige bewerkingen bevat} other {# bestanden overgeslagen omdat ze handmatige bewerkingen bevatten}}",
+        "skippedNoMetadata": "{count, plural, =0 {één bestand overgeslagen omdat het geen opgehaalde metadata heeft} one {één bestand overgeslagen omdat het geen opgehaalde metadata heeft} other {# bestanden overgeslagen omdat ze geen opgehaalde metadata hebben}}",
         "noneApplied": "Geen bestanden toegepast; {reasons}",
         "noneSelected": "Geen bestanden geselecteerd"
       }
@@ -6194,7 +6053,7 @@
       "showControlsAria": "Collectiebediening tonen",
       "loadError": "Kan deze collectie niet laden",
       "toast": {
-        "removed": "Geen boeken uit collectie verwijderd | Eén boek uit collectie verwijderd | {count} boeken uit collectie verwijderd",
+        "removed": "{count, plural, =0 {Geen boeken uit collectie verwijderd} one {Eén boek uit collectie verwijderd} other {# boeken uit collectie verwijderd}}",
         "removeFailed": "Boeken verwijderen uit collectie mislukt"
       },
       "empty": {
@@ -6261,7 +6120,7 @@
     "title": "Wat is er nieuw",
     "subtitle": "Alles wat is uitgebracht, nieuwste eerst.",
     "versionPrefix": "Versie {version}",
-    "newUpdates": "geen nieuwe updates | één nieuwe update | {count} nieuwe updates",
+    "newUpdates": "{count, plural, =0 {geen nieuwe updates} one {één nieuwe update} other {# nieuwe updates}}",
     "remindLater": "Later herinneren",
     "gotIt": "Begrepen",
     "latest": "Nieuwste",
@@ -6302,7 +6161,6 @@
     "series": "Reeksen",
     "entityManager": "Entiteitenbeheer",
     "bulkRename": "Bulksgewijs hernoemen",
-    "duplicateBooks": "Duplicate Books",
     "notFound": "Niet gevonden",
     "signIn": "Inloggen",
     "initialSetup": "Eerste installatie",

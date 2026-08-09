@@ -12,6 +12,8 @@ export interface ParsedBookData {
   language?: string | null;
   seriesName?: string | null;
   seriesIndex?: number | null;
+  /** Series length declared by the file itself; annotates the series, never the book row. */
+  seriesTotalBooks?: number | null;
   authors: { name: string; sortName: string | null }[];
   genres: string[];
   tags?: string[];
@@ -24,6 +26,7 @@ export interface ParsedBookData {
   openLibraryId?: string | null;
   ranobedbId?: string | null;
   koboId?: string | null;
+  comicvineId?: string | null;
   lubimyczytacId?: string | null;
   aladinId?: string | null;
   itunesId?: string | null;

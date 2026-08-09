@@ -10,6 +10,7 @@ local ConfirmBox = require("ui/widget/confirmbox")
 local Device = require("device")
 local InfoMessage = require("ui/widget/infomessage")
 local NetworkMgr = require("ui/network/manager")
+local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
@@ -17,7 +18,9 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 
 local BookOrbitBookSync = require("bookorbit_book_sync")
+local BookOrbitApi = require("bookorbit_api")
 local BookOrbitSweep = require("bookorbit_sweep")
+local Transfer = require("bookorbit_download_transfer")
 
 local BookOrbitUpdater = {}
 
@@ -42,6 +45,94 @@ local function sq(path)
     return "'" .. path:gsub("'", "'\\''") .. "'"
 end
 
+-- Names of the entries directly under `dir`, excluding "." and "..".
+local function childNames(dir)
+    local names = {}
+    local ok, iterator, dir_obj = pcall(lfs.dir, dir)
+    if not ok or not iterator then return names end
+    for name in iterator, dir_obj do
+        if name ~= "." and name ~= ".." then
+            names[#names + 1] = name
+        end
+    end
+    return names
+end
+
+-- Extracts every entry of `zip_path` below `raw_dir` with KOReader's Archiver.
+-- Returns true, or nil + error string.
+local function extractWithArchiver(Archiver, zip_path, raw_dir)
+    local arc = Archiver.Reader:new()
+    if not arc:open(zip_path) then
+        local open_err = arc.err
+        arc:close()
+        return nil, tostring(open_err or "could not open update archive")
+    end
+    for entry in arc:iterate() do
+        if not arc:extractToPath(entry.path, raw_dir .. "/" .. entry.path) then
+            break
+        end
+    end
+    local err = arc.err
+    arc:close()
+    if err then return nil, tostring(err) end
+    return true
+end
+
+-- Renames the extracted tree to `staging`, dropping the archive's single
+-- top-level directory when it has one. Returns true, or nil + error string.
+local function stripRootInto(raw_dir, staging)
+    local names = childNames(raw_dir)
+    local root = names[1]
+    if #names == 1 and lfs.attributes(raw_dir .. "/" .. root, "mode") == "directory" then
+        if not os.rename(raw_dir .. "/" .. root, staging) then
+            return nil, "could not move extracted plugin into place"
+        end
+        os.execute("rm -rf " .. sq(raw_dir))
+        return true
+    end
+    if not os.rename(raw_dir, staging) then
+        return nil, "could not move extracted plugin into place"
+    end
+    return true
+end
+
+-- Extracts the update zip into `staging`, stripping the zip's root folder.
+--
+-- KOReader dropped `Device:unpackArchive` in koreader/koreader@751b4978 (July
+-- 2026) after its own callers moved to the `ffi/archiver` module, so prefer
+-- Archiver and keep the old helper for readers that predate the module. Both
+-- are probed at runtime: neither is guaranteed to exist on a given build.
+local function unpackUpdate(zip_path, staging, raw_dir)
+    local has_archiver, Archiver = pcall(require, "ffi/archiver")
+    if has_archiver and type(Archiver) == "table" and Archiver.Reader then
+        os.execute("rm -rf " .. sq(raw_dir))
+        if not lfs.mkdir(raw_dir) and lfs.attributes(raw_dir, "mode") ~= "directory" then
+            return nil, "could not create update staging directory"
+        end
+        local ok, err = extractWithArchiver(Archiver, zip_path, raw_dir)
+        if ok then
+            ok, err = stripRootInto(raw_dir, staging)
+        end
+        if not ok then
+            os.execute("rm -rf " .. sq(raw_dir))
+            return nil, err
+        end
+        return true
+    end
+
+    if type(Device.unpackArchive) ~= "function" then
+        return nil, "this KOReader build provides no archive extraction support"
+    end
+    if not lfs.mkdir(staging) and lfs.attributes(staging, "mode") ~= "directory" then
+        return nil, "could not create update staging directory"
+    end
+    local ok, err = Device:unpackArchive(zip_path, staging, true)
+    if not ok then
+        return nil, tostring(err or "archive extraction failed")
+    end
+    return true
+end
+
 -- Downloads the plugin zip from the server and atomically replaces `plugin_dir`.
 --
 -- Strategy: extract into a staging directory, backup the current plugin dir,
@@ -50,10 +141,13 @@ end
 --
 -- `api`         BookOrbitApi instance (must be logged in)
 -- `plugin_dir`  Absolute path of the running plugin directory
--- `progress_cb` Optional function(bytes_received) called during download
+-- `opts`        Optional { on_progress = function(received, total) }. The
+--               transfer runs in a subprocess when a Trapper coroutine is
+--               driving, so progress arrives through polled snapshots.
 --
 -- Returns true on success, or nil + error string on failure.
-function BookOrbitUpdater.apply(api, plugin_dir, progress_cb)
+function BookOrbitUpdater.apply(api, plugin_dir, opts)
+    opts = opts or {}
     local dir = plugin_dir:gsub("/+$", "")
     local parent_dir = dir:match("^(.*)/[^/]+$")
     local plugin_name = dir:match("([^/]+)$")
@@ -64,25 +158,31 @@ function BookOrbitUpdater.apply(api, plugin_dir, progress_cb)
 
     local tmp_zip  = parent_dir .. "/bookorbit-update.zip"
     local staging  = parent_dir .. "/" .. plugin_name .. ".update"
+    local raw_dir  = parent_dir .. "/" .. plugin_name .. ".unpack"
     local backup   = parent_dir .. "/" .. plugin_name .. ".bak"
 
-    -- Remove any leftover staging dir from a previous failed attempt.
-    os.execute("rm -rf " .. sq(staging))
+    -- Remove any leftover staging dirs from a previous failed attempt.
+    os.execute("rm -rf " .. sq(staging) .. " " .. sq(raw_dir))
 
-    local ok, err = api:downloadPluginUpdate(tmp_zip, progress_cb)
+    Transfer.sweepStale(parent_dir)
+    local ok, err = Transfer.run{
+        root = parent_dir,
+        destination = tmp_zip,
+        generation = opts.generation or 1,
+        on_progress = opts.on_progress,
+        is_current = opts.is_current,
+        perform = function(download_opts)
+            return api:downloadPluginUpdate(tmp_zip, download_opts)
+        end,
+    }
     if not ok then
         return nil, tostring(err or "download failed")
     end
 
-    if not lfs.mkdir(staging) and lfs.attributes(staging, "mode") ~= "directory" then
-        os.remove(tmp_zip)
-        return nil, "could not create update staging directory"
-    end
-
     -- Extract into a staging directory so a partial unpack never touches the
-    -- live plugin directory. Use KOReader's archive helper instead of the
+    -- live plugin directory. Use KOReader's archive helpers instead of the
     -- platform unzip command: unzip warning exit codes vary by platform.
-    local ok_unpack, unpack_err = Device:unpackArchive(tmp_zip, staging, true)
+    local ok_unpack, unpack_err = unpackUpdate(tmp_zip, staging, raw_dir)
     os.remove(tmp_zip)
 
     if not ok_unpack then
@@ -162,6 +262,7 @@ end
 
 function UpdateCheck:maybeCheckForUpdate(interactive)
     if not self:isLoggedIn() or self._checking_update or self._updating then return end
+    if not interactive and not NetworkMgr:isConnected() then return end
     if BookOrbitSweep.isRunning() or BookOrbitBookSync.isRunning() then return end
 
     local now = os.time()
@@ -192,11 +293,17 @@ function UpdateCheck:maybeCheckForUpdate(interactive)
 end
 
 function UpdateCheck:doCheckForUpdate()
-    local checking = InfoMessage:new{ text = _("Checking for update...") }
-    UIManager:show(checking)
-
-    local body, err = self:newClient():getPluginVersion()
-    UIManager:close(checking)
+    if self._checking_update or self._updating then return end
+    self._checking_update = true
+    local api_opts = self:apiOpts(false)
+    local completed, result = Trapper:dismissableRunInSubprocess(function()
+        local body, err = BookOrbitApi.new(api_opts):getPluginVersion()
+        return { body = body, err = err }
+    end, _("Checking for update..."))
+    self._checking_update = false
+    if not completed then return end
+    result = result or {}
+    local body, err = result.body, result.err
 
     if not body then
         if self.recordSyncError then
@@ -272,8 +379,15 @@ function UpdateCheck:applyUpdate(new_version)
         return
     end
     self._updating = true
-    self:_doApplyUpdate(new_version)
-    self._updating = false
+    -- The transfer owns a background subprocess, so the whole flow needs a
+    -- Trapper coroutine; the busy flag clears inside it, not when wrap returns.
+    Trapper:wrap(function()
+        local ok, err = pcall(function()
+            self:_doApplyUpdate(new_version)
+        end)
+        self._updating = false
+        if not ok then error(err, 0) end
+    end)
 end
 
 function UpdateCheck:_doApplyUpdate(new_version)
@@ -285,12 +399,33 @@ function UpdateCheck:_doApplyUpdate(new_version)
         return
     end
 
-    local progress = InfoMessage:new{ text = T(_("Downloading BookOrbit v%1..."), new_version) }
-    UIManager:show(progress)
-    UIManager:forceRePaint()
+    local progress
+    local last_bucket = -1
+    local function showProgress(text)
+        if progress then UIManager:close(progress) end
+        progress = InfoMessage:new{ text = text }
+        UIManager:show(progress)
+        UIManager:forceRePaint()
+    end
+    showProgress(T(_("Downloading BookOrbit v%1..."), new_version))
 
-    local ok, err = BookOrbitUpdater.apply(self:newClient(), self.path)
-    UIManager:close(progress)
+    local ok, err = BookOrbitUpdater.apply(self:newClient(), self.path, {
+        on_progress = function(received, total)
+            local bucket, text
+            if total and total > 0 then
+                local pct = math.min(100, math.floor(received / total * 100))
+                bucket = math.floor(pct / 5)
+                text = T(_("Downloading BookOrbit v%1...\n\n%2"), new_version, pct .. "%")
+            else
+                bucket = math.floor((received or 0) / (256 * 1024))
+                text = T(_("Downloading BookOrbit v%1...\n\n%2 KB"), new_version, math.floor((received or 0) / 1024))
+            end
+            if bucket == last_bucket then return end
+            last_bucket = bucket
+            showProgress(text)
+        end,
+    })
+    if progress then UIManager:close(progress) end
 
     if not ok then
         local msg

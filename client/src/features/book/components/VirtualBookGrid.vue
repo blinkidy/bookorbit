@@ -2,7 +2,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useElementSize, useWindowSize, watchDebounced } from '@vueuse/core'
 import { RecycleScroller } from 'vue-virtual-scroller'
-import { isAudioFormat, type BookCard, type CoverAspectRatio, type JumpBucketKind } from '@bookorbit/types'
+import type { BookCard, CoverAspectRatio, JumpBucketKind } from '@bookorbit/types'
 import BookCoverCard from './BookCoverCard.vue'
 import BookCoverSkeleton from './BookCoverSkeleton.vue'
 import CollapsedSeriesCard from './CollapsedSeriesCard.vue'
@@ -10,7 +10,7 @@ import { COVER_ASPECT_RATIO_KEY, DEFAULT_COVER_ASPECT_RATIO } from '../lib/cover
 import { isBookPlaceholder, type BookSlot } from '../composables/useBookWindow'
 import { useDisplaySettings } from '@/composables/useDisplaySettings'
 
-type BookActionType = 'quick-view' | 'add-to-collection' | 'delete'
+type BookActionType = 'quick-view' | 'add-to-collection' | 'move-to-library' | 'delete'
 
 const props = withDefaults(
   defineProps<{
@@ -21,16 +21,17 @@ const props = withDefaults(
     isSelected?: (bookId: number) => boolean
     newBookIds?: Set<number>
     virtualized?: boolean
-    audioCoverScale?: number
+    squareCoverScale?: number
     railGutter?: boolean
     railGutterKind?: JumpBucketKind | null
+    allowMoveToLibrary?: boolean
   }>(),
   {
     selectionMode: false,
     isSelected: undefined,
     newBookIds: () => new Set<number>(),
     virtualized: true,
-    audioCoverScale: 1,
+    squareCoverScale: 1,
     railGutter: false,
     railGutterKind: null,
   },
@@ -86,7 +87,7 @@ watchDebounced(
 
 const coverPx = computed(() => asPositiveInt(props.coverSize, 140))
 const gapPx = computed(() => asPositiveInt(props.gridGap, 20))
-const audioCoverScale = computed(() => normalizeScale(props.audioCoverScale))
+const squareCoverScale = computed(() => normalizeScale(props.squareCoverScale))
 
 const availableWidth = computed(() => {
   if (settledWidth.value > 0) return settledWidth.value
@@ -143,7 +144,7 @@ const staticVariableWrapStyle = computed(() => ({
   gap: `${gapPx.value}px`,
 }))
 
-const useVariableStaticWidths = computed(() => !props.virtualized && audioCoverScale.value > 1)
+const useVariableStaticWidths = computed(() => !props.virtualized && squareCoverScale.value > 1)
 
 const staticBooks = computed(() => props.books.filter((slot): slot is BookCard => !isBookPlaceholder(slot)))
 
@@ -151,19 +152,14 @@ function asBook(slot: BookSlot): BookCard {
   return slot as BookCard
 }
 
-function isAudiobook(book: BookCard): boolean {
-  return book.files.some((file) => (file.format ? isAudioFormat(file.format) : false))
-}
-
 function staticItemStyle(book: BookCard): { width: string; maxWidth: string } {
-  const scale = isAudiobook(book) ? audioCoverScale.value : 1
+  const scale = book.coverAspectRatio === '1/1' ? squareCoverScale.value : 1
   const width = Math.max(1, Math.round(coverPx.value * scale))
   return { width: `${width}px`, maxWidth: '100%' }
 }
 
 function staticCoverAspectRatio(book: BookCard): CoverAspectRatio {
-  if (isAudiobook(book)) return '1/1'
-  return coverAspectRatio.value
+  return book.coverAspectRatio ?? coverAspectRatio.value
 }
 
 function handleScrollerUpdate(startIndex: number, endIndex: number) {
@@ -289,6 +285,7 @@ defineExpose({ scrollToIndex })
           :cover-aspect-ratio="staticCoverAspectRatio(book)"
           :selection-mode="selectionMode"
           :selected="isSelected?.(book.id) ?? false"
+          :allow-move-to-library="allowMoveToLibrary"
           @action="emit('action', book, $event)"
           @select="emit('select', book.id, $event)"
           @update:book="emit('update:book', $event)"
@@ -296,7 +293,7 @@ defineExpose({ scrollToIndex })
       </div>
     </div>
 
-    <div v-else-if="!virtualized" class="grid w-full max-w-full items-start" :style="staticGridStyle" data-testid="book-grid-static">
+    <div v-else-if="!virtualized" class="grid w-full max-w-full items-end" :style="staticGridStyle" data-testid="book-grid-static">
       <div v-for="book in staticBooks" :key="book.id" class="min-w-0" :class="{ 'book-grid-cell--new': props.newBookIds.has(book.id) }">
         <CollapsedSeriesCard v-if="book.collapsedSeries" :book="book" :show-label="showLabel" />
         <BookCoverCard
@@ -305,6 +302,7 @@ defineExpose({ scrollToIndex })
           :show-label="showLabel"
           :selection-mode="selectionMode"
           :selected="isSelected?.(book.id) ?? false"
+          :allow-move-to-library="allowMoveToLibrary"
           @action="emit('action', book, $event)"
           @select="emit('select', book.id, $event)"
           @update:book="emit('update:book', $event)"
@@ -337,6 +335,7 @@ defineExpose({ scrollToIndex })
             :show-label="showLabel"
             :selection-mode="selectionMode"
             :selected="isSelected?.(item.id) ?? false"
+            :allow-move-to-library="allowMoveToLibrary"
             @action="emit('action', asBook(item), $event)"
             @select="emit('select', item.id, $event)"
             @update:book="emit('update:book', $event)"
@@ -368,7 +367,9 @@ defineExpose({ scrollToIndex })
 }
 
 .book-grid-cell {
-  height: calc(var(--book-grid-height) + var(--book-grid-label-height, 0px));
+  display: grid;
+  align-items: end;
+  height: calc(var(--book-grid-height) + var(--book-grid-label-height, 0px) + var(--book-grid-gap));
   box-sizing: border-box;
   padding-left: 0;
   padding-right: var(--book-grid-gap);

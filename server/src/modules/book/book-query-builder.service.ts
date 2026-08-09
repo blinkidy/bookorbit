@@ -2,17 +2,28 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { AnyColumn, SQL, and, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, not, or, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
-import type { CommunityRatingProvider, ContentFilterRules, GroupRule, ReadStatus, Rule, SortSpec } from '@bookorbit/types';
+import { parseCustomRuleFieldId, parseCustomSortFieldId } from '@bookorbit/types';
+import type {
+  CommunityRatingProvider,
+  ContentFilterRules,
+  CustomMetadataFieldTypeMap,
+  GroupRule,
+  ReadStatus,
+  Rule,
+  RuleValue,
+  SortSpec,
+} from '@bookorbit/types';
 import { DB } from '../../db';
 import { isDateKey, resolveTimeZone, toDateKeyInTimeZone } from '../../common/utils/timezone.utils';
 import { buildContentFilterClauses } from '../../common/utils/content-filter-sql.utils';
 import { accentInsensitiveIlike } from '../../common/utils/accent-insensitive-search.utils';
 import * as schema from '../../db/schema';
-import { BookSortBuilder } from './book-sort-builder.service';
+import { BookSortBuilder, customMetadataValueColumn } from './book-sort-builder.service';
 import {
   audiobookProgress,
   authors,
   bookAuthors,
+  bookCustomMetadataValues,
   bookFiles,
   bookGenres,
   bookCommunityRatings,
@@ -118,8 +129,8 @@ export class BookQueryBuilder {
     )!;
   }
 
-  buildOrderBy(sort: SortSpec[], userId?: number): SQL[] {
-    return this.sortBuilder.build(sort, userId);
+  buildOrderBy(sort: SortSpec[], userId?: number, customFieldTypes?: CustomMetadataFieldTypeMap): SQL[] {
+    return this.sortBuilder.build(sort, userId, customFieldTypes);
   }
 
   private groupToSql(node: GroupRule, depth: number, userId?: number, timeZone = 'UTC'): SQL {
@@ -132,6 +143,10 @@ export class BookQueryBuilder {
 
   private ruleToSql(rule: Rule, userId?: number, timeZone = 'UTC'): SQL {
     const { field, operator, value, valueTo } = rule;
+    const customFieldId = parseCustomRuleFieldId(field);
+    if (customFieldId !== null) {
+      return this.customFieldRuleToSql(customFieldId, operator, value, valueTo, timeZone);
+    }
     switch (field) {
       case 'title':
         return this.textRuleToSql(bookMetadata.title, operator, value as string);
@@ -268,6 +283,92 @@ export class BookQueryBuilder {
         return isNotNull(col);
       default:
         throw new BadRequestException(`Invalid operator '${operator}' for numeric field`);
+    }
+  }
+
+  /**
+   * User-defined custom metadata fields, addressed as `custom:<id>`.
+   *
+   * Negated operators negate the whole EXISTS so that books carrying no value for the field
+   * still match, the same way `notContains` treats a null column on a built-in field.
+   */
+  private customFieldRuleToSql(
+    fieldId: number,
+    operator: string,
+    value: RuleValue | undefined,
+    valueTo: string | number | undefined,
+    timeZone: string,
+  ): SQL {
+    const existsValue = (whereClause: SQL) => {
+      const sq = this.db
+        .select({ one: sql`1` })
+        .from(bookCustomMetadataValues)
+        .where(and(eq(bookCustomMetadataValues.bookId, books.id), eq(bookCustomMetadataValues.fieldId, fieldId), whereClause)!);
+      return sql`exists (${sq})`;
+    };
+
+    switch (operator) {
+      case 'isEmpty':
+        return not(existsValue(this.customValuePresentSql()));
+      case 'isNotEmpty':
+        return existsValue(this.customValuePresentSql());
+      case 'notContains':
+        return not(existsValue(this.customValueMatchSql('contains', value, valueTo, timeZone)));
+      case 'notEq':
+        return not(existsValue(this.customValueMatchSql('eq', value, valueTo, timeZone)));
+      default:
+        return existsValue(this.customValueMatchSql(operator, value, valueTo, timeZone));
+    }
+  }
+
+  /** True for a row holding a value of any kind, so presence is answered without knowing the field's type. */
+  private customValuePresentSql(): SQL {
+    return or(
+      isNotNull(bookCustomMetadataValues.valueText),
+      isNotNull(bookCustomMetadataValues.valueNumber),
+      isNotNull(bookCustomMetadataValues.valueDate),
+      isNotNull(bookCustomMetadataValues.valueBoolean),
+    )!;
+  }
+
+  /**
+   * Predicate over a single `book_custom_metadata_values` row.
+   *
+   * `book_custom_metadata_values` keeps one typed column per value kind, and a field's type is
+   * fixed at creation, so the column to compare follows from the operator. The operators more
+   * than one type offers (`eq`, `between`) split on the value's runtime type instead. A rule
+   * whose operator does not suit its field therefore reads a column that is always null and
+   * matches nothing, which is how an archived or deleted field behaves too.
+   */
+  private customValueMatchSql(operator: string, value: RuleValue | undefined, valueTo: string | number | undefined, timeZone: string): SQL {
+    switch (operator) {
+      case 'contains':
+      case 'startsWith':
+      case 'endsWith':
+        return this.textRuleToSql(bookCustomMetadataValues.valueText, operator, value as string);
+      case 'eq':
+        return typeof value === 'number'
+          ? this.numericRuleToSql(bookCustomMetadataValues.valueNumber, operator, value)
+          : this.textRuleToSql(bookCustomMetadataValues.valueText, operator, value as string);
+      case 'gt':
+      case 'gte':
+      case 'lt':
+      case 'lte':
+        return this.numericRuleToSql(bookCustomMetadataValues.valueNumber, operator, value as number, valueTo as number | undefined);
+      case 'between':
+        return typeof value === 'number'
+          ? this.numericRuleToSql(bookCustomMetadataValues.valueNumber, operator, value, valueTo as number | undefined)
+          : this.dateExprRuleToSql(sql`${bookCustomMetadataValues.valueDate}`, operator, value as string, valueTo, timeZone, 'custom metadata');
+      case 'before':
+      case 'after':
+      case 'withinLast':
+        return this.dateExprRuleToSql(sql`${bookCustomMetadataValues.valueDate}`, operator, value as string, valueTo, timeZone, 'custom metadata');
+      case 'isTrue':
+        return eq(bookCustomMetadataValues.valueBoolean, true);
+      case 'isFalse':
+        return eq(bookCustomMetadataValues.valueBoolean, false);
+      default:
+        throw new BadRequestException(`Invalid operator '${operator}' for custom metadata field`);
     }
   }
 
@@ -598,6 +699,25 @@ export class BookQueryBuilder {
   private publishedDateRuleToSql(operator: string, value: string | number | undefined, valueTo: string | number | undefined, timeZone: string): SQL {
     const dateExpr = sql`coalesce(${bookMetadata.publishedDate}, make_date(${bookMetadata.publishedYear}, 1, 1))`;
     switch (operator) {
+      case 'isEmpty':
+        return and(isNull(bookMetadata.publishedDate), isNull(bookMetadata.publishedYear))!;
+      case 'isNotEmpty':
+        return or(isNotNull(bookMetadata.publishedDate), isNotNull(bookMetadata.publishedYear))!;
+      default:
+        return this.dateExprRuleToSql(dateExpr, operator, value, valueTo, timeZone, 'publishedDate');
+    }
+  }
+
+  /** Date comparisons shared by every date-valued expression: `publishedDate` and custom date fields. */
+  private dateExprRuleToSql(
+    dateExpr: SQL,
+    operator: string,
+    value: string | number | undefined,
+    valueTo: string | number | undefined,
+    timeZone: string,
+    fieldLabel: string,
+  ): SQL {
+    switch (operator) {
       case 'before':
         return sql`${dateExpr} < ${this.parseDateKey(value, operator, 'value', timeZone)}::date`;
       case 'after':
@@ -612,12 +732,8 @@ export class BookQueryBuilder {
         const shiftDays = wholeDays > 0 ? wholeDays - 1 : 0;
         return sql`${dateExpr} >= (timezone(${timeZone}, now())::date - ${shiftDays}::int)`;
       }
-      case 'isEmpty':
-        return and(isNull(bookMetadata.publishedDate), isNull(bookMetadata.publishedYear))!;
-      case 'isNotEmpty':
-        return or(isNotNull(bookMetadata.publishedDate), isNotNull(bookMetadata.publishedYear))!;
       default:
-        throw new BadRequestException(`Invalid operator '${operator}' for publishedDate field`);
+        throw new BadRequestException(`Invalid operator '${operator}' for ${fieldLabel} field`);
     }
   }
 
@@ -807,13 +923,22 @@ export class BookQueryBuilder {
       return sql`exists (${sq})`;
     };
 
+    // A book only gets a user_book_status row once a status is set explicitly or derived from
+    // progress. Everywhere else (sorting, jump buckets, OPDS, the UI) a missing row reads as
+    // 'unread', so filtering on 'unread' has to cover row-less books too.
+    const targetsUnread = values?.includes('unread') ?? false;
+
     switch (operator) {
-      case 'includesAny':
+      case 'includesAny': {
         if (!values?.length) return sql`1 = 0`;
-        return existsStatus(inArray(userBookStatus.status, values as ReadStatus[]));
-      case 'excludesAll':
+        const matches = existsStatus(inArray(userBookStatus.status, values as ReadStatus[]));
+        return targetsUnread ? or(matches, not(existsStatus()))! : matches;
+      }
+      case 'excludesAll': {
         if (!values?.length) return sql`1 = 1`;
-        return not(existsStatus(inArray(userBookStatus.status, values as ReadStatus[])));
+        const matches = existsStatus(inArray(userBookStatus.status, values as ReadStatus[]));
+        return targetsUnread ? and(not(matches), existsStatus())! : not(matches);
+      }
       case 'isEmpty':
         return not(existsStatus());
       case 'isNotEmpty':
@@ -926,7 +1051,7 @@ export class BookQueryBuilder {
     return node.rules.some((r) => BookQueryBuilder.hasSeriesSelectionFilter(r));
   }
 
-  static buildCollapseOrderBy(sort: SortSpec[], userId: number): string {
+  static buildCollapseOrderBy(sort: SortSpec[], userId: number, customFieldTypes?: CustomMetadataFieldTypeMap): string {
     if (sort.length === 0) return 'sort_title ASC NULLS LAST, r.id ASC';
 
     if (!Number.isSafeInteger(userId)) throw new BadRequestException('Invalid userId for collapse order');
@@ -936,6 +1061,18 @@ export class BookQueryBuilder {
     for (const { field, dir } of sort) {
       const D = dir.toUpperCase();
       if (D !== 'ASC' && D !== 'DESC') continue;
+      // Custom field ids are parsed to bounded integers and the column comes from a fixed
+      // map, so both are safe to inline into this raw ORDER BY.
+      const customFieldId = parseCustomSortFieldId(field);
+      if (customFieldId !== null) {
+        const column = customMetadataValueColumn(customFieldId, customFieldTypes);
+        if (column) {
+          parts.push(
+            `(SELECT v.${column} FROM book_custom_metadata_values v WHERE v.book_id = r.id AND v.field_id = ${customFieldId}) ${D} NULLS LAST`,
+          );
+        }
+        continue;
+      }
       switch (field) {
         case 'title':
         case 'series':

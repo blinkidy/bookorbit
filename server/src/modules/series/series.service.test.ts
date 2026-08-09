@@ -12,6 +12,7 @@ describe('SeriesService', () => {
     findPage: vi.fn(),
     findDetail: vi.fn(),
     findBookIds: vi.fn(),
+    countSeries: vi.fn(),
   };
 
   const bookReadService = {
@@ -20,6 +21,7 @@ describe('SeriesService', () => {
 
   const libraryService = {
     findAll: vi.fn(),
+    findAccessibleLibraryIds: vi.fn(),
   };
 
   let service: SeriesService;
@@ -28,6 +30,23 @@ describe('SeriesService', () => {
     vi.resetAllMocks();
     service = new SeriesService(seriesRepo as any, bookReadService as any, libraryService as any);
     libraryService.findAll.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+    libraryService.findAccessibleLibraryIds.mockResolvedValue([1, 2]);
+  });
+
+  describe('countAll', () => {
+    it('counts series across the accessible libraries with the user content filters', async () => {
+      seriesRepo.countSeries.mockResolvedValue(1200);
+
+      await expect(service.countAll(reqUser())).resolves.toBe(1200);
+      expect(seriesRepo.countSeries).toHaveBeenCalledWith({ libraryIds: [1, 2], contentFilters: undefined });
+    });
+
+    it('skips the query when the user has no library access', async () => {
+      libraryService.findAccessibleLibraryIds.mockResolvedValue([]);
+
+      await expect(service.countAll(reqUser())).resolves.toBe(0);
+      expect(seriesRepo.countSeries).not.toHaveBeenCalled();
+    });
   });
 
   describe('findAll', () => {
@@ -347,6 +366,88 @@ describe('SeriesService', () => {
       seriesRepo.findDetail.mockResolvedValue({ id: 42, name: 'S', bookCount: 0, readCount: 0, authors: [], indices: [] });
       const result = await service.findBooks(reqUser(), 42, {});
       expect(result.seriesInfo.possibleGaps).toEqual([]);
+    });
+  });
+
+  describe('computeGaps with a provider expected book count', () => {
+    beforeEach(() => {
+      seriesRepo.findBookIds.mockResolvedValue({ bookIds: [], total: 0 });
+    });
+
+    async function gapsFor(indices: number[], bookCount: number, expectedBookCount: number | null) {
+      seriesRepo.findDetail.mockResolvedValue({ id: 42, name: 'S', bookCount, readCount: 0, authors: [], indices, expectedBookCount });
+      const result = await service.findBooks(reqUser(), 42, {});
+      return result.seriesInfo.possibleGaps;
+    }
+
+    it('reports books past the highest owned index, which is the whole point of the total', async () => {
+      expect(await gapsFor([1, 2, 4], 3, 7)).toEqual([3, 5, 6, 7]);
+    });
+
+    it('reports the books below the lowest owned index', async () => {
+      expect(await gapsFor([4], 1, 5)).toEqual([1, 2, 3, 5]);
+    });
+
+    it('reports no gaps for a complete series', async () => {
+      expect(await gapsFor([1, 2, 3], 3, 3)).toEqual([]);
+    });
+
+    it('still reports gaps for a single owned book, which the interior-only rule cannot', async () => {
+      expect(await gapsFor([2], 1, 3)).toEqual([1, 3]);
+      expect(await gapsFor([2], 1, null)).toEqual([]);
+    });
+
+    it('exposes the expected count on the series payload', async () => {
+      seriesRepo.findDetail.mockResolvedValue({
+        id: 42,
+        name: 'S',
+        bookCount: 1,
+        readCount: 0,
+        authors: [],
+        indices: [1],
+        expectedBookCount: 7,
+      });
+      const result = await service.findBooks(reqUser(), 42, {});
+      expect(result.seriesInfo.expectedBookCount).toBe(7);
+    });
+
+    it('reports null when no provider has supplied a total', async () => {
+      seriesRepo.findDetail.mockResolvedValue({ id: 42, name: 'S', bookCount: 1, readCount: 0, authors: [], indices: [1], expectedBookCount: null });
+      const result = await service.findBooks(reqUser(), 42, {});
+      expect(result.seriesInfo.expectedBookCount).toBeNull();
+    });
+
+    describe('distrusting the total rather than naming a book missing wrongly', () => {
+      it('falls back to interior gaps when a book has no series index', async () => {
+        // Four books but only three numbered: the unnumbered one could be any of #4 to #7.
+        expect(await gapsFor([1, 2, 5], 4, 7)).toEqual([3, 4]);
+      });
+
+      it('falls back to interior gaps when a book has a fractional index', async () => {
+        expect(await gapsFor([1, 2.5, 4], 3, 7)).toEqual([2, 3]);
+      });
+
+      it('falls back when an owned book is numbered past the provider total', async () => {
+        expect(await gapsFor([1, 2, 9], 3, 7)).toEqual([3, 4, 5, 6, 7, 8]);
+      });
+
+      it('ignores a total of zero or below', async () => {
+        expect(await gapsFor([1, 3], 2, 0)).toEqual([2]);
+        expect(await gapsFor([1, 3], 2, -5)).toEqual([2]);
+      });
+
+      it('ignores a total beyond the ceiling so gap enumeration stays bounded', async () => {
+        expect(await gapsFor([1, 3], 2, 10_001)).toEqual([2]);
+      });
+
+      it('ignores a fractional total', async () => {
+        expect(await gapsFor([1, 3], 2, 4.5)).toEqual([2]);
+      });
+    });
+
+    it('counts duplicate editions of one entry as a single owned position', async () => {
+      // Two files for #1 plus #3: bookCount 3 matches the three index rows, so the total is trusted.
+      expect(await gapsFor([1, 1, 3], 3, 4)).toEqual([2, 4]);
     });
   });
 });

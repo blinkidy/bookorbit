@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BookCard, BookFileRef, CoverAspectRatio } from '@bookorbit/types'
-import { FORMAT_TO_GROUP, READER_OPENABLE_FORMATS } from '@bookorbit/types'
+import { FORMAT_TO_GROUP, getBookMediaProfile, READER_OPENABLE_FORMATS } from '@bookorbit/types'
 import { getFormatColor } from '../lib/format-colors'
 import { computed, inject, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -10,6 +10,7 @@ import {
   Check,
   Download,
   Eye,
+  FolderInput,
   FolderPlus,
   Image,
   Lock,
@@ -63,9 +64,11 @@ const props = defineProps<{
   selected?: boolean
   showLabel?: boolean
   coverAspectRatio?: CoverAspectRatio
+  /** Opt-in: only views that host the destination sheet should offer this. */
+  allowMoveToLibrary?: boolean
 }>()
 
-type BookActionType = 'quick-view' | 'add-to-collection' | 'delete'
+type BookActionType = 'quick-view' | 'add-to-collection' | 'move-to-library' | 'delete'
 const emit = defineEmits<{
   action: [type: BookActionType]
   select: [event: MouseEvent]
@@ -77,8 +80,9 @@ const authorQuery = computed(() => props.book.authors[0] ?? null)
 
 const readableFiles = computed(() => props.book.files.filter((f) => f.format && READER_OPENABLE_FORMATS.has(f.format)))
 const primaryFile = computed(() => readableFiles.value.find((f) => f.role === 'primary') ?? readableFiles.value[0] ?? null)
-const isAudiobook = computed(() => readableFiles.value.some((f) => FORMAT_TO_GROUP[f.format!] === 'audio'))
-const isComic = computed(() => readableFiles.value.some((f) => FORMAT_TO_GROUP[f.format!] === 'cbx'))
+const mediaProfile = computed(() => getBookMediaProfile(readableFiles.value))
+const isAudiobook = computed(() => mediaProfile.value.primaryMediaKind === 'audiobook')
+const isComic = computed(() => mediaProfile.value.primaryMediaKind === 'comic')
 
 // For multi-file audiobooks, collapse all tracks into one representative entry.
 // The audio reader loads the full track queue from the book, so opening any track is equivalent.
@@ -121,7 +125,9 @@ async function handleRefreshMetadata() {
 const { hasPermission } = usePermissions()
 const { cardOverlays, bookCoverDisplayMode, gridCardPrimaryLabel, gridCardSecondaryLabel, cardInfoMode, thumbnailClickAction } = useDisplaySettings()
 const injectedCoverAspectRatio = inject(COVER_ASPECT_RATIO_KEY, ref(DEFAULT_COVER_ASPECT_RATIO))
-const effectiveCoverAspectRatio = computed<CoverAspectRatio>(() => props.coverAspectRatio ?? injectedCoverAspectRatio.value)
+const effectiveCoverAspectRatio = computed<CoverAspectRatio>(
+  () => props.coverAspectRatio ?? props.book.coverAspectRatio ?? injectedCoverAspectRatio.value,
+)
 const showSendDialog = ref(false)
 
 const hasProgress = computed(() => props.book.readingProgress != null && props.book.readingProgress > 0)
@@ -601,7 +607,7 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
                       <DropdownMenuItem v-for="file in openableFiles" :key="file.id" @click="openFile(file)">
                         <span v-if="isMultiTrackAudio && FORMAT_TO_GROUP[file.format!] === 'audio'">{{ t('book.file.audiobook') }}</span>
                         <span v-else>{{ file.format?.toUpperCase() ?? '?' }}</span>
-                        <span v-if="file.role === 'primary' && !isMultiTrackAudio" class="ml-auto pl-4 text-[10px] text-primary/70">{{
+                        <span v-if="file.role === 'primary' && !isMultiTrackAudio" class="ml-auto pl-4 text-[10px] text-primary">{{
                           t('book.file.primary')
                         }}</span>
                       </DropdownMenuItem>
@@ -629,7 +635,7 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
                       <DropdownMenuItem v-for="file in openableFiles" :key="file.id" @click="handleDownloadFile(file)">
                         <span v-if="isMultiTrackAudio && isAudioFile(file)">{{ t('book.download.audiobookZip') }}</span>
                         <span v-else>{{ file.format?.toUpperCase() ?? '?' }}</span>
-                        <span v-if="file.role === 'primary' && !isMultiTrackAudio" class="ml-auto pl-4 text-[10px] text-primary/70">{{
+                        <span v-if="file.role === 'primary' && !isMultiTrackAudio" class="ml-auto pl-4 text-[10px] text-primary">{{
                           t('book.file.primary')
                         }}</span>
                       </DropdownMenuItem>
@@ -668,6 +674,10 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
                   <DropdownMenuItem @click="emit('action', 'add-to-collection')">
                     <FolderPlus class="size-4 mr-2" />
                     {{ t('book.actions.addToCollection') }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem v-if="allowMoveToLibrary && hasPermission('library_edit_metadata')" @click="emit('action', 'move-to-library')">
+                    <FolderInput class="size-4 mr-2" />
+                    {{ t('book.move.action') }}
                   </DropdownMenuItem>
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
@@ -740,7 +750,7 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
                 <DropdownMenuItem v-for="file in openableFiles" :key="file.id" @click="openFile(file)">
                   <span v-if="isMultiTrackAudio && FORMAT_TO_GROUP[file.format!] === 'audio'">{{ t('book.file.audiobook') }}</span>
                   <span v-else>{{ file.format?.toUpperCase() ?? '?' }}</span>
-                  <span v-if="file.role === 'primary' && !isMultiTrackAudio" class="ml-auto pl-4 text-[10px] text-primary/70">{{
+                  <span v-if="file.role === 'primary' && !isMultiTrackAudio" class="ml-auto pl-4 text-[10px] text-primary">{{
                     t('book.file.primary')
                   }}</span>
                 </DropdownMenuItem>
@@ -767,7 +777,7 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
                 <DropdownMenuItem v-for="file in openableFiles" :key="file.id" @click="handleDownloadFile(file)">
                   <span v-if="isMultiTrackAudio && isAudioFile(file)">{{ t('book.download.audiobookZip') }}</span>
                   <span v-else>{{ file.format?.toUpperCase() ?? '?' }}</span>
-                  <span v-if="file.role === 'primary' && !isMultiTrackAudio" class="ml-auto pl-4 text-[10px] text-primary/70">{{
+                  <span v-if="file.role === 'primary' && !isMultiTrackAudio" class="ml-auto pl-4 text-[10px] text-primary">{{
                     t('book.file.primary')
                   }}</span>
                 </DropdownMenuItem>

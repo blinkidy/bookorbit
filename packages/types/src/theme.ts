@@ -6,36 +6,68 @@ export type Theme = (typeof THEME_IDS)[number];
 
 export const ACCENT_IDS = [
   "grey",
+  "scarlet",
+  "vermilion",
   "rose",
+  "copper",
   "orange",
+  "chartreuse",
+  "marigold",
+  "wasabi",
   "amber",
+  "malachite",
   "yellow",
+  "viridian",
+  "turquoise",
   "lime",
   "green",
+  "acid-green",
   "emerald",
   "teal",
+  "electric-blue",
   "cyan",
-  "sky",
+  "jade",
+  "ultramarine",
+  "iris",
+  "purple",
   "blue",
   "indigo",
   "violet",
+  "amethyst",
   "fuchsia",
+  "raspberry",
   "pink",
   "white",
+  "rosewater",
+  "salmon",
   "coral",
+  "sand",
   "peach",
+  "pear",
+  "flax",
+  "sprout",
   "butter",
+  "aloe",
   "lemon",
+  "foam",
+  "aqua",
   "celadon",
   "sage",
+  "pistachio",
   "mint",
   "seafoam",
+  "baby-blue",
   "powder",
-  "mist",
+  "sea-glass",
+  "bluebell",
+  "cornflower",
+  "thistle",
   "periwinkle",
   "wisteria",
   "lavender",
+  "mauve",
   "orchid",
+  "rose-quartz",
   "blush",
 ] as const;
 export type Accent = (typeof ACCENT_IDS)[number];
@@ -47,7 +79,6 @@ export const BACKGROUND_IDS = [
   "none",
   "dots",
   "cross",
-  "terminal",
   "millimeter",
   "blueprint",
   "brushed",
@@ -68,10 +99,18 @@ export const BACKGROUND_IDS = [
 ] as const;
 export type Background = (typeof BACKGROUND_IDS)[number];
 
+/** Shell surface translucency, in percent. The floor keeps the sidebar and header
+ *  readable over the busiest background patterns. */
+export const SURFACE_OPACITY_MIN = 80;
+export const SURFACE_OPACITY_MAX = 100;
+export const SURFACE_OPACITY_DEFAULT = 92;
+
 export interface ThemePreferences {
   theme: Theme;
   accent: Accent;
   radius: Radius;
   background: Background;
   brightness: number;
+  /** Optional so a client that sends it stays valid against a server that predates it. */
+  surfaceOpacity?: number;
 }

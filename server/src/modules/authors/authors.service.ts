@@ -1,5 +1,4 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
-import { inArray } from 'drizzle-orm';
 import { Observable } from 'rxjs';
 
 import type {
@@ -16,10 +15,10 @@ import { MAX_OFFSET_ROWS, isOffsetWithinLimit } from '../../common/constants/pag
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { normalizeMetadataText } from '../../common/utils/metadata-text-normalize.utils';
 import type { RequestUser } from '../../common/types/request-user';
-import { books } from '../../db/schema';
 import { BookReadService } from '../book/book-read.service';
 import { LibraryService } from '../library/library.service';
 import { AppSettingsService } from '../app-settings/app-settings.service';
+import { MetadataScoreService } from '../metadata-score/metadata-score.service';
 import { AuthorImageStorageError, AuthorImageStorageService } from './author-image-storage.service';
 import { AUTHOR_ENRICHMENT_REASONS } from './author-enrichment-reasons';
 import { AuthorEnrichmentExecutorService } from './author-enrichment-executor.service';
@@ -50,6 +49,7 @@ export class AuthorsService {
     private readonly authorImageStorage: AuthorImageStorageService,
     private readonly enrichmentExecutor: AuthorEnrichmentExecutorService,
     private readonly enrichmentOrchestrator: AuthorEnrichmentOrchestratorService,
+    private readonly metadataScoreService: MetadataScoreService,
   ) {}
 
   private assertPaginationWindow(page: number, size: number): void {
@@ -84,6 +84,13 @@ export class AuthorsService {
     };
   }
 
+  /** Total authors the user can browse; matches the unfiltered total of {@link findAll}. */
+  async countAll(user: RequestUser): Promise<number> {
+    const libraryIds = await this.libraryService.findAccessibleLibraryIds(user);
+    if (libraryIds.length === 0) return 0;
+    return this.authorsRepo.countAuthors({ libraryIds, contentFilters: user.isSuperuser ? undefined : user.contentFilters });
+  }
+
   async findOne(user: RequestUser, authorId: number): Promise<AuthorDetail> {
     const libraryIds = await this.resolveLibraryIds(user);
     const row = await this.authorsRepo.findById(authorId, libraryIds, user.isSuperuser ? undefined : user.contentFilters);
@@ -116,17 +123,18 @@ export class AuthorsService {
     }
 
     const orderMap = new Map(page.bookIds.map((id, index) => [id, index]));
-    const { rows, authorRows, fileRows, genreRows, progressRows } = await this.bookReadService.findCards({
-      where: inArray(books.id, page.bookIds),
-      orderBy: [],
-      limit: page.bookIds.length,
-      offset: 0,
-      userId: user.id,
-    });
-
-    const items = assembleBookCards(rows, authorRows, fileRows, genreRows, progressRows).sort(
-      (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
-    );
+    const cardData = await this.bookReadService.findCardsByBookIds(page.bookIds, user.id);
+    const items = assembleBookCards(
+      cardData.rows,
+      cardData.authorRows,
+      cardData.fileRows,
+      cardData.genreRows,
+      cardData.progressRows,
+      cardData.statusRows,
+      cardData.narratorRows,
+      cardData.tagRows,
+      cardData.seriesMembershipRows,
+    ).sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
 
     return { items, total: page.total, page: page.page, size: page.size };
   }
@@ -268,18 +276,19 @@ export class AuthorsService {
       const allAuthorIds = [dto.targetAuthorId, ...uniqueSourceIds];
       await this.assertMutationAccess(user, allAuthorIds);
 
-      const affectedBookCount = await this.authorsRepo.countDistinctBooks(uniqueSourceIds);
+      const affectedBookIds = await this.authorsRepo.findBookIdsByAuthorIds(uniqueSourceIds);
       await this.authorsRepo.mergeAuthors(dto.targetAuthorId, uniqueSourceIds);
+      await this.metadataScoreService.calculateAndSaveMany(affectedBookIds);
       await this.enrichmentOrchestrator.schedule(dto.targetAuthorId, AUTHOR_ENRICHMENT_REASONS.AUTHOR_MERGE_TARGET);
       const target = await this.findOne(user, dto.targetAuthorId);
 
       this.logger.log(
-        `[${event}] [end] userId=${user.id} targetAuthorId=${dto.targetAuthorId} durationMs=${Date.now() - startedAt} mergedCount=${uniqueSourceIds.length} affectedBookCount=${affectedBookCount} - author merge completed`,
+        `[${event}] [end] userId=${user.id} targetAuthorId=${dto.targetAuthorId} durationMs=${Date.now() - startedAt} mergedCount=${uniqueSourceIds.length} affectedBookCount=${affectedBookIds.length} - author merge completed`,
       );
       return {
         target,
         mergedAuthorIds: uniqueSourceIds,
-        affectedBookCount,
+        affectedBookCount: affectedBookIds.length,
       };
     } catch (err) {
       const errorClass = err instanceof Error ? err.name : 'Error';
@@ -303,15 +312,16 @@ export class AuthorsService {
       const authorIds = [...new Set(dto.authorIds)];
       await this.assertMutationAccess(user, authorIds);
 
-      const affectedBookCount = await this.authorsRepo.countDistinctBooks(authorIds);
+      const affectedBookIds = await this.authorsRepo.findBookIdsByAuthorIds(authorIds);
       await this.authorsRepo.deleteAuthors(authorIds);
+      await this.metadataScoreService.calculateAndSaveMany(affectedBookIds);
       this.logger.log(
-        `[${event}] [end] userId=${user.id} durationMs=${Date.now() - startedAt} deletedCount=${authorIds.length} affectedBookCount=${affectedBookCount} - author delete completed`,
+        `[${event}] [end] userId=${user.id} durationMs=${Date.now() - startedAt} deletedCount=${authorIds.length} affectedBookCount=${affectedBookIds.length} - author delete completed`,
       );
 
       return {
         deletedAuthorIds: authorIds,
-        affectedBookCount,
+        affectedBookCount: affectedBookIds.length,
       };
     } catch (err) {
       const errorClass = err instanceof Error ? err.name : 'Error';
