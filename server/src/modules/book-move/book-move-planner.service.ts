@@ -349,11 +349,13 @@ export class BookMovePlannerService {
 class DestinationAllocator {
   private readonly reservedFolders = new Set<string>();
   private readonly reservedFiles = new Set<string>();
+  private readonly folderPathOwners: Map<string, number>;
+  private readonly filePathOwners: Map<string, number>;
 
-  constructor(
-    private readonly folderPathOwners: Map<string, number>,
-    private readonly filePathOwners: Map<string, number>,
-  ) {}
+  constructor(folderPathOwners: Map<string, number>, filePathOwners: Map<string, number>) {
+    this.folderPathOwners = new Map([...folderPathOwners].map(([path, bookId]) => [path.toLowerCase(), bookId]));
+    this.filePathOwners = new Map([...filePathOwners].map(([path, bookId]) => [path.toLowerCase(), bookId]));
+  }
 
   findConflict(plan: BookMovePlan, bookId: number, ownFileIds: Set<number>): { kind: BookMoveCollisionKind; existingBookId: number | null } | null {
     const folderKey = plan.targetFolderPathKey.toLowerCase();
@@ -361,7 +363,7 @@ class DestinationAllocator {
       return { kind: 'folder_path', existingBookId: null };
     }
 
-    const folderOwner = this.folderPathOwners.get(plan.targetFolderPathKey);
+    const folderOwner = this.folderPathOwners.get(folderKey);
     if (folderOwner !== undefined && folderOwner !== bookId) {
       return { kind: 'folder_path', existingBookId: folderOwner };
     }
@@ -372,7 +374,7 @@ class DestinationAllocator {
         return { kind: 'file_path', existingBookId: null };
       }
 
-      const owner = this.filePathOwners.get(file.to);
+      const owner = this.filePathOwners.get(fileKey);
       if (owner !== undefined && owner !== bookId) {
         return { kind: 'file_path', existingBookId: owner };
       }

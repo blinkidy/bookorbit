@@ -64,7 +64,7 @@ function makeDto(overrides: Partial<MoveBooksDto> = {}): MoveBooksDto {
 let moveRepo: Record<string, Mock<(...args: unknown[]) => unknown>>;
 type ExecuteResult = { status: string; crossDevice?: boolean; reason?: string; mergedBookId?: number | null };
 let executor: { execute: Mock<(input: unknown) => Promise<ExecuteResult>> };
-let bookService: { resolveSelectionToIds: ReturnType<typeof vi.fn> };
+let bookService: { resolveSelectionToIds: ReturnType<typeof vi.fn>; iterateSelectionIds: ReturnType<typeof vi.fn> };
 let appSettings: Record<string, ReturnType<typeof vi.fn>>;
 let scannerService: { isScanRunning: ReturnType<typeof vi.fn>; startScanAsync: ReturnType<typeof vi.fn> };
 let fileWatcherService: { stopWatcher: ReturnType<typeof vi.fn>; startWatcher: ReturnType<typeof vi.fn> };
@@ -118,7 +118,13 @@ beforeEach(() => {
     applyBookMove: vi.fn(),
   };
   executor = { execute: vi.fn<(input: unknown) => Promise<ExecuteResult>>().mockResolvedValue({ status: 'success', crossDevice: false }) };
-  bookService = { resolveSelectionToIds: vi.fn().mockResolvedValue([1]) };
+  bookService = {
+    resolveSelectionToIds: vi.fn().mockResolvedValue([1]),
+    iterateSelectionIds: vi.fn(async function* () {
+      const ids = await bookService.resolveSelectionToIds();
+      if (ids.length > 0) yield ids;
+    }),
+  };
   appSettings = {
     getUploadPattern: vi.fn().mockResolvedValue('<{title}>'),
     getUploadPatternBookPerFolder: vi.fn().mockResolvedValue('<{title}>/<{title}>'),
@@ -307,6 +313,63 @@ describe('execute guards', () => {
 });
 
 describe('execute', () => {
+  it('clears busy libraries when job creation fails', async () => {
+    moveRepo.createJob.mockRejectedValue(new Error('job insert failed'));
+
+    await expect(service.execute(makeDto(), USER, collectProgress().options)).rejects.toThrow('job insert failed');
+
+    expect(service.isBusy(1)).toBe(false);
+    expect(service.isBusy(2)).toBe(false);
+    expect(fileWatcherService.stopWatcher).not.toHaveBeenCalled();
+  });
+
+  it('restarts watchers already stopped when a later stop fails', async () => {
+    fileWatcherService.stopWatcher.mockImplementation((libraryId: number) => {
+      if (libraryId === 2) throw new Error('watcher stop failed');
+    });
+
+    await expect(service.execute(makeDto(), USER, collectProgress().options)).rejects.toThrow('watcher stop failed');
+
+    expect(fileWatcherService.startWatcher).toHaveBeenCalledWith(1, ['/libA']);
+    expect(fileWatcherService.startWatcher).not.toHaveBeenCalledWith(2, ['/libB']);
+    expect(service.isBusy(1)).toBe(false);
+    expect(service.isBusy(2)).toBe(false);
+  });
+
+  it('plans and executes large selections in bounded batches', async () => {
+    const books = new Map([
+      [
+        1,
+        makeBook({
+          bookId: 1,
+          folderPath: '/libA/One',
+          files: [{ id: 10, absolutePath: '/libA/One.epub', relPath: null, role: 'content', format: 'epub', fileHash: null, sortOrder: null }],
+        }),
+      ],
+      [
+        2,
+        makeBook({
+          bookId: 2,
+          folderPath: '/libA/Two',
+          metadata: { ...makeBook().metadata, title: 'Two' },
+          files: [{ id: 20, absolutePath: '/libA/Two.epub', relPath: null, role: 'content', format: 'epub', fileHash: null, sortOrder: null }],
+        }),
+      ],
+    ]);
+    bookService.iterateSelectionIds.mockImplementation(async function* () {
+      await Promise.resolve();
+      yield [1];
+      yield [2];
+    });
+    moveRepo.findMoveBookData.mockImplementation((ids: number[]) => Promise.resolve(ids.flatMap((id) => (books.has(id) ? [books.get(id)!] : []))));
+
+    const summary = await service.execute(makeDto(), USER, collectProgress().options);
+
+    expect(summary.succeeded).toBe(2);
+    expect(executor.execute).toHaveBeenCalledTimes(2);
+    expect(moveRepo.findMoveBookData.mock.calls.every((call) => (call[0] as number[]).length === 1)).toBe(true);
+  });
+
   it('stops and restarts watchers for every involved library', async () => {
     await service.execute(makeDto(), USER, collectProgress().options);
 
@@ -474,6 +537,10 @@ describe('destination lookup', () => {
     const taken = new Map([
       ['/libB/Dune', 99],
       ['/libB/Dune (2)', 98],
+      ['/libB/Dune (3)', 97],
+      ['/libB/Dune (4)', 96],
+      ['/libB/Dune (5)', 95],
+      ['/libB/Dune (6)', 94],
     ]);
     moveRepo.findFolderPathOwners.mockImplementation((...args: unknown[]) => {
       const paths = args[1] as string[];
@@ -482,7 +549,7 @@ describe('destination lookup', () => {
 
     const result = await service.preview(makeDto(), USER);
 
-    expect(result.collisions[0].keepBothPath).toBe('/libB/Dune (3)/Dune.epub');
+    expect(result.collisions[0].keepBothPath).toBe('/libB/Dune (7)/Dune.epub');
   });
 
   it('stops querying once no new destination is proposed', async () => {

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
@@ -85,6 +85,11 @@ export interface ApplyBookMoveInput {
   fileUpdates: BookFileMoveUpdate[];
   /** When set, this book in the target library is replaced by the moved book. */
   mergeDuplicateBookId?: number | null;
+}
+
+export interface MergeIncumbentFile {
+  id: number;
+  absolutePath: string;
 }
 
 @Injectable()
@@ -223,19 +228,27 @@ export class BookMoveRepository {
     return rows;
   }
 
+  async findMergeIncumbentFiles(bookId: number): Promise<MergeIncumbentFile[]> {
+    return this.db
+      .select({ id: bookFiles.id, absolutePath: bookFiles.absolutePath })
+      .from(bookFiles)
+      .where(eq(bookFiles.bookId, bookId))
+      .orderBy(asc(bookFiles.id));
+  }
+
   /** Maps folderPath to the owning book id, for books already in the target library. */
   async findFolderPathOwners(libraryId: number, folderPaths: string[]): Promise<Map<string, number>> {
     const owners = new Map<string, number>();
     if (folderPaths.length === 0) return owners;
 
     for (let index = 0; index < folderPaths.length; index += ID_BATCH_SIZE) {
-      const batch = folderPaths.slice(index, index + ID_BATCH_SIZE);
+      const batch = folderPaths.slice(index, index + ID_BATCH_SIZE).map((path) => path.toLowerCase());
       const rows = await this.db
         .select({ id: books.id, folderPath: books.folderPath })
         .from(books)
-        .where(and(eq(books.libraryId, libraryId), inArray(books.folderPath, batch)));
+        .where(and(eq(books.libraryId, libraryId), inArray(sql<string>`lower(${books.folderPath})`, batch)));
 
-      for (const row of rows) owners.set(row.folderPath, row.id);
+      for (const row of rows) owners.set(row.folderPath.toLowerCase(), row.id);
     }
 
     return owners;
@@ -247,13 +260,13 @@ export class BookMoveRepository {
     if (absolutePaths.length === 0) return owners;
 
     for (let index = 0; index < absolutePaths.length; index += ID_BATCH_SIZE) {
-      const batch = absolutePaths.slice(index, index + ID_BATCH_SIZE);
+      const batch = absolutePaths.slice(index, index + ID_BATCH_SIZE).map((path) => path.toLowerCase());
       const rows = await this.db
         .select({ absolutePath: bookFiles.absolutePath, bookId: bookFiles.bookId })
         .from(bookFiles)
-        .where(inArray(bookFiles.absolutePath, batch));
+        .where(inArray(sql<string>`lower(${bookFiles.absolutePath})`, batch));
 
-      for (const row of rows) owners.set(row.absolutePath, row.bookId);
+      for (const row of rows) owners.set(row.absolutePath.toLowerCase(), row.bookId);
     }
 
     return owners;
@@ -340,10 +353,11 @@ export class BookMoveRepository {
           .for('update')
           .limit(1);
 
-        if (duplicate && duplicate.libraryId === input.targetLibraryId) {
-          await tx.delete(books).where(eq(books.id, duplicate.id));
-          mergedBookId = duplicate.id;
+        if (!duplicate || duplicate.libraryId !== input.targetLibraryId) {
+          throw new ConflictException('Merge duplicate is no longer available in the target library');
         }
+        await tx.delete(books).where(eq(books.id, duplicate.id));
+        mergedBookId = duplicate.id;
       }
 
       const now = new Date();

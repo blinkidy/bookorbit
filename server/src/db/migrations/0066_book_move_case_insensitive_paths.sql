@@ -1,0 +1,2 @@
+CREATE INDEX "book_files_lower_absolute_path_idx" ON "book_files" USING btree (lower("absolute_path"));--> statement-breakpoint
+CREATE INDEX "books_library_lower_folder_path_idx" ON "books" USING btree ("library_id",lower("folder_path"));

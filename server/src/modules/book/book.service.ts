@@ -531,6 +531,48 @@ export class BookService {
     throw new BadRequestException('Either bookIds or query must be provided');
   }
 
+  async *iterateSelectionIds(dto: BulkSelectionDto, user: RequestUser, batchSize: number): AsyncGenerator<number[]> {
+    if (dto.bookIds && dto.query) {
+      throw new BadRequestException('bookIds and query are mutually exclusive');
+    }
+    if (dto.bookIds) {
+      for (let index = 0; index < dto.bookIds.length; index += batchSize) {
+        const batch = dto.bookIds.slice(index, index + batchSize);
+        await this.verifyLibraryAccessForBookIds(batch, user);
+        yield batch;
+      }
+      return;
+    }
+    if (dto.query) {
+      const libs = await this.libraryService.findAll(user);
+      let accessibleLibraryIds = libs.map((library) => library.id);
+      const timeZone = this.resolveUserTimeZone(user);
+      if (dto.query.libraryId !== undefined) {
+        if (!accessibleLibraryIds.includes(dto.query.libraryId)) {
+          throw new ForbiddenException(`Library ${dto.query.libraryId} is not accessible`);
+        }
+        accessibleLibraryIds = [dto.query.libraryId];
+      }
+      const where = this.queryBuilder.buildWhere(dto.query.filter, {
+        accessibleLibraryIds,
+        implicitLibraryId: dto.query.libraryId,
+        userId: user.id,
+        q: dto.query.q,
+        timeZone,
+        contentFilters: this.isSuperuser(user) ? undefined : user.contentFilters,
+      });
+      let afterId = 0;
+      while (true) {
+        const batch = await this.bookRepo.findIdsByWhereAfter(where, afterId, batchSize);
+        if (batch.length === 0) return;
+        yield batch;
+        afterId = batch[batch.length - 1]!;
+        if (batch.length < batchSize) return;
+      }
+    }
+    throw new BadRequestException('Either bookIds or query must be provided');
+  }
+
   acquireExportSlot(userId: number): () => void {
     const current = this.activeExportCounts.get(userId) ?? 0;
     if (current >= EXPORT_LIMITS.MAX_CONCURRENT_PER_USER) {

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { dirname, relative } from 'path';
+import { mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { basename, dirname, join, relative } from 'path';
 
 import { SelfWriteRegistry } from '../../common/services/self-write-registry.service';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
@@ -33,6 +35,11 @@ interface CompletedMove {
   mtime: Date;
 }
 
+interface StagedIncumbent {
+  from: string;
+  stagedAt: string;
+}
+
 /**
  * Moves a single book's files and then commits the database change.
  *
@@ -56,15 +63,18 @@ export class BookMoveExecutorService {
   ) {}
 
   async execute(input: ExecuteMoveInput): Promise<ExecuteMoveResult> {
-    return this.lockService.withLock(bookOperationLockKey(input.plan.bookId), () => this.executeLocked(input));
+    const bookIds = [input.plan.bookId, input.mergeDuplicateBookId].filter((id): id is number => id != null);
+    const lockKeys = [...new Set(bookIds)].sort((left, right) => left - right).map(bookOperationLockKey);
+    return this.withLocks(lockKeys, () => this.executeLocked(input));
   }
 
   private async executeLocked(input: ExecuteMoveInput): Promise<ExecuteMoveResult> {
     const { plan, target } = input;
     const startedAt = Date.now();
+    const incumbentFiles = input.mergeDuplicateBookId == null ? [] : await this.moveRepo.findMergeIncumbentFiles(input.mergeDuplicateBookId);
 
     const suppressionPaths = buildSuppressionPaths({
-      sourcePaths: plan.files.map((file) => file.from),
+      sourcePaths: [...plan.files.map((file) => file.from), ...incumbentFiles.map((file) => file.absolutePath)],
       targetPaths: plan.files.map((file) => file.to),
       sourceFolderPath: plan.sourceFolderPath,
       targetFolderPath: plan.targetFolderPathKey,
@@ -74,16 +84,30 @@ export class BookMoveExecutorService {
     this.selfWriteRegistry.begin(suppressionPaths);
 
     const completed: CompletedMove[] = [];
+    const stagedIncumbents: StagedIncumbent[] = [];
+    let stagingDirectory: string | null = null;
     let crossDevice = false;
 
     try {
+      if (incumbentFiles.length > 0) {
+        stagingDirectory = await mkdtemp(join(tmpdir(), 'bookorbit-move-merge-'));
+        for (const file of incumbentFiles) {
+          if (!(await pathExists(file.absolutePath))) continue;
+          const stagedAt = join(stagingDirectory, `${file.id}-${basename(file.absolutePath)}`);
+          await moveFile(file.absolutePath, stagedAt);
+          stagedIncumbents.push({ from: file.absolutePath, stagedAt });
+        }
+      }
+
       for (const file of plan.files) {
         if (!(await pathExists(file.from))) {
           await this.rollback(completed, plan.bookId);
+          await this.restoreIncumbents(stagedIncumbents, plan.bookId);
           return { status: 'skipped', reason: `source file is missing: ${file.from}` };
         }
         if (await pathExists(file.to)) {
           await this.rollback(completed, plan.bookId);
+          await this.restoreIncumbents(stagedIncumbents, plan.bookId);
           return { status: 'skipped', reason: `destination already exists: ${file.to}` };
         }
 
@@ -119,10 +143,19 @@ export class BookMoveExecutorService {
 
       if (!applied.moved) {
         await this.rollback(completed, plan.bookId);
+        await this.restoreIncumbents(stagedIncumbents, plan.bookId);
         return { status: 'skipped', reason: 'book no longer exists' };
       }
 
       await this.cleanupSourceDirectories(plan);
+      if (stagingDirectory !== null) {
+        await rm(stagingDirectory, { recursive: true, force: true }).catch((error: Error) => {
+          this.logger.error(
+            `[${MOVE_EVENT}] [fail] bookId=${plan.bookId} path="${sanitizeLogValue(stagingDirectory!)}" ` +
+              `error="${sanitizeLogValue(error.message)}" - could not remove staged duplicate files`,
+          );
+        });
+      }
 
       this.logger.log(
         `[${MOVE_EVENT}] [end] bookId=${plan.bookId} fromLibraryId=${plan.sourceLibraryId} toLibraryId=${target.libraryId} ` +
@@ -142,10 +175,17 @@ export class BookMoveExecutorService {
       );
 
       await this.rollback(completed, plan.bookId);
+      await this.restoreIncumbents(stagedIncumbents, plan.bookId);
       return { status: 'failed', reason: message };
     } finally {
       this.selfWriteRegistry.end(suppressionPaths);
     }
+  }
+
+  private async withLocks<T>(keys: string[], operation: () => Promise<T>): Promise<T> {
+    const [key, ...remaining] = keys;
+    if (key === undefined) return operation();
+    return this.lockService.withLock(key, () => this.withLocks(remaining, operation));
   }
 
   /** Returns already-moved files to their original locations. Best effort, always logged. */
@@ -158,6 +198,20 @@ export class BookMoveExecutorService {
         this.logger.error(
           `[${MOVE_EVENT}] [fail] bookId=${bookId} from="${sanitizeLogValue(move.to)}" to="${sanitizeLogValue(move.from)}" ` +
             `error="${sanitizeLogValue(message)}" - rollback failed, file left at destination`,
+        );
+      }
+    }
+  }
+
+  private async restoreIncumbents(staged: StagedIncumbent[], bookId: number): Promise<void> {
+    for (const file of [...staged].reverse()) {
+      try {
+        await moveFileBack(file.stagedAt, file.from);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `[${MOVE_EVENT}] [fail] bookId=${bookId} from="${sanitizeLogValue(file.stagedAt)}" to="${sanitizeLogValue(file.from)}" ` +
+            `error="${sanitizeLogValue(message)}" - duplicate rollback failed`,
         );
       }
     }

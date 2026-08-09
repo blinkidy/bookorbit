@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { SQL, and, asc, count, eq, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { SQL, and, asc, count, eq, gt, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 import { SUPPORTED_BOOK_FORMATS } from '../upload/upload-validator.service';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
@@ -1778,6 +1778,17 @@ export class BookRepository {
       .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
       .where(this.visibleWhere(where));
     return rows.map((r) => r.id);
+  }
+
+  async findIdsByWhereAfter(where: SQL | undefined, afterId: number, limit: number): Promise<number[]> {
+    const rows = await this.db
+      .select({ id: books.id })
+      .from(books)
+      .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
+      .where(and(this.visibleWhere(where), gt(books.id, afterId)))
+      .orderBy(asc(books.id))
+      .limit(limit);
+    return rows.map((row) => row.id);
   }
 
   async findPrimaryFile(bookId: number): Promise<{ absolutePath: string; format: string | null } | null> {

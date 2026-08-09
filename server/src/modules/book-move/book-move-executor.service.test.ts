@@ -1,7 +1,7 @@
 import type { Mock } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 
 import { SelfWriteRegistry } from '../../common/services/self-write-registry.service';
 import { FileLockService } from '../file-write/file-lock.service';
@@ -18,6 +18,7 @@ let executor: BookMoveExecutorService;
 let registry: SelfWriteRegistry;
 type ApplyMoveResult = { moved: boolean; mergedBookId: number | null };
 let applyBookMove: Mock<(input: unknown) => Promise<ApplyMoveResult>>;
+let findMergeIncumbentFiles: Mock<(bookId: number) => Promise<{ id: number; absolutePath: string }[]>>;
 
 function makeTarget(): MoveTargetLibrary {
   return {
@@ -69,7 +70,8 @@ beforeEach(async () => {
 
   registry = new SelfWriteRegistry();
   applyBookMove = vi.fn<(input: unknown) => Promise<ApplyMoveResult>>().mockResolvedValue({ moved: true, mergedBookId: null });
-  const repo = { applyBookMove } as unknown as BookMoveRepository;
+  findMergeIncumbentFiles = vi.fn().mockResolvedValue([]);
+  const repo = { applyBookMove, findMergeIncumbentFiles } as unknown as BookMoveRepository;
   executor = new BookMoveExecutorService(repo, new FileLockService(), registry);
 });
 
@@ -168,6 +170,36 @@ describe('successful move', () => {
 
     expect(result).toMatchObject({ status: 'merged', mergedBookId: 55 });
     expect(applyBookMove.mock.calls[0][0].mergeDuplicateBookId).toBe(55);
+  });
+
+  it('replaces and removes the incumbent files during a merge', async () => {
+    const plan = makePlan();
+    await writeFile(plan.files[0].from, 'incoming copy');
+    await mkdir(dirname(plan.files[0].to), { recursive: true });
+    await writeFile(plan.files[0].to, 'incumbent copy');
+    findMergeIncumbentFiles.mockResolvedValue([{ id: 501, absolutePath: plan.files[0].to }]);
+    applyBookMove.mockResolvedValue({ moved: true, mergedBookId: 55 });
+
+    const result = await executor.execute({ plan, target: makeTarget(), mergeDuplicateBookId: 55 });
+
+    expect(result).toMatchObject({ status: 'merged', mergedBookId: 55 });
+    expect(await readFile(plan.files[0].to, 'utf8')).toBe('incoming copy');
+    expect(await pathExists(plan.files[0].from)).toBe(false);
+  });
+
+  it('restores the incumbent and incoming files when a merge transaction fails', async () => {
+    const plan = makePlan();
+    await writeFile(plan.files[0].from, 'incoming copy');
+    await mkdir(dirname(plan.files[0].to), { recursive: true });
+    await writeFile(plan.files[0].to, 'incumbent copy');
+    findMergeIncumbentFiles.mockResolvedValue([{ id: 501, absolutePath: plan.files[0].to }]);
+    applyBookMove.mockRejectedValue(new Error('merge failed'));
+
+    const result = await executor.execute({ plan, target: makeTarget(), mergeDuplicateBookId: 55 });
+
+    expect(result).toMatchObject({ status: 'failed', reason: 'merge failed' });
+    expect(await readFile(plan.files[0].from, 'utf8')).toBe('incoming copy');
+    expect(await readFile(plan.files[0].to, 'utf8')).toBe('incumbent copy');
   });
 });
 

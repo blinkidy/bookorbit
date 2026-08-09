@@ -371,6 +371,18 @@ describe('batch reservations', () => {
     // Postgres would allow both, but a case-insensitive filesystem would not.
     expect(outcomes[1].kind).toBe('collision');
   });
+
+  it('normalizes persisted owner paths before matching them', () => {
+    const initial = expectReady(planner.plan(makeInput())[0]);
+    const input = makeInput({
+      folderPathOwners: new Map([[initial.targetFolderPathKey.toUpperCase(), 99]]),
+      filePathOwners: new Map([[initial.targetPath.toUpperCase(), 99]]),
+    });
+
+    const outcome = expectCollision(planner.plan(input)[0]);
+
+    expect(outcome.collision.existingBookId).toBe(99);
+  });
 });
 
 describe('path safety', () => {
