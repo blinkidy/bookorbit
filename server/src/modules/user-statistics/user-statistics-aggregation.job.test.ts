@@ -36,10 +36,14 @@ describe('UserStatisticsAggregationJob', () => {
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('deleted=2, inserted=3'));
   });
 
-  it('logs historical rebuild failures without blocking bootstrap', async () => {
+  it('retries historical rebuild failures without blocking bootstrap', async () => {
+    vi.useFakeTimers();
     const failure = new Error('rebuild failed');
     const service = {
-      rebuildDailyStatsAffectedByNoProgressKoreaderSessions: vi.fn().mockRejectedValue(failure),
+      rebuildDailyStatsAffectedByNoProgressKoreaderSessions: vi
+        .fn()
+        .mockRejectedValueOnce(failure)
+        .mockResolvedValue({ scanned: 1, rebuiltDays: 3, lastId: 12, complete: true, alreadyComplete: false }),
       recomputeRecentDailyStats: vi.fn().mockResolvedValue({ deleted: 0, inserted: 0, since: '2026-04-09' }),
     };
     const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
@@ -47,8 +51,13 @@ describe('UserStatisticsAggregationJob', () => {
     const job = new UserStatisticsAggregationJob(service as never);
 
     await expect(job.onApplicationBootstrap()).resolves.toBeUndefined();
-    await vi.waitFor(() => expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[reading_session.rebuild_no_progress_stats] [fail]')));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('retryDelayMs=1000'));
     expect(service.recomputeRecentDailyStats).toHaveBeenCalledWith(2);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(service.rebuildDailyStatsAffectedByNoProgressKoreaderSessions).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 
   it('does not wait for a historical rebuild before bootstrap completes', async () => {

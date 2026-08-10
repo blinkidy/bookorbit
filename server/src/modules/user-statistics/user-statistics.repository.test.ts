@@ -444,18 +444,18 @@ describe('UserStatisticsRepository', () => {
     ]);
   });
 
-  it('rebuilds affected daily stats without deleting historical KOReader sessions', async () => {
+  it('rebuilds current and potential prior-timezone days without deleting historical KOReader sessions', async () => {
     const selectQueue = [
       [
         {
           id: 11,
           userId: 5,
           libraryId: 3,
-          startedAt: new Date('2026-04-13T19:00:00.000Z'),
-          endedAt: new Date('2026-04-13T19:00:10.000Z'),
+          startedAt: new Date('2026-04-13T00:30:00.000Z'),
+          endedAt: new Date('2026-04-13T00:30:10.000Z'),
           durationSeconds: 10,
           progressDelta: 0,
-          settings: { timezone: 'UTC' },
+          settings: { timezone: 'America/Phoenix' },
         },
       ],
       [],
@@ -477,7 +477,7 @@ describe('UserStatisticsRepository', () => {
 
     await expect(repo.rebuildDailyStatsAffectedByNoProgressKoreaderSessions(1)).resolves.toEqual({
       scanned: 1,
-      rebuiltDays: 1,
+      rebuiltDays: 3,
       lastId: 11,
       complete: false,
       alreadyComplete: false,

@@ -17,6 +17,7 @@ import { toReadingSessionSourceBucket } from '@bookorbit/types';
 import { APP_SETTING_KEYS } from '../../common/constants/app-settings.constants';
 import { MIN_LOGGED_READING_PROGRESS_DELTA } from '../../common/constants/reading-session.constants';
 import {
+  addDateKeyDays,
   aggregateReadingSessionDailyStats,
   getDayRangeForDateKeys,
   getReadingSessionDayKeys,
@@ -917,7 +918,14 @@ export class UserStatisticsRepository {
       const affected = new Map<string, { userId: number; libraryId: number; timeZone: string; days: Set<string> }>();
       for (const row of rows) {
         const timeZone = resolveTimeZone((row.settings as { timezone?: unknown } | undefined)?.timezone, 'UTC');
-        for (const day of getReadingSessionDayKeys(row, timeZone)) {
+        const days = new Set(getReadingSessionDayKeys(row, timeZone));
+        // A local date can differ from UTC by at most one day, which covers keys written under any prior timezone.
+        for (const utcDay of getReadingSessionDayKeys(row, 'UTC')) {
+          days.add(addDateKeyDays(utcDay, -1));
+          days.add(utcDay);
+          days.add(addDateKeyDays(utcDay, 1));
+        }
+        for (const day of days) {
           const key = `${row.userId}:${row.libraryId}:${timeZone}:${day.slice(0, 7)}`;
           let group = affected.get(key);
           if (!group) {

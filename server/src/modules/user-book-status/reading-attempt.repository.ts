@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, isNull, notExists, notInArray, sql } from 'd
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { ReadingAttemptOrigin, ReadingAttemptOutcome, ReadStatus, ReadStatusSource } from '@bookorbit/types';
 
+import { loggedReadingSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 import { readingAttempts, readingSessions, userBookStatus, users } from '../../db/schema';
@@ -222,7 +223,7 @@ export class ReadingAttemptRepository {
           updatedAt: readingAttempts.updatedAt,
         })
         .from(readingAttempts)
-        .leftJoin(readingSessions, eq(readingSessions.attemptId, readingAttempts.id))
+        .leftJoin(readingSessions, and(eq(readingSessions.attemptId, readingAttempts.id), loggedReadingSessionFilter()))
         .where(where)
         .groupBy(readingAttempts.id)
         .orderBy(desc(readingAttempts.id))
