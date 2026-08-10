@@ -13,6 +13,7 @@ import {
   getReadingSessionDayKeys,
   type ReadingDailyStatsSegment,
 } from '../../../common/utils/reading-daily-stats.utils';
+import { loggedReadingSessionFilter } from '../../../common/utils/reading-session-filter.utils';
 import { resolveTimeZone } from '../../../common/utils/timezone.utils';
 import { uniqueNumbers } from './executor-utils';
 
@@ -874,6 +875,7 @@ export class MigrationImportRepository {
           eq(schema.books.libraryId, libraryId),
           lt(schema.readingSessions.startedAt, range.end),
           gt(schema.readingSessions.endedAt, range.start),
+          loggedReadingSessionFilter(),
         ),
       );
 

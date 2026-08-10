@@ -14,6 +14,7 @@ import type {
 } from '@bookorbit/types';
 import { toReadingSessionSourceBucket } from '@bookorbit/types';
 
+import { APP_SETTING_KEYS } from '../../common/constants/app-settings.constants';
 import { MIN_LOGGED_READING_PROGRESS_DELTA } from '../../common/constants/reading-session.constants';
 import {
   aggregateReadingSessionDailyStats,
@@ -30,6 +31,7 @@ import {
   bookGenres,
   bookMetadata,
   books,
+  appSettings,
   genres,
   readingProgress,
   readingSessions,
@@ -61,6 +63,7 @@ type SessionTimelineConflictRow = {
 };
 const RECENT_DAILY_AGGREGATION_DAYS = 2;
 const NO_PROGRESS_REBUILD_BATCH_SIZE = 500;
+const NO_PROGRESS_REBUILD_COMPLETE = 'complete';
 
 @Injectable()
 export class UserStatisticsRepository {
@@ -878,71 +881,70 @@ export class UserStatisticsRepository {
 
   async rebuildDailyStatsAffectedByNoProgressKoreaderSessions(
     batchSize = NO_PROGRESS_REBUILD_BATCH_SIZE,
-  ): Promise<{ scanned: number; rebuiltDays: number }> {
-    const normalizedBatchSize = Math.max(1, Math.floor(batchSize));
-    let afterId = 0;
-    let scanned = 0;
-    let rebuiltDays = 0;
-
-    while (true) {
-      const batchResult = await this.db.transaction(async (tx) => {
-        const rows = await tx
-          .select({
-            id: readingSessions.id,
-            userId: readingSessions.userId,
-            libraryId: books.libraryId,
-            startedAt: readingSessions.startedAt,
-            endedAt: readingSessions.endedAt,
-            durationSeconds: readingSessions.durationSeconds,
-            progressDelta: readingSessions.progressDelta,
-            settings: users.settings,
-          })
-          .from(readingSessions)
-          .innerJoin(books, eq(books.id, readingSessions.bookId))
-          .innerJoin(users, eq(users.id, readingSessions.userId))
-          .where(and(gt(readingSessions.id, afterId), noProgressKoreaderSessionFilter()))
-          .orderBy(readingSessions.id)
-          .limit(normalizedBatchSize);
-
-        if (rows.length === 0) {
-          return { lastId: afterId, scanned: 0, rebuiltDays: 0 };
-        }
-
-        const affected = new Map<string, { userId: number; libraryId: number; timeZone: string; days: Set<string> }>();
-        for (const row of rows) {
-          const timeZone = resolveTimeZone((row.settings as { timezone?: unknown } | undefined)?.timezone, 'UTC');
-          for (const day of getReadingSessionDayKeys(row, timeZone)) {
-            const key = `${row.userId}:${row.libraryId}:${timeZone}:${day.slice(0, 7)}`;
-            let group = affected.get(key);
-            if (!group) {
-              group = { userId: row.userId, libraryId: row.libraryId, timeZone, days: new Set<string>() };
-              affected.set(key, group);
-            }
-            group.days.add(day);
-          }
-        }
-
-        let batchRebuiltDays = 0;
-        for (const group of affected.values()) {
-          const days = [...group.days];
-          await this.recomputeDailyStats(tx, group.userId, group.libraryId, days, group.timeZone);
-          batchRebuiltDays += days.length;
-        }
-
-        return {
-          lastId: rows[rows.length - 1]!.id,
-          scanned: rows.length,
-          rebuiltDays: batchRebuiltDays,
-        };
-      });
-
-      scanned += batchResult.scanned;
-      rebuiltDays += batchResult.rebuiltDays;
-      afterId = batchResult.lastId;
-      if (batchResult.scanned < normalizedBatchSize) break;
+  ): Promise<{ scanned: number; rebuiltDays: number; lastId: number; complete: boolean; alreadyComplete: boolean }> {
+    const normalizedBatchSize = Number.isFinite(batchSize) ? Math.max(1, Math.floor(batchSize)) : NO_PROGRESS_REBUILD_BATCH_SIZE;
+    const checkpointKey = APP_SETTING_KEYS.NO_PROGRESS_KOREADER_STATS_REBUILD_CHECKPOINT;
+    const checkpoint = await this.db.query.appSettings.findFirst({
+      columns: { value: true },
+      where: eq(appSettings.key, checkpointKey),
+    });
+    if (checkpoint?.value === NO_PROGRESS_REBUILD_COMPLETE) {
+      return { scanned: 0, rebuiltDays: 0, lastId: 0, complete: true, alreadyComplete: true };
     }
 
-    return { scanned, rebuiltDays };
+    const parsedCursor = Number.parseInt(checkpoint?.value ?? '0', 10);
+    const afterId = Number.isSafeInteger(parsedCursor) && parsedCursor > 0 ? parsedCursor : 0;
+
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .select({
+          id: readingSessions.id,
+          userId: readingSessions.userId,
+          libraryId: books.libraryId,
+          startedAt: readingSessions.startedAt,
+          endedAt: readingSessions.endedAt,
+          durationSeconds: readingSessions.durationSeconds,
+          progressDelta: readingSessions.progressDelta,
+          settings: users.settings,
+        })
+        .from(readingSessions)
+        .innerJoin(books, eq(books.id, readingSessions.bookId))
+        .innerJoin(users, eq(users.id, readingSessions.userId))
+        .where(and(gt(readingSessions.id, afterId), noProgressKoreaderSessionFilter()))
+        .orderBy(readingSessions.id)
+        .limit(normalizedBatchSize);
+
+      const affected = new Map<string, { userId: number; libraryId: number; timeZone: string; days: Set<string> }>();
+      for (const row of rows) {
+        const timeZone = resolveTimeZone((row.settings as { timezone?: unknown } | undefined)?.timezone, 'UTC');
+        for (const day of getReadingSessionDayKeys(row, timeZone)) {
+          const key = `${row.userId}:${row.libraryId}:${timeZone}:${day.slice(0, 7)}`;
+          let group = affected.get(key);
+          if (!group) {
+            group = { userId: row.userId, libraryId: row.libraryId, timeZone, days: new Set<string>() };
+            affected.set(key, group);
+          }
+          group.days.add(day);
+        }
+      }
+
+      let rebuiltDays = 0;
+      for (const group of affected.values()) {
+        const days = [...group.days];
+        await this.recomputeDailyStats(tx, group.userId, group.libraryId, days, group.timeZone);
+        rebuiltDays += days.length;
+      }
+
+      const lastId = rows.at(-1)?.id ?? afterId;
+      const complete = rows.length < normalizedBatchSize;
+      const checkpointValue = complete ? NO_PROGRESS_REBUILD_COMPLETE : String(lastId);
+      await tx
+        .insert(appSettings)
+        .values({ key: checkpointKey, value: checkpointValue })
+        .onConflictDoUpdate({ target: appSettings.key, set: { value: checkpointValue } });
+
+      return { scanned: rows.length, rebuiltDays, lastId, complete, alreadyComplete: false };
+    });
   }
 
   async recomputeRecentDailyStats(days = RECENT_DAILY_AGGREGATION_DAYS): Promise<{ deleted: number; inserted: number; since: string }> {

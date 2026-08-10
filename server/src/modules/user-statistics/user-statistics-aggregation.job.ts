@@ -1,18 +1,26 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { UserStatisticsService } from './user-statistics.service';
 
+const REBUILD_BATCH_DELAY_MS = 25;
+
 @Injectable()
-export class UserStatisticsAggregationJob implements OnApplicationBootstrap {
+export class UserStatisticsAggregationJob implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(UserStatisticsAggregationJob.name);
+  private stopping = false;
+  private rebuilding = false;
 
   constructor(private readonly userStatisticsService: UserStatisticsService) {}
 
   async onApplicationBootstrap() {
-    await this.rebuildNoProgressKoreaderDailyStats();
+    void this.rebuildNoProgressKoreaderDailyStats();
     await this.recomputeRecent();
+  }
+
+  onModuleDestroy() {
+    this.stopping = true;
   }
 
   @Cron('15 * * * *')
@@ -20,21 +28,32 @@ export class UserStatisticsAggregationJob implements OnApplicationBootstrap {
     await this.recomputeRecent();
   }
 
-  private async rebuildNoProgressKoreaderDailyStats() {
+  private async rebuildNoProgressKoreaderDailyStats(): Promise<void> {
+    if (this.rebuilding) return;
+    this.rebuilding = true;
     const startedAt = Date.now();
+    let scanned = 0;
+    let rebuiltDays = 0;
     this.logger.log('[reading_session.rebuild_no_progress_stats] [start] batchSize=500 - historical stats rebuild started');
     try {
-      const result = await this.userStatisticsService.rebuildDailyStatsAffectedByNoProgressKoreaderSessions();
+      while (!this.stopping) {
+        const result = await this.userStatisticsService.rebuildDailyStatsAffectedByNoProgressKoreaderSessions();
+        scanned += result.scanned;
+        rebuiltDays += result.rebuiltDays;
+        if (result.complete) break;
+        await new Promise((resolve) => setTimeout(resolve, REBUILD_BATCH_DELAY_MS));
+      }
       this.logger.log(
-        `[reading_session.rebuild_no_progress_stats] [end] durationMs=${Date.now() - startedAt} scanned=${result.scanned} rebuiltDays=${result.rebuiltDays} - historical stats rebuild completed`,
+        `[reading_session.rebuild_no_progress_stats] [end] durationMs=${Date.now() - startedAt} scanned=${scanned} rebuiltDays=${rebuiltDays} stopped=${this.stopping} - historical stats rebuild completed`,
       );
     } catch (error) {
       const errorClass = error instanceof Error ? error.name : 'UnknownError';
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(
+      this.logger.warn(
         `[reading_session.rebuild_no_progress_stats] [fail] durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${sanitizeLogValue(message)}" - historical stats rebuild failed`,
       );
-      throw error;
+    } finally {
+      this.rebuilding = false;
     }
   }
 

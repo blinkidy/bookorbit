@@ -11,6 +11,7 @@ import {
   getReadingSessionDayKeys,
   type ReadingDailyStatsSegment,
 } from '../../common/utils/reading-daily-stats.utils';
+import { loggedReadingSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import {
   KOREADER_MAX_EVENT_DURATION_SECONDS,
   KOREADER_SESSION_GAP_SECONDS,
@@ -334,6 +335,7 @@ export class KoreaderPluginRepository {
           eq(schema.books.libraryId, libraryId),
           lt(schema.readingSessions.startedAt, range.end),
           gt(schema.readingSessions.endedAt, range.start),
+          loggedReadingSessionFilter(),
         ),
       );
 

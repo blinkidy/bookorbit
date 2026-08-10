@@ -310,11 +310,19 @@ describe('UserStatisticsService', () => {
 
   it('delegates historical no-progress daily-stat rebuilds', async () => {
     const repo = {
-      rebuildDailyStatsAffectedByNoProgressKoreaderSessions: vi.fn().mockResolvedValue({ scanned: 3, rebuiltDays: 2 }),
+      rebuildDailyStatsAffectedByNoProgressKoreaderSessions: vi
+        .fn()
+        .mockResolvedValue({ scanned: 3, rebuiltDays: 2, lastId: 19, complete: false, alreadyComplete: false }),
     };
     const service = new UserStatisticsService(repo as any);
 
-    await expect(service.rebuildDailyStatsAffectedByNoProgressKoreaderSessions()).resolves.toEqual({ scanned: 3, rebuiltDays: 2 });
+    await expect(service.rebuildDailyStatsAffectedByNoProgressKoreaderSessions()).resolves.toEqual({
+      scanned: 3,
+      rebuiltDays: 2,
+      lastId: 19,
+      complete: false,
+      alreadyComplete: false,
+    });
     expect(repo.rebuildDailyStatsAffectedByNoProgressKoreaderSessions).toHaveBeenCalledOnce();
   });
 
