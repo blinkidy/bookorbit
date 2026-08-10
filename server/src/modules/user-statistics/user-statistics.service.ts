@@ -618,4 +618,10 @@ export class UserStatisticsService {
     this.cache.clear();
     return result;
   }
+
+  async rebuildDailyStatsAffectedByNoProgressKoreaderSessions() {
+    const result = await this.repo.rebuildDailyStatsAffectedByNoProgressKoreaderSessions();
+    this.cache.clear();
+    return result;
+  }
 }

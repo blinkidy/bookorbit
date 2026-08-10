@@ -14,12 +14,14 @@ import type {
 } from '@bookorbit/types';
 import { toReadingSessionSourceBucket } from '@bookorbit/types';
 
+import { MIN_LOGGED_READING_PROGRESS_DELTA } from '../../common/constants/reading-session.constants';
 import {
   aggregateReadingSessionDailyStats,
   getDayRangeForDateKeys,
   getReadingSessionDayKeys,
   type ReadingDailyStatsSegment,
 } from '../../common/utils/reading-daily-stats.utils';
+import { loggedReadingSessionFilter, noProgressKoreaderSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import { resolveTimeZone } from '../../common/utils/timezone.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
@@ -58,6 +60,7 @@ type SessionTimelineConflictRow = {
   endedAt: Date;
 };
 const RECENT_DAILY_AGGREGATION_DAYS = 2;
+const NO_PROGRESS_REBUILD_BATCH_SIZE = 500;
 
 @Injectable()
 export class UserStatisticsRepository {
@@ -190,7 +193,7 @@ export class UserStatisticsRepository {
       .from(readingSessions)
       .leftJoin(bookFiles, eq(bookFiles.id, readingSessions.bookFileId))
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), libraryFilter))
+      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), loggedReadingSessionFilter(), libraryFilter))
       .as('session_buckets');
 
     return this.db
@@ -237,6 +240,7 @@ export class UserStatisticsRepository {
           eq(readingSessions.userId, userId),
           lt(readingSessions.startedAt, untilExclusive),
           gt(readingSessions.endedAt, sinceInclusive),
+          loggedReadingSessionFilter(),
           libraryFilter,
         ),
       )
@@ -269,7 +273,7 @@ export class UserStatisticsRepository {
       .leftJoin(bookFiles, eq(bookFiles.id, readingSessions.bookFileId))
       .innerJoin(books, eq(books.id, readingSessions.bookId))
       .leftJoin(bookMetadata, eq(bookMetadata.bookId, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), eq(readingSessions.id, sessionId), libraryFilter))
+      .where(and(eq(readingSessions.userId, userId), eq(readingSessions.id, sessionId), loggedReadingSessionFilter(), libraryFilter))
       .limit(1);
 
     return row ?? null;
@@ -303,6 +307,7 @@ export class UserStatisticsRepository {
             ne(readingSessions.id, sessionId),
             lt(readingSessions.startedAt, endedAt),
             gt(readingSessions.endedAt, startedAt),
+            loggedReadingSessionFilter(),
           ),
         )
         .orderBy(readingSessions.startedAt)
@@ -313,7 +318,7 @@ export class UserStatisticsRepository {
       const touched = await tx
         .update(readingSessions)
         .set({ startedAt, endedAt, durationSeconds })
-        .where(and(eq(readingSessions.userId, userId), eq(readingSessions.id, sessionId)))
+        .where(and(eq(readingSessions.userId, userId), eq(readingSessions.id, sessionId), loggedReadingSessionFilter()))
         .returning({ id: readingSessions.id });
       if (touched.length === 0) return { updated: null, conflict: null };
 
@@ -384,6 +389,7 @@ export class UserStatisticsRepository {
           eq(books.libraryId, libraryId),
           lt(readingSessions.startedAt, range.end),
           gt(readingSessions.endedAt, range.start),
+          loggedReadingSessionFilter(),
         ),
       );
 
@@ -455,7 +461,7 @@ export class UserStatisticsRepository {
       .from(readingSessions)
       .leftJoin(bookFiles, eq(bookFiles.id, readingSessions.bookFileId))
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), libraryFilter))
+      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), loggedReadingSessionFilter(), libraryFilter))
       .groupBy(dayOfWeekExpr, readingSessions.source, formatExpr)
       .orderBy(dayOfWeekExpr);
   }
@@ -477,7 +483,7 @@ export class UserStatisticsRepository {
       })
       .from(readingSessions)
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.endProgress, 99), libraryFilter))
+      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.endProgress, 99), loggedReadingSessionFilter(), libraryFilter))
       .groupBy(readingSessions.bookId)
       .as('first_completion');
 
@@ -520,7 +526,7 @@ export class UserStatisticsRepository {
       })
       .from(readingSessions)
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), timeFilter, libraryFilter, isNotNull(readingSessions.endProgress)))
+      .where(and(eq(readingSessions.userId, userId), timeFilter, loggedReadingSessionFilter(), libraryFilter, isNotNull(readingSessions.endProgress)))
       .groupBy(readingSessions.bookId)
       .as('per_book_progress');
 
@@ -555,7 +561,15 @@ export class UserStatisticsRepository {
       })
       .from(readingSessions)
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), gte(readingSessions.endProgress, 99), libraryFilter))
+      .where(
+        and(
+          eq(readingSessions.userId, userId),
+          gte(readingSessions.startedAt, since),
+          gte(readingSessions.endProgress, 99),
+          loggedReadingSessionFilter(),
+          libraryFilter,
+        ),
+      )
       .groupBy(readingSessions.bookId)
       .as('completed_in_window');
 
@@ -566,7 +580,7 @@ export class UserStatisticsRepository {
       })
       .from(readingSessions)
       .innerJoin(completedInWindow, eq(completedInWindow.bookId, readingSessions.bookId))
-      .where(eq(readingSessions.userId, userId))
+      .where(and(eq(readingSessions.userId, userId), loggedReadingSessionFilter()))
       .groupBy(completedInWindow.bookId, completedInWindow.completedAt)
       .as('started_and_completed');
 
@@ -604,7 +618,7 @@ export class UserStatisticsRepository {
       .innerJoin(books, eq(books.id, readingSessions.bookId))
       .innerJoin(bookGenres, eq(bookGenres.bookId, books.id))
       .innerJoin(genres, eq(genres.id, bookGenres.genreId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), libraryFilter))
+      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), loggedReadingSessionFilter(), libraryFilter))
       .groupBy(genres.name, readingSessions.source);
   }
 
@@ -627,7 +641,7 @@ export class UserStatisticsRepository {
       })
       .from(readingSessions)
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), libraryFilter))
+      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), loggedReadingSessionFilter(), libraryFilter))
       .groupBy(dayExpr, readingSessions.source);
   }
 
@@ -652,6 +666,7 @@ export class UserStatisticsRepository {
           gte(readingSessions.startedAt, since),
           isNotNull(readingSessions.progressDelta),
           gt(readingSessions.progressDelta, 0),
+          loggedReadingSessionFilter(),
           libraryFilter,
         ),
       )
@@ -678,7 +693,15 @@ export class UserStatisticsRepository {
       })
       .from(readingSessions)
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), isNotNull(readingSessions.endProgress), libraryFilter))
+      .where(
+        and(
+          eq(readingSessions.userId, userId),
+          gte(readingSessions.startedAt, since),
+          isNotNull(readingSessions.endProgress),
+          loggedReadingSessionFilter(),
+          libraryFilter,
+        ),
+      )
       .groupBy(readingSessions.bookId)
       .as('per_book');
 
@@ -701,7 +724,15 @@ export class UserStatisticsRepository {
       .select({ bookId: readingSessions.bookId })
       .from(readingSessions)
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), isNotNull(readingSessions.endProgress), libraryFilter))
+      .where(
+        and(
+          eq(readingSessions.userId, userId),
+          gte(readingSessions.startedAt, since),
+          isNotNull(readingSessions.endProgress),
+          loggedReadingSessionFilter(),
+          libraryFilter,
+        ),
+      )
       .groupBy(readingSessions.bookId)
       .orderBy(sql`count(*) desc`)
       .limit(limit)
@@ -718,7 +749,14 @@ export class UserStatisticsRepository {
       })
       .from(readingSessions)
       .leftJoin(bookMetadata, eq(bookMetadata.bookId, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), inArray(readingSessions.bookId, topBookIds), isNotNull(readingSessions.endProgress)))
+      .where(
+        and(
+          eq(readingSessions.userId, userId),
+          inArray(readingSessions.bookId, topBookIds),
+          isNotNull(readingSessions.endProgress),
+          loggedReadingSessionFilter(),
+        ),
+      )
       .orderBy(readingSessions.bookId, readingSessions.startedAt)
       .then((rows) => rows.map((r) => ({ ...r, endProgress: r.endProgress! })));
   }
@@ -741,7 +779,15 @@ export class UserStatisticsRepository {
       .select({ hour: hourExpr, durationMinutes: durationExpr, dayOfWeek: dowExpr })
       .from(readingSessions)
       .innerJoin(books, eq(books.id, readingSessions.bookId))
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.startedAt, since), gte(readingSessions.durationSeconds, 300), libraryFilter))
+      .where(
+        and(
+          eq(readingSessions.userId, userId),
+          gte(readingSessions.startedAt, since),
+          gte(readingSessions.durationSeconds, 300),
+          loggedReadingSessionFilter(),
+          libraryFilter,
+        ),
+      )
       .orderBy(readingSessions.startedAt)
       .limit(2000);
 
@@ -776,6 +822,7 @@ export class UserStatisticsRepository {
         inner join authors a on a.id = ba.author_id
         where rs.user_id = ${userId}
           and rs.started_at >= ${sinceStr}::timestamp
+          and (rs.source is distinct from 'koreader' or rs.progress_delta >= ${MIN_LOGGED_READING_PROGRESS_DELTA})
           and ${libCondition}
         group by a.name
         order by total desc
@@ -789,6 +836,7 @@ export class UserStatisticsRepository {
         inner join genres g on g.id = bg.genre_id
         where rs.user_id = ${userId}
           and rs.started_at >= ${sinceStr}::timestamp
+          and (rs.source is distinct from 'koreader' or rs.progress_delta >= ${MIN_LOGGED_READING_PROGRESS_DELTA})
           and ${libCondition}
         group by g.name
         order by total desc
@@ -810,6 +858,7 @@ export class UserStatisticsRepository {
       )
       where rs.user_id = ${userId}
         and rs.started_at >= ${sinceStr}::timestamp
+        and (rs.source is distinct from 'koreader' or rs.progress_delta >= ${MIN_LOGGED_READING_PROGRESS_DELTA})
         and ${libCondition}
       group by a.name, g.name
       having sum(rs.duration_seconds) > 0
@@ -825,6 +874,75 @@ export class UserStatisticsRepository {
       nodes: [...authorNames.map((n) => ({ name: n })), ...genreNames.map((n) => ({ name: n }))],
       links: rows.rows.map((r) => ({ source: r.author, target: r.genre, value: r.reading_seconds })),
     };
+  }
+
+  async rebuildDailyStatsAffectedByNoProgressKoreaderSessions(
+    batchSize = NO_PROGRESS_REBUILD_BATCH_SIZE,
+  ): Promise<{ scanned: number; rebuiltDays: number }> {
+    const normalizedBatchSize = Math.max(1, Math.floor(batchSize));
+    let afterId = 0;
+    let scanned = 0;
+    let rebuiltDays = 0;
+
+    while (true) {
+      const batchResult = await this.db.transaction(async (tx) => {
+        const rows = await tx
+          .select({
+            id: readingSessions.id,
+            userId: readingSessions.userId,
+            libraryId: books.libraryId,
+            startedAt: readingSessions.startedAt,
+            endedAt: readingSessions.endedAt,
+            durationSeconds: readingSessions.durationSeconds,
+            progressDelta: readingSessions.progressDelta,
+            settings: users.settings,
+          })
+          .from(readingSessions)
+          .innerJoin(books, eq(books.id, readingSessions.bookId))
+          .innerJoin(users, eq(users.id, readingSessions.userId))
+          .where(and(gt(readingSessions.id, afterId), noProgressKoreaderSessionFilter()))
+          .orderBy(readingSessions.id)
+          .limit(normalizedBatchSize);
+
+        if (rows.length === 0) {
+          return { lastId: afterId, scanned: 0, rebuiltDays: 0 };
+        }
+
+        const affected = new Map<string, { userId: number; libraryId: number; timeZone: string; days: Set<string> }>();
+        for (const row of rows) {
+          const timeZone = resolveTimeZone((row.settings as { timezone?: unknown } | undefined)?.timezone, 'UTC');
+          for (const day of getReadingSessionDayKeys(row, timeZone)) {
+            const key = `${row.userId}:${row.libraryId}:${timeZone}:${day.slice(0, 7)}`;
+            let group = affected.get(key);
+            if (!group) {
+              group = { userId: row.userId, libraryId: row.libraryId, timeZone, days: new Set<string>() };
+              affected.set(key, group);
+            }
+            group.days.add(day);
+          }
+        }
+
+        let batchRebuiltDays = 0;
+        for (const group of affected.values()) {
+          const days = [...group.days];
+          await this.recomputeDailyStats(tx, group.userId, group.libraryId, days, group.timeZone);
+          batchRebuiltDays += days.length;
+        }
+
+        return {
+          lastId: rows[rows.length - 1]!.id,
+          scanned: rows.length,
+          rebuiltDays: batchRebuiltDays,
+        };
+      });
+
+      scanned += batchResult.scanned;
+      rebuiltDays += batchResult.rebuiltDays;
+      afterId = batchResult.lastId;
+      if (batchResult.scanned < normalizedBatchSize) break;
+    }
+
+    return { scanned, rebuiltDays };
   }
 
   async recomputeRecentDailyStats(days = RECENT_DAILY_AGGREGATION_DAYS): Promise<{ deleted: number; inserted: number; since: string }> {
@@ -852,7 +970,7 @@ export class UserStatisticsRepository {
         .from(readingSessions)
         .innerJoin(books, eq(books.id, readingSessions.bookId))
         .innerJoin(users, eq(users.id, readingSessions.userId))
-        .where(gt(readingSessions.endedAt, broadSince))
+        .where(and(gt(readingSessions.endedAt, broadSince), loggedReadingSessionFilter()))
         .groupBy(readingSessions.userId, books.libraryId, users.settings);
 
       const groups = new Map<string, { userId: number; libraryId: number; settings: unknown }>();
@@ -887,7 +1005,14 @@ export class UserStatisticsRepository {
           })
           .from(readingSessions)
           .innerJoin(books, eq(books.id, readingSessions.bookId))
-          .where(and(eq(readingSessions.userId, group.userId), eq(books.libraryId, group.libraryId), gt(readingSessions.endedAt, range.start)));
+          .where(
+            and(
+              eq(readingSessions.userId, group.userId),
+              eq(books.libraryId, group.libraryId),
+              gt(readingSessions.endedAt, range.start),
+              loggedReadingSessionFilter(),
+            ),
+          );
 
         const segments = aggregateReadingSessionDailyStats(
           rows.map((row) => ({

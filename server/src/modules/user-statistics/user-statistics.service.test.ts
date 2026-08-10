@@ -308,6 +308,16 @@ describe('UserStatisticsService', () => {
     expect(after.current.completed).toBe(3);
   });
 
+  it('delegates historical no-progress daily-stat rebuilds', async () => {
+    const repo = {
+      rebuildDailyStatsAffectedByNoProgressKoreaderSessions: vi.fn().mockResolvedValue({ scanned: 3, rebuiltDays: 2 }),
+    };
+    const service = new UserStatisticsService(repo as any);
+
+    await expect(service.rebuildDailyStatsAffectedByNoProgressKoreaderSessions()).resolves.toEqual({ scanned: 3, rebuiltDays: 2 });
+    expect(repo.rebuildDailyStatsAffectedByNoProgressKoreaderSessions).toHaveBeenCalledOnce();
+  });
+
   it('returns previous-window funnel when comparePrevious is true', async () => {
     const repo = {
       getProgressFunnelInRange: vi

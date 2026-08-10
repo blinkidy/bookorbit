@@ -443,4 +443,43 @@ describe('UserStatisticsRepository', () => {
       }),
     ]);
   });
+
+  it('rebuilds affected daily stats without deleting historical KOReader sessions', async () => {
+    const selectQueue = [
+      [
+        {
+          id: 11,
+          userId: 5,
+          libraryId: 3,
+          startedAt: new Date('2026-04-13T19:00:00.000Z'),
+          endedAt: new Date('2026-04-13T19:00:10.000Z'),
+          durationSeconds: 10,
+          progressDelta: 0,
+          settings: { timezone: 'UTC' },
+        },
+      ],
+      [],
+      [],
+    ];
+    const deleteWhere = vi.fn().mockResolvedValue(undefined);
+    const tx = {
+      select: vi.fn((fields?: Record<string, unknown>) => makeChain(selectQueue.shift() ?? [], fields)),
+      delete: vi.fn().mockReturnValue({ where: deleteWhere }),
+      execute: vi.fn().mockResolvedValue({ rowCount: 0 }),
+      insert: vi.fn(),
+    };
+    const db = {
+      transaction: vi.fn(async (callback: (trx: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const repo = new UserStatisticsRepository(db as never);
+
+    await expect(repo.rebuildDailyStatsAffectedByNoProgressKoreaderSessions(1)).resolves.toEqual({
+      scanned: 1,
+      rebuiltDays: 1,
+    });
+    expect(db.transaction).toHaveBeenCalledTimes(2);
+    expect(tx.delete).toHaveBeenCalledOnce();
+    expect(tx.delete).toHaveBeenCalledWith(schema.userReadingDailyStats);
+    expect(tx.delete).not.toHaveBeenCalledWith(schema.readingSessions);
+  });
 });

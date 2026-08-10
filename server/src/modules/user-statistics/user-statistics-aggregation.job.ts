@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 
+import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { UserStatisticsService } from './user-statistics.service';
 
 @Injectable()
@@ -10,12 +11,31 @@ export class UserStatisticsAggregationJob implements OnApplicationBootstrap {
   constructor(private readonly userStatisticsService: UserStatisticsService) {}
 
   async onApplicationBootstrap() {
+    await this.rebuildNoProgressKoreaderDailyStats();
     await this.recomputeRecent();
   }
 
   @Cron('15 * * * *')
   async runHourlyAggregation() {
     await this.recomputeRecent();
+  }
+
+  private async rebuildNoProgressKoreaderDailyStats() {
+    const startedAt = Date.now();
+    this.logger.log('[reading_session.rebuild_no_progress_stats] [start] batchSize=500 - historical stats rebuild started');
+    try {
+      const result = await this.userStatisticsService.rebuildDailyStatsAffectedByNoProgressKoreaderSessions();
+      this.logger.log(
+        `[reading_session.rebuild_no_progress_stats] [end] durationMs=${Date.now() - startedAt} scanned=${result.scanned} rebuiltDays=${result.rebuiltDays} - historical stats rebuild completed`,
+      );
+    } catch (error) {
+      const errorClass = error instanceof Error ? error.name : 'UnknownError';
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[reading_session.rebuild_no_progress_stats] [fail] durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${sanitizeLogValue(message)}" - historical stats rebuild failed`,
+      );
+      throw error;
+    }
   }
 
   private async recomputeRecent() {

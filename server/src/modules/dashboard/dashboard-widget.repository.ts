@@ -13,6 +13,7 @@ import type {
   ReadingStreakWidgetData,
 } from '@bookorbit/types';
 
+import { loggedReadingSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 import {
@@ -458,6 +459,7 @@ export class DashboardWidgetRepository {
             eq(readingSessions.userId, userId),
             gte(readingSessions.startedAt, monthStart),
             gt(readingSessions.progressDelta, 0),
+            loggedReadingSessionFilter(),
             isNotNull(bookMetadata.pageCount),
             libFilter,
             presentFilter,
@@ -476,6 +478,7 @@ export class DashboardWidgetRepository {
             eq(readingSessions.userId, userId),
             gte(readingSessions.startedAt, monthStart),
             gt(readingSessions.progressDelta, 0),
+            loggedReadingSessionFilter(),
             isNull(bookMetadata.pageCount),
             libFilter,
             presentFilter,
@@ -744,7 +747,7 @@ export class DashboardWidgetRepository {
         })
         .from(readingSessions)
         .innerJoin(books, eq(books.id, readingSessions.bookId))
-        .where(and(eq(readingSessions.userId, userId), libFilter, presentFilter, ...cfClauses))
+        .where(and(eq(readingSessions.userId, userId), loggedReadingSessionFilter(), libFilter, presentFilter, ...cfClauses))
         .groupBy(sql`extract(hour from ${readingSessions.startedAt})`)
         .orderBy(desc(sql`sum(${readingSessions.durationSeconds})`))
         .limit(1),
@@ -767,6 +770,7 @@ export class DashboardWidgetRepository {
             gt(readingSessions.progressDelta, 0),
             sql`${readingSessions.progressDelta} <= 100`,
             gt(readingSessions.durationSeconds, 0),
+            loggedReadingSessionFilter(),
             isNotNull(bookMetadata.pageCount),
             gt(bookMetadata.pageCount, 0),
           ),
@@ -790,6 +794,7 @@ export class DashboardWidgetRepository {
             gt(readingSessions.progressDelta, 0),
             sql`${readingSessions.progressDelta} <= 100`,
             gt(readingSessions.durationSeconds, 0),
+            loggedReadingSessionFilter(),
             isNull(bookMetadata.pageCount),
           ),
         ),
