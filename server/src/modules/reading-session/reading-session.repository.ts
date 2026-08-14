@@ -17,6 +17,7 @@ import {
   splitReadingSessionByDay,
   type ReadingDailyStatsSegment,
 } from '../../common/utils/reading-daily-stats.utils';
+import { loggedReadingSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import { toDateKeyInTimeZone } from '../../common/utils/timezone.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
@@ -159,6 +160,7 @@ export class ReadingSessionRepository {
           eq(readingSessions.bookId, bookId),
           lt(readingSessions.startedAt, before),
           isNotNull(readingSessions.endProgress),
+          loggedReadingSessionFilter(),
         ),
       )
       .orderBy(desc(readingSessions.startedAt))
@@ -179,7 +181,7 @@ export class ReadingSessionRepository {
     format?: string,
     timeZone = 'UTC',
   ): Promise<BookReadingSessionListResponse> {
-    const conditions = [eq(readingSessions.bookId, bookId), eq(readingSessions.userId, userId)];
+    const conditions = [eq(readingSessions.bookId, bookId), eq(readingSessions.userId, userId), loggedReadingSessionFilter()];
     if (dateFrom) conditions.push(gte(readingSessions.startedAt, new Date(dateFrom)));
     if (dateTo) conditions.push(lte(readingSessions.startedAt, new Date(dateTo)));
     if (format) conditions.push(eq(sql`upper(${bookFiles.format})`, format.toUpperCase()));
@@ -414,6 +416,7 @@ export class ReadingSessionRepository {
           eq(books.libraryId, libraryId),
           lt(readingSessions.startedAt, range.end),
           gt(readingSessions.endedAt, range.start),
+          loggedReadingSessionFilter(),
         ),
       );
 

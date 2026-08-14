@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, max, min } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
+import { loggedReadingSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 import { readingSessions, userBookStatus } from '../../db/schema';
@@ -67,7 +68,7 @@ export class UserBookStatusRepository {
         lastEndedAt: max(readingSessions.endedAt),
       })
       .from(readingSessions)
-      .where(and(eq(readingSessions.userId, userId), eq(readingSessions.bookId, bookId)));
+      .where(and(eq(readingSessions.userId, userId), eq(readingSessions.bookId, bookId), loggedReadingSessionFilter()));
 
     return {
       firstStartedAt: (row?.firstStartedAt as Date | null | undefined) ?? null,

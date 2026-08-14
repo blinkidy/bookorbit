@@ -443,4 +443,66 @@ describe('UserStatisticsRepository', () => {
       }),
     ]);
   });
+
+  it('rebuilds current and potential prior-timezone days without deleting historical KOReader sessions', async () => {
+    const selectQueue = [
+      [
+        {
+          id: 11,
+          userId: 5,
+          libraryId: 3,
+          startedAt: new Date('2026-04-13T00:30:00.000Z'),
+          endedAt: new Date('2026-04-13T00:30:10.000Z'),
+          durationSeconds: 10,
+          progressDelta: 0,
+          settings: { timezone: 'America/Phoenix' },
+        },
+      ],
+      [],
+    ];
+    const deleteWhere = vi.fn().mockResolvedValue(undefined);
+    const onConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
+    const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
+    const tx = {
+      select: vi.fn((fields?: Record<string, unknown>) => makeChain(selectQueue.shift() ?? [], fields)),
+      delete: vi.fn().mockReturnValue({ where: deleteWhere }),
+      execute: vi.fn().mockResolvedValue({ rowCount: 0 }),
+      insert: vi.fn().mockReturnValue({ values }),
+    };
+    const db = {
+      query: { appSettings: { findFirst: vi.fn().mockResolvedValue(undefined) } },
+      transaction: vi.fn(async (callback: (trx: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const repo = new UserStatisticsRepository(db as never);
+
+    await expect(repo.rebuildDailyStatsAffectedByNoProgressKoreaderSessions(1)).resolves.toEqual({
+      scanned: 1,
+      rebuiltDays: 3,
+      lastId: 11,
+      complete: false,
+      alreadyComplete: false,
+    });
+    expect(db.transaction).toHaveBeenCalledOnce();
+    expect(tx.delete).toHaveBeenCalledOnce();
+    expect(tx.delete).toHaveBeenCalledWith(schema.userReadingDailyStats);
+    expect(tx.delete).not.toHaveBeenCalledWith(schema.readingSessions);
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ key: 'internal_no_progress_koreader_stats_rebuild_v1', value: '11' }));
+  });
+
+  it('skips the historical rebuild after its persisted checkpoint completes', async () => {
+    const db = {
+      query: { appSettings: { findFirst: vi.fn().mockResolvedValue({ value: 'complete' }) } },
+      transaction: vi.fn(),
+    };
+    const repo = new UserStatisticsRepository(db as never);
+
+    await expect(repo.rebuildDailyStatsAffectedByNoProgressKoreaderSessions()).resolves.toEqual({
+      scanned: 0,
+      rebuiltDays: 0,
+      lastId: 0,
+      complete: true,
+      alreadyComplete: true,
+    });
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
 });

@@ -3,6 +3,7 @@ import type { BroadReadingGenre, ReadingInsightsSharingLevel } from '@bookorbit/
 import { and, desc, eq, gte, gt, inArray, lte, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
+import { loggedReadingSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 
@@ -82,7 +83,7 @@ export class SharedReadingInsightsRepository {
       .from(schema.readingSessions)
       .innerJoin(schema.bookGenres, eq(schema.bookGenres.bookId, schema.readingSessions.bookId))
       .innerJoin(schema.genres, eq(schema.genres.id, schema.bookGenres.genreId))
-      .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since)))
+      .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since), loggedReadingSessionFilter()))
       .groupBy(schema.readingSessions.id, schema.readingSessions.durationSeconds, broadGenre)
       .as('genre_sessions');
     const [daily, statusRows, formats, genres, sources] = await Promise.all([
@@ -110,7 +111,7 @@ export class SharedReadingInsightsRepository {
         })
         .from(schema.readingSessions)
         .leftJoin(schema.bookFiles, eq(schema.bookFiles.id, schema.readingSessions.bookFileId))
-        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since)))
+        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since), loggedReadingSessionFilter()))
         .groupBy(sql`coalesce(upper(${schema.bookFiles.format}), 'UNKNOWN')`)
         .orderBy(desc(sql`sum(${schema.readingSessions.durationSeconds})`))
         .limit(10),
@@ -130,7 +131,7 @@ export class SharedReadingInsightsRepository {
           sessionsCount: sql<number>`count(*)::int`,
         })
         .from(schema.readingSessions)
-        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since)))
+        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since), loggedReadingSessionFilter()))
         .groupBy(schema.readingSessions.source)
         .orderBy(desc(sql`sum(${schema.readingSessions.durationSeconds})`)),
     ]);
@@ -148,7 +149,7 @@ export class SharedReadingInsightsRepository {
         .from(schema.readingSessions)
         .innerJoin(schema.bookAuthors, eq(schema.bookAuthors.bookId, schema.readingSessions.bookId))
         .innerJoin(schema.authors, eq(schema.authors.id, schema.bookAuthors.authorId))
-        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since)))
+        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since), loggedReadingSessionFilter()))
         .groupBy(schema.authors.id, schema.authors.name)
         .orderBy(desc(sql`sum(${schema.readingSessions.durationSeconds})`))
         .limit(10),
@@ -157,7 +158,7 @@ export class SharedReadingInsightsRepository {
         .from(schema.readingSessions)
         .innerJoin(schema.bookGenres, eq(schema.bookGenres.bookId, schema.readingSessions.bookId))
         .innerJoin(schema.genres, eq(schema.genres.id, schema.bookGenres.genreId))
-        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since)))
+        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since), loggedReadingSessionFilter()))
         .groupBy(schema.genres.id, schema.genres.name)
         .orderBy(desc(sql`sum(${schema.readingSessions.durationSeconds})`))
         .limit(10),
@@ -166,7 +167,7 @@ export class SharedReadingInsightsRepository {
         .from(schema.readingSessions)
         .innerJoin(schema.bookSeriesMemberships, eq(schema.bookSeriesMemberships.bookId, schema.readingSessions.bookId))
         .innerJoin(schema.bookSeries, eq(schema.bookSeries.id, schema.bookSeriesMemberships.seriesId))
-        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since)))
+        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since), loggedReadingSessionFilter()))
         .groupBy(schema.bookSeries.id, schema.bookSeries.name)
         .orderBy(desc(sql`sum(${schema.readingSessions.durationSeconds})`))
         .limit(10),
@@ -175,7 +176,7 @@ export class SharedReadingInsightsRepository {
         .from(schema.readingSessions)
         .innerJoin(schema.bookNarrators, eq(schema.bookNarrators.bookId, schema.readingSessions.bookId))
         .innerJoin(schema.narrators, eq(schema.narrators.id, schema.bookNarrators.narratorId))
-        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since)))
+        .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since), loggedReadingSessionFilter()))
         .groupBy(schema.narrators.id, schema.narrators.name)
         .orderBy(desc(sql`sum(${schema.readingSessions.durationSeconds})`))
         .limit(10),
@@ -197,7 +198,7 @@ export class SharedReadingInsightsRepository {
       .from(schema.readingSessions)
       .leftJoin(schema.bookMetadata, eq(schema.bookMetadata.bookId, schema.readingSessions.bookId))
       .leftJoin(schema.userBookStatus, and(eq(schema.userBookStatus.bookId, schema.readingSessions.bookId), eq(schema.userBookStatus.userId, userId)))
-      .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since)))
+      .where(and(eq(schema.readingSessions.userId, userId), gte(schema.readingSessions.startedAt, since), loggedReadingSessionFilter()))
       .groupBy(schema.readingSessions.bookId, schema.bookMetadata.title, schema.userBookStatus.status)
       .orderBy(desc(order === 'reading' ? readingSeconds : lastReadAt))
       .limit(10);

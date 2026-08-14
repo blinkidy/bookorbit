@@ -2,6 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, count, countDistinct, desc, eq, gt, gte, isNotNull, isNull, lt, lte, ne, notInArray, sql, sum } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
+import { MIN_LOGGED_READING_PROGRESS_DELTA } from '../../common/constants/reading-session.constants';
+import { loggedReadingSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 import {
@@ -134,6 +136,7 @@ export class AchievementRepository {
           gt(readingSessions.progressDelta, 0),
           sql`${readingSessions.progressDelta} <= 100`,
           gt(readingSessions.durationSeconds, 0),
+          loggedReadingSessionFilter(),
         ),
       );
     return Math.floor(Number(result?.value ?? 0));
@@ -143,7 +146,7 @@ export class AchievementRepository {
     const [result] = await this.db
       .select({ value: sum(readingSessions.durationSeconds) })
       .from(readingSessions)
-      .where(eq(readingSessions.userId, userId));
+      .where(and(eq(readingSessions.userId, userId), loggedReadingSessionFilter()));
     return Math.floor(Number(result?.value ?? 0) / 3600);
   }
 
@@ -382,7 +385,7 @@ export class AchievementRepository {
     const [row] = await this.db
       .select({ endedAt: readingSessions.endedAt })
       .from(readingSessions)
-      .where(and(eq(readingSessions.userId, userId), sql`${readingSessions.sessionId} != ${currentSessionId}`))
+      .where(and(eq(readingSessions.userId, userId), sql`${readingSessions.sessionId} != ${currentSessionId}`, loggedReadingSessionFilter()))
       .orderBy(desc(readingSessions.endedAt))
       .limit(1);
     return row?.endedAt ?? null;
@@ -397,7 +400,7 @@ export class AchievementRepository {
     const [row] = await this.db
       .select({ sessionId: readingSessions.sessionId })
       .from(readingSessions)
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.durationSeconds, minSeconds)))
+      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.durationSeconds, minSeconds), loggedReadingSessionFilter()))
       .limit(1);
     return !!row;
   }
@@ -414,6 +417,7 @@ export class AchievementRepository {
             OR EXTRACT(HOUR FROM ${readingSessions.endedAt}) >= ${startHour} AND EXTRACT(HOUR FROM ${readingSessions.endedAt}) < ${endHour}
             OR EXTRACT(HOUR FROM ${readingSessions.startedAt}) < ${startHour} AND EXTRACT(HOUR FROM ${readingSessions.endedAt}) >= ${endHour}
           )`,
+          loggedReadingSessionFilter(),
         ),
       )
       .limit(1);
@@ -428,6 +432,7 @@ export class AchievementRepository {
         and(
           eq(readingSessions.userId, userId),
           sql`EXTRACT(HOUR FROM ${readingSessions.startedAt}) >= ${startHour} AND EXTRACT(HOUR FROM ${readingSessions.startedAt}) < ${endHour}`,
+          loggedReadingSessionFilter(),
         ),
       )
       .limit(1);
@@ -531,6 +536,7 @@ export class AchievementRepository {
             LEAD(started_at) OVER (ORDER BY started_at) AS next_start
           FROM reading_sessions
           WHERE user_id = ${userId}
+            AND (source IS DISTINCT FROM 'koreader' OR progress_delta >= ${MIN_LOGGED_READING_PROGRESS_DELTA})
         ) gaps
         WHERE next_start IS NOT NULL
           AND EXTRACT(EPOCH FROM (next_start - ended_at)) / 86400 >= ${minDays}
@@ -548,6 +554,7 @@ export class AchievementRepository {
           eq(readingSessions.userId, userId),
           sql`EXTRACT(MONTH FROM ${readingSessions.startedAt}) = 1`,
           sql`EXTRACT(DAY FROM ${readingSessions.startedAt}) = 1`,
+          loggedReadingSessionFilter(),
         ),
       )
       .limit(1);
@@ -558,7 +565,7 @@ export class AchievementRepository {
     const [result] = await this.db
       .select({ value: sql<number>`coalesce(max(${readingSessions.durationSeconds}) / 60.0, 0)::float` })
       .from(readingSessions)
-      .where(eq(readingSessions.userId, userId));
+      .where(and(eq(readingSessions.userId, userId), loggedReadingSessionFilter()));
     return Math.floor(Number(result?.value ?? 0));
   }
 
@@ -826,7 +833,7 @@ export class AchievementRepository {
     const [{ value }] = await this.db
       .select({ value: count() })
       .from(readingSessions)
-      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.durationSeconds, minSeconds)));
+      .where(and(eq(readingSessions.userId, userId), gte(readingSessions.durationSeconds, minSeconds), loggedReadingSessionFilter()));
     return value;
   }
 
@@ -884,7 +891,14 @@ export class AchievementRepository {
     const [row] = await this.db
       .select({ sessionId: readingSessions.sessionId })
       .from(readingSessions)
-      .where(and(eq(readingSessions.userId, userId), isNotNull(readingSessions.progressDelta), gte(readingSessions.progressDelta, minDelta)))
+      .where(
+        and(
+          eq(readingSessions.userId, userId),
+          isNotNull(readingSessions.progressDelta),
+          gte(readingSessions.progressDelta, minDelta),
+          loggedReadingSessionFilter(),
+        ),
+      )
       .limit(1);
     return !!row;
   }
@@ -983,6 +997,7 @@ export class AchievementRepository {
           gt(readingSessions.progressDelta, 0),
           sql`${readingSessions.progressDelta} <= 100`,
           gt(readingSessions.durationSeconds, 0),
+          loggedReadingSessionFilter(),
         ),
       );
     return Math.floor(Number(result?.value ?? 0));
@@ -1009,6 +1024,7 @@ export class AchievementRepository {
           gt(readingSessions.progressDelta, 0),
           sql`${readingSessions.progressDelta} <= 100`,
           gt(readingSessions.durationSeconds, 0),
+          loggedReadingSessionFilter(),
         ),
       );
     return Math.floor(Number(result?.value ?? 0));
@@ -1025,6 +1041,7 @@ export class AchievementRepository {
           AND bm.page_count IS NOT NULL AND bm.page_count > 0
           AND rs.progress_delta IS NOT NULL AND rs.progress_delta > 0 AND rs.progress_delta <= 100
           AND rs.duration_seconds > 0
+          AND (rs.source IS DISTINCT FROM 'koreader' OR rs.progress_delta >= ${MIN_LOGGED_READING_PROGRESS_DELTA})
         GROUP BY DATE_TRUNC('day', rs.started_at AT TIME ZONE 'UTC')
       ) daily
     `);
@@ -1067,7 +1084,7 @@ export class AchievementRepository {
     const [row] = await this.db
       .select({ id: readingSessions.id })
       .from(readingSessions)
-      .where(and(eq(readingSessions.userId, userId), eq(readingSessions.source, 'web')))
+      .where(and(eq(readingSessions.userId, userId), eq(readingSessions.source, 'web'), loggedReadingSessionFilter()))
       .limit(1);
     return !!row;
   }

@@ -1,0 +1,1 @@
+export const MIN_LOGGED_READING_PROGRESS_DELTA = 0.1;

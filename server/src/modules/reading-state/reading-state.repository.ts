@@ -10,6 +10,7 @@ import {
   splitReadingSessionByDay,
   type ReadingDailyStatsSegment,
 } from '../../common/utils/reading-daily-stats.utils';
+import { loggedReadingSessionFilter } from '../../common/utils/reading-session-filter.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 import {
@@ -225,6 +226,7 @@ export class ReadingStateRepository {
               lt(readingSessions.startedAt, range.end),
               gt(readingSessions.endedAt, range.start),
               gt(readingSessions.id, lastId),
+              loggedReadingSessionFilter(),
             ),
           )
           .orderBy(asc(readingSessions.id))

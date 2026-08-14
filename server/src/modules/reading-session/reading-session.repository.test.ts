@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { sqlChunkText } from '../../common/test-utils/sql-chunk-text';
 import { readingSessions, userReadingDailyStats } from '../../db/schema';
 import { ReadingSessionRepository } from './reading-session.repository';
 
@@ -291,26 +292,31 @@ describe('ReadingSessionRepository - listByBook', () => {
     vi.clearAllMocks();
   });
 
-  function makeQueryChain(result: unknown) {
+  function makeQueryChain(result: unknown, whereClauses?: unknown[]) {
     const self: Record<string, unknown> = {};
     const terminal = Promise.resolve(result);
     for (const m of ['from', 'innerJoin', 'leftJoin', 'where', 'orderBy', 'limit', 'offset', 'groupBy']) {
       self[m] = vi.fn().mockReturnValue(self);
     }
+    self['where'] = vi.fn().mockImplementation((clause: unknown) => {
+      whereClauses?.push(clause);
+      return self;
+    });
     self['then'] = (onFulfilled: (v: unknown) => unknown, onRejected: (e: unknown) => unknown) => terminal.then(onFulfilled, onRejected);
     self['catch'] = (onRejected: (e: unknown) => unknown) => terminal.catch(onRejected);
     return self;
   }
 
   function makeListDb(results: { rows?: unknown[]; count?: unknown[]; stats?: unknown[]; summary?: unknown[]; bySource?: unknown[] }) {
+    const whereClauses: unknown[] = [];
     const select = vi
       .fn()
-      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.rows ?? [])) })
-      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.count ?? [])) })
-      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.stats ?? [])) })
-      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.summary ?? [])) })
-      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.bySource ?? [])) });
-    return { db: { select }, select };
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.rows ?? [], whereClauses)) })
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.count ?? [], whereClauses)) })
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.stats ?? [], whereClauses)) })
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.summary ?? [], whereClauses)) })
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue(makeQueryChain(results.bySource ?? [], whereClauses)) });
+    return { db: { select }, select, whereClauses };
   }
 
   it('returns items, total, and stats with correct structure', async () => {
@@ -355,6 +361,19 @@ describe('ReadingSessionRepository - listByBook', () => {
     await repo.listByBook(1, 2, 2, 25, 'startedAt', 'desc');
 
     expect(select).toHaveBeenCalledTimes(5);
+  });
+
+  it('excludes existing KOReader sessions below 0.1 percent from every log aggregate', async () => {
+    const { db, whereClauses } = makeListDb({});
+    const repo = new ReadingSessionRepository(db as never);
+
+    await repo.listByBook(1, 2, 1, 25, 'startedAt', 'desc');
+
+    expect(whereClauses).toHaveLength(5);
+    for (const clause of whereClauses) {
+      const text = sqlChunkText(clause).replace(/\s+/g, ' ');
+      expect(text).toContain('is null or <> or >=');
+    }
   });
 
   it('splits per-book daily summaries across local midnight', async () => {

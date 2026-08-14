@@ -44,7 +44,7 @@ describe('AppSettingsRepository', () => {
   });
 
   describe('listPublic', () => {
-    it('returns rows excluding oidc_config via ne filter', async () => {
+    it('returns rows excluding private settings', async () => {
       const rows = [{ key: 'allow_registration', value: 'true' }];
       db.orderBy.mockResolvedValue(rows);
       const result = await repo.listPublic();

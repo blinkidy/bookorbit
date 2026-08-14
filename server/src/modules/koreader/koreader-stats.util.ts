@@ -1,3 +1,5 @@
+import { MIN_LOGGED_READING_PROGRESS_DELTA } from '../../common/constants/reading-session.constants';
+
 export const KOREADER_SESSION_GAP_SECONDS = 1800;
 /** Upper bound accepted for a single page event, used to bound backward window scans. */
 export const KOREADER_MAX_EVENT_DURATION_SECONDS = 86400;
@@ -85,7 +87,12 @@ export function deriveKoreaderSessions(
 ): DerivedKoreaderSession[] {
   return clusterPageStats(events, gapSeconds)
     .map((cluster) => computeClusterMetrics(cluster, deviceId, bookFileId))
-    .filter((session) => session.durationSeconds >= KOREADER_MIN_SESSION_SECONDS);
+    .filter(
+      (session) =>
+        session.durationSeconds >= KOREADER_MIN_SESSION_SECONDS &&
+        session.progressDelta !== null &&
+        session.progressDelta >= MIN_LOGGED_READING_PROGRESS_DELTA,
+    );
 }
 
 function round2(value: number): number {
