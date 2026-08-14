@@ -24,6 +24,7 @@ describe('CollectionRepository', () => {
   const db = {
     select: vi.fn(),
     transaction: vi.fn(),
+    execute: vi.fn(),
   };
 
   let repo: CollectionRepository;
@@ -36,6 +37,16 @@ describe('CollectionRepository', () => {
     txUpdate.mockImplementation(() => ({ set: txSet }));
     txSet.mockReturnValue({ where: txWhere });
     txWhere.mockResolvedValue(undefined);
+  });
+
+  it('backfills positions using the former per-collection order', async () => {
+    db.execute.mockResolvedValue({ rowCount: 12 });
+
+    await expect(repo.backfillPositionsByLegacyOrder()).resolves.toBe(12);
+
+    const query = db.execute.mock.calls[0][0] as { text: string };
+    expect(query.text).toContain('PARTITION BY collection_id');
+    expect(query.text).toContain('ORDER BY added_at ASC, book_id ASC');
   });
 
   it('updateDisplayOrders performs all updates in a single transaction and updates timestamps', async () => {

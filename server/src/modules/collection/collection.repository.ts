@@ -25,6 +25,27 @@ const collectionFields = {
 export class CollectionRepository {
   constructor(@Inject(DB) private readonly db: Db) {}
 
+  async backfillPositionsByLegacyOrder(): Promise<number> {
+    const result = await this.db.execute(sql`
+      WITH ranked AS (
+        SELECT
+          collection_id,
+          book_id,
+          row_number() OVER (
+            PARTITION BY collection_id
+            ORDER BY added_at ASC, book_id ASC
+          ) AS position
+        FROM collection_books
+      )
+      UPDATE collection_books AS membership
+      SET position = ranked.position
+      FROM ranked
+      WHERE membership.collection_id = ranked.collection_id
+        AND membership.book_id = ranked.book_id
+    `);
+    return result.rowCount ?? 0;
+  }
+
   findAllForUser(userId: number) {
     return this.db
       .select(collectionFields)
