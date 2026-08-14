@@ -1,19 +1,21 @@
 import type {
   HardcoverActiveSyncStatus,
   HardcoverBookSyncState,
-  HardcoverEdition,
-  HardcoverLinkedBook,
   HardcoverLinkResult,
+  HardcoverEditionsResult,
+  HardcoverLinkedBooksResult,
   HardcoverSettings,
   HardcoverSyncPendingSummary,
   ReadStatus,
+  SetHardcoverEditionResult,
   UpdateHardcoverBookSyncPayload,
 } from '@bookorbit/types';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { distinctUntilChanged, filter, map, merge, Observable, of, Subject } from 'rxjs';
 
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
+import { BookService } from '../book/book.service';
 import { HARDCOVER_STATUS } from './hardcover.constants';
 import { HardcoverBookMatchService } from './hardcover-book-match.service';
 import { HardcoverClientService } from './hardcover-client.service';
@@ -25,9 +27,7 @@ import {
   resolveHardcoverBookSyncOverrideForToggle,
 } from './hardcover-sync-policy';
 
-// "Linked books" only needs to manage matches for books actively being read right now —
-// finished/want-to-read books aren't useful to manually re-link from that view.
-const CURRENTLY_READING_STATUSES = new Set<ReadStatus>(['reading', 'rereading']);
+const LINKED_BOOKS_LIMIT = 200;
 
 const STATUS_MAP: Partial<Record<ReadStatus, number>> = {
   want_to_read: HARDCOVER_STATUS.WANT_TO_READ,
@@ -128,6 +128,7 @@ export class HardcoverSyncService {
     private readonly client: HardcoverClientService,
     private readonly matchService: HardcoverBookMatchService,
     private readonly settingsService: HardcoverSettingsService,
+    private readonly bookService: BookService,
   ) {}
 
   async syncBook(userId: number, bookId: number): Promise<HardcoverSyncBookResult> {
@@ -152,7 +153,7 @@ export class HardcoverSyncService {
   }
 
   // Links a book directly to a Hardcover id/slug/URL the user supplied, bypassing the
-  // ISBN/title match cascade entirely — the user is telling us exactly which book is correct.
+  // ISBN/title match cascade because the user is telling us exactly which book is correct.
   async linkBookManually(userId: number, bookId: number, input: string): Promise<HardcoverLinkResult> {
     const token = await this.settingsService.getTokenForUser(userId);
     if (!token) return { success: false };
@@ -176,61 +177,6 @@ export class HardcoverSyncService {
     await this.syncBook(userId, bookId);
 
     return { success: true, hardcoverBookId: resolved.hardcoverBookId, title: resolved.title };
-  }
-
-  async listEditions(userId: number, bookId: number): Promise<HardcoverEdition[]> {
-    const token = await this.settingsService.getTokenForUser(userId);
-    if (!token) return [];
-
-    const state = await this.repo.findBookState(userId, bookId);
-    if (!state?.hardcoverBookId) return [];
-
-    return this.matchService.getEditions(userId, token, state.hardcoverBookId);
-  }
-
-  async setEdition(userId: number, bookId: number, editionId: number): Promise<{ success: boolean }> {
-    const token = await this.settingsService.getTokenForUser(userId);
-    if (!token) return { success: false };
-
-    const state = await this.repo.findBookState(userId, bookId);
-    if (!state?.hardcoverBookId) return { success: false };
-
-    await this.repo.upsertBookState({
-      userId,
-      bookId,
-      hardcoverBookId: state.hardcoverBookId,
-      hardcoverEditionId: editionId,
-      matchMethod: 'manual',
-      matchError: null,
-      lastSyncedAt: null,
-    });
-
-    await this.syncBook(userId, bookId);
-
-    return { success: true };
-  }
-
-  async listLinkedBooks(userId: number): Promise<HardcoverLinkedBook[]> {
-    const allBooks = await this.repo.findSyncableBooks(userId);
-    const books = allBooks.filter((book) => CURRENTLY_READING_STATUSES.has(book.status as ReadStatus));
-    const states = await this.repo.findBookStatesByBookIds(
-      userId,
-      books.map((book) => book.bookId),
-    );
-    const stateByBookId = new Map(states.map((state) => [state.bookId, state]));
-
-    return books.map((book) => {
-      const state = stateByBookId.get(book.bookId);
-      return {
-        bookId: book.bookId,
-        title: book.title,
-        authorName: book.authorName,
-        hardcoverBookId: state?.hardcoverBookId ?? null,
-        hardcoverEditionId: state?.hardcoverEditionId ?? null,
-        matchMethod: state?.matchMethod ?? null,
-        matchError: state?.matchError ?? null,
-      };
-    });
   }
 
   async syncAll(userId: number): Promise<number> {
@@ -373,6 +319,79 @@ export class HardcoverSyncService {
     return this.toBookSyncState(bookId, book, settings, state);
   }
 
+  async listLinkedBooks(userId: number): Promise<HardcoverLinkedBooksResult> {
+    // One over the cap, so a full page can be told apart from a truncated one.
+    const rows = await this.repo.findCurrentReadingBooks(userId, LINKED_BOOKS_LIMIT + 1);
+    const books = rows.slice(0, LINKED_BOOKS_LIMIT);
+    const states = await this.repo.findBookStatesByBookIds(
+      userId,
+      books.map((book) => book.bookId),
+    );
+    const stateByBookId = new Map(states.map((state) => [state.bookId, state]));
+
+    return {
+      books: books.map((book) => {
+        const state = stateByBookId.get(book.bookId);
+        return {
+          bookId: book.bookId,
+          title: book.title,
+          authorName: book.authorName,
+          hardcoverBookId: state?.hardcoverBookId ?? null,
+          hardcoverEditionId: state?.hardcoverEditionId ?? null,
+          matchMethod: state?.matchMethod ?? null,
+          matchError: state?.matchError ?? null,
+        };
+      }),
+      truncated: rows.length > LINKED_BOOKS_LIMIT,
+    };
+  }
+
+  async getEditions(userId: number, bookId: number): Promise<HardcoverEditionsResult> {
+    const { token, hardcoverBookId } = await this.requireMatchedBook(userId, bookId);
+    return this.matchService.listEditions(userId, token, hardcoverBookId);
+  }
+
+  async setEdition(userId: number, bookId: number, editionId: number): Promise<SetHardcoverEditionResult> {
+    const { token, hardcoverBookId } = await this.requireMatchedBook(userId, bookId);
+
+    const edition = await this.matchService.findEditionForBook(userId, token, hardcoverBookId, editionId);
+    if (!edition) {
+      throw new BadRequestException(`Edition ${editionId} does not belong to the matched Hardcover book`);
+    }
+
+    await this.repo.upsertBookState({
+      userId,
+      bookId,
+      hardcoverBookId,
+      hardcoverEditionId: editionId,
+      matchMethod: 'manual',
+      matchError: null,
+      lastSyncedAt: null,
+    });
+
+    await this.syncBook(userId, bookId);
+
+    await this.bookService.setHardcoverEditionIdIfEmpty(bookId, String(editionId)).catch((err) => {
+      this.logger.warn(
+        `[hardcover.set_edition] [fail] userId=${userId} bookId=${bookId} errorClass=${err?.constructor?.name ?? 'Error'} error="${sanitizeLogValue(err instanceof Error ? err.message : String(err))}" - back-fill of shared metadata edition id failed`,
+      );
+    });
+
+    return { success: true };
+  }
+
+  // Both edition routes need the same two preconditions, and neither can be reported as an empty
+  // catalogue: "not connected" and "not matched yet" are distinct states the user can act on.
+  private async requireMatchedBook(userId: number, bookId: number): Promise<{ token: string; hardcoverBookId: number }> {
+    const token = await this.settingsService.getTokenForUser(userId);
+    if (!token) throw new BadRequestException('Hardcover is not connected for this user');
+
+    const state = await this.repo.findBookState(userId, bookId);
+    if (!state?.hardcoverBookId) throw new BadRequestException(`Book ${bookId} is not matched to a Hardcover book yet`);
+
+    return { token, hardcoverBookId: state.hardcoverBookId };
+  }
+
   private async runSyncAll(userId: number, token: string, books: BookSyncData[], runId: number, settings: HardcoverSettings): Promise<void> {
     const startedAt = Date.now();
     let synced = 0;
@@ -500,7 +519,7 @@ export class HardcoverSyncService {
         const progressPages =
           !match.editionIsAudio && book.progress != null && match.editionPages ? Math.round((book.progress / 100) * match.editionPages) : undefined;
         // Prefer a precise position (from BookOrbit's own audiobook player) over deriving one
-        // from a percentage — some sources (e.g. a KOReader-sync bridge translating audio
+        // from a percentage. Some sources (e.g. a KOReader-sync bridge translating audio
         // position into a "page" percentage) only ever give us the percentage.
         const progressSeconds = !match.editionIsAudio
           ? undefined

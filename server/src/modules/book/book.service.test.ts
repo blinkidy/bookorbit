@@ -10,7 +10,7 @@ import { extractCbzMetadata, extractCbrMetadata, extractCb7Metadata } from '../m
 import { parseFb2File } from '../metadata/lib/fb2-parser';
 import { parseMobiFile } from '../metadata/lib/mobi-parser';
 import { parsePdfFile } from '../metadata/lib/pdf-parser';
-import { ACHIEVEMENT_EVENT_BOOK_RATING_CHANGED } from '../achievement/achievement-events.service';
+import { ACHIEVEMENT_EVENT_BOOK_HARDCOVER_EDITION_CHANGED, ACHIEVEMENT_EVENT_BOOK_RATING_CHANGED } from '../achievement/achievement-events.service';
 import { UpdateBookMetadataDto } from './dto/update-book-metadata.dto';
 import { BulkEditFieldsDto } from './dto/bulk-edit-metadata.dto';
 import { BookQueryBuilder } from './book-query-builder.service';
@@ -137,6 +137,7 @@ function makeService(overrides: { bookMetadataLockService?: unknown } = {}) {
     bulkSetRating: vi.fn(),
     bulkUpdateMetadataFields: vi.fn(),
     updateMetadataFields: vi.fn(),
+    setHardcoverEditionIdIfEmpty: vi.fn(),
     updateAddedAt: vi.fn(),
     replaceCommunityRatings: vi.fn(),
     withTransaction: vi.fn(),
@@ -1234,6 +1235,25 @@ describe('BookService', () => {
       );
     });
 
+    it('refreshMetadata pins the search to a previously chosen Hardcover edition', async () => {
+      const { service, bookRepo, pipeline } = makeService();
+      const user = makeUser();
+      bookRepo.findById.mockResolvedValue({
+        book: {
+          books: { id: 1, libraryId: 7 },
+          book_metadata: { title: 'Old', isbn13: '9780756404741', isbn10: null, hardcoverEditionId: '8941973' },
+        },
+        authorRows: [{ id: 1, name: 'Patrick Rothfuss', sortName: null }],
+        genreRows: [],
+        communityRatingRows: [],
+      });
+      pipeline.runWithSources.mockResolvedValue({ resolved: {}, sources: {}, providerIds: {} });
+
+      await service.refreshMetadata(1, true, user);
+
+      expect(pipeline.runWithSources).toHaveBeenCalledWith(expect.objectContaining({ hardcoverEditionId: '8941973' }), expect.any(Object), 7);
+    });
+
     it('refreshMetadata persists provider-specific community rating rows', async () => {
       const { service, bookRepo, pipeline } = makeService();
       const user = makeUser();
@@ -1908,6 +1928,40 @@ describe('BookService', () => {
         bookIds: [5],
         rating: 4,
       });
+    });
+
+    it('updateMetadata emits hardcover edition changed event when hardcoverEditionId is set', async () => {
+      const { service, achievementEvents } = makeService();
+      const user = makeUser();
+      vi.spyOn(service, 'verifyBookAccess').mockResolvedValue(undefined);
+      vi.spyOn(service, 'getDetail').mockResolvedValue({ id: 5 } as never);
+
+      await service.updateMetadata(5, { hardcoverEditionId: '200' }, user);
+
+      expect(achievementEvents.emit).toHaveBeenCalledWith(ACHIEVEMENT_EVENT_BOOK_HARDCOVER_EDITION_CHANGED, {
+        userId: user.id,
+        bookId: 5,
+        hardcoverEditionId: '200',
+      });
+    });
+
+    it('updateMetadata does not emit hardcover edition changed event when hardcoverEditionId is cleared', async () => {
+      const { service, achievementEvents } = makeService();
+      const user = makeUser();
+      vi.spyOn(service, 'verifyBookAccess').mockResolvedValue(undefined);
+      vi.spyOn(service, 'getDetail').mockResolvedValue({ id: 5 } as never);
+
+      await service.updateMetadata(5, { hardcoverEditionId: null }, user);
+
+      expect(achievementEvents.emit).not.toHaveBeenCalledWith(ACHIEVEMENT_EVENT_BOOK_HARDCOVER_EDITION_CHANGED, expect.anything());
+    });
+
+    it('setHardcoverEditionIdIfEmpty delegates to the repository', async () => {
+      const { service, bookRepo } = makeService();
+      bookRepo.setHardcoverEditionIdIfEmpty.mockResolvedValue(true);
+
+      await expect(service.setHardcoverEditionIdIfEmpty(5, '200')).resolves.toBe(true);
+      expect(bookRepo.setHardcoverEditionIdIfEmpty).toHaveBeenCalledWith(5, '200');
     });
 
     it('updateMetadata replaces genres array only', async () => {
@@ -4418,6 +4472,50 @@ describe('BookService', () => {
       expect(result).toEqual({ items: [], total: 0, page: 0, size: 50 });
     });
 
+    it('passes collection ordering context to an uncollapsed collectionOrder query', async () => {
+      const { service, bookRepo, queryBuilder } = makeService();
+      const query: BookQuery = {
+        pagination: { page: 0, size: 50 },
+        sort: [{ field: 'collectionOrder', dir: 'asc' }],
+        filter: undefined,
+        collapseSeries: false,
+      };
+      queryBuilder.buildOrderBy.mockReturnValue('collection-order');
+      bookRepo.findCards.mockResolvedValue(emptyCardQueryResult);
+
+      await service.executeBooksQuery(12, undefined, query, { defaultCollectionId: 42 });
+
+      expect(queryBuilder.buildOrderBy).toHaveBeenCalledWith(query.sort, 12, undefined, { defaultCollectionId: 42 });
+      expect(bookRepo.findCards).toHaveBeenCalledWith(expect.objectContaining({ orderBy: 'collection-order' }));
+    });
+
+    it('rejects collectionOrder when the query is not scoped to a collection', async () => {
+      const { service, bookRepo } = makeService();
+      const query: BookQuery = {
+        pagination: { page: 0, size: 50 },
+        sort: [{ field: 'collectionOrder', dir: 'asc' }],
+        filter: undefined,
+        collapseSeries: false,
+      };
+
+      await expect(service.executeBooksQuery(12, undefined, query)).rejects.toThrow('This sort is only available inside a collection');
+      expect(bookRepo.findCards).not.toHaveBeenCalled();
+    });
+
+    it('rejects collectionOrder on the collapsed path too', async () => {
+      const { service, bookRepo } = makeService();
+      vi.spyOn(BookQueryBuilder, 'hasSeriesSelectionFilter').mockReturnValue(false);
+      const query: BookQuery = {
+        pagination: { page: 0, size: 50 },
+        sort: [{ field: 'collectionOrder', dir: 'asc' }],
+        filter: undefined,
+        collapseSeries: true,
+      };
+
+      await expect(service.executeBooksQuery(12, undefined, query)).rejects.toThrow('This sort is only available inside a collection');
+      expect(bookRepo.findCardsCollapsed).not.toHaveBeenCalled();
+    });
+
     it('returns results from findCardsCollapsed when collapseSeries is true', async () => {
       const { service, bookRepo, queryBuilder } = makeService();
       const hasSeriesSelectionFilterSpy = vi.spyOn(BookQueryBuilder, 'hasSeriesSelectionFilter').mockReturnValue(false);
@@ -4443,6 +4541,30 @@ describe('BookService', () => {
       expect(bookRepo.findCards).not.toHaveBeenCalled();
       expect(queryBuilder.buildOrderBy).not.toHaveBeenCalled();
       expect(result).toEqual({ items: [], total: 0, page: 1, size: 25 });
+    });
+
+    it('passes collection ordering context to a collapsed collectionOrder query', async () => {
+      const { service, bookRepo } = makeService();
+      vi.spyOn(BookQueryBuilder, 'hasSeriesSelectionFilter').mockReturnValue(false);
+      const query: BookQuery = {
+        pagination: { page: 0, size: 50 },
+        sort: [{ field: 'collectionOrder', dir: 'asc' }],
+        filter: undefined,
+        collapseSeries: true,
+      };
+      bookRepo.findCardsCollapsed.mockResolvedValue(emptyCardQueryResult);
+
+      await service.executeBooksQuery(12, undefined, query, { defaultCollectionId: 42 });
+
+      expect(bookRepo.findCardsCollapsed).toHaveBeenCalledWith({
+        where: undefined,
+        sort: query.sort,
+        limit: 50,
+        offset: 0,
+        userId: 12,
+        customFieldTypes: undefined,
+        defaultCollectionId: 42,
+      });
     });
 
     it('resolves custom metadata field types for custom sort fields', async () => {

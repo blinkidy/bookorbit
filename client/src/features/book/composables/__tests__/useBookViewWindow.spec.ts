@@ -1,6 +1,7 @@
 import { nextTick, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BookCard, BooksPage, GroupRule, JumpBucket } from '@bookorbit/types'
+import type { BookCard, BooksPage, GroupRule, JumpBucket, SortSpec } from '@bookorbit/types'
+import { COLLECTION_DEFAULT_SORT } from '../../lib/sort-defaults'
 
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>()
 const bookEventsMock = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ vi.mock('../useBookEvents', () => ({
 
 import { BOOK_WINDOW_BLOCK_SIZE } from '../useBookWindow'
 import { useBookViewWindow } from '../useBookViewWindow'
+import { useEffectiveSeriesCollapse } from '../useEffectiveSeriesCollapse'
 
 function makeBook(id: number): BookCard {
   return {
@@ -87,12 +89,25 @@ async function flush() {
   await nextTick()
 }
 
-function setup(options: { scope?: number | null; viewMode?: string; collapse?: boolean; q?: string; railEnabled?: boolean; enabled?: boolean } = {}) {
+function setup(
+  options: {
+    scope?: number | null
+    viewMode?: string
+    collapse?: boolean
+    selectionMode?: boolean
+    q?: string
+    railEnabled?: boolean
+    enabled?: boolean
+    defaultSort?: SortSpec[]
+  } = {},
+) {
   const scopeId = ref<number | null>(options.scope === undefined ? 1 : options.scope)
   const viewMode = ref(options.viewMode ?? 'table')
   const railEnabled = ref(options.railEnabled ?? true)
   const enabled = ref(options.enabled ?? true)
-  const collapseEnabled = ref(options.collapse ?? false)
+  const collapsePreference = ref(options.collapse ?? false)
+  const selectionMode = ref(options.selectionMode ?? false)
+  const collapseEnabled = useEffectiveSeriesCollapse(collapsePreference, selectionMode)
   const q = ref(options.q ?? '')
   const win = useBookViewWindow({
     scopeId,
@@ -103,14 +118,21 @@ function setup(options: { scope?: number | null; viewMode?: string; collapse?: b
     collapseEnabled,
     q,
     enabled,
+    defaultSort: options.defaultSort,
   })
-  return { win, scopeId, viewMode, railEnabled, enabled, collapseEnabled, q }
+  return { win, scopeId, viewMode, railEnabled, enabled, collapsePreference, selectionMode, collapseEnabled, q }
 }
 
 function listRequests(): number[] {
   return fetchMock.mock.calls
     .filter(([url]) => !url.includes('jump-buckets'))
     .map(([, init]) => (JSON.parse(String(init?.body)) as { pagination: { page: number } }).pagination.page)
+}
+
+function listRequestBodies(): Array<Record<string, unknown>> {
+  return fetchMock.mock.calls
+    .filter(([url]) => !url.includes('jump-buckets'))
+    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>)
 }
 
 function jumpRequestCount(): number {
@@ -135,6 +157,35 @@ describe('useBookViewWindow', () => {
     expect(win.total.value).toBe(250)
     expect(win.contiguousPrefix.value).toHaveLength(100)
     expect(win.hasMorePrefix.value).toBe(true)
+  })
+
+  it('defaults to title ascending when no default sort is supplied', async () => {
+    mockApi(250)
+    const { win } = setup()
+    await flush()
+
+    expect(win.sort.value).toEqual([{ field: 'title', dir: 'asc' }])
+    expect(listRequestBodies()[0]).toMatchObject({ sort: [{ field: 'title', dir: 'asc' }] })
+  })
+
+  it('sends the supplied default sort and hides the rail for collection order', async () => {
+    mockApi(250)
+    const { win } = setup({ viewMode: 'grid', defaultSort: COLLECTION_DEFAULT_SORT })
+    await flush()
+
+    expect(win.sort.value).toEqual([{ field: 'collectionOrder', dir: 'asc' }])
+    expect(listRequestBodies()[0]).toMatchObject({ sort: [{ field: 'collectionOrder', dir: 'asc' }] })
+    expect(win.bucketKind.value).toBeNull()
+    expect(jumpRequestCount()).toBe(0)
+  })
+
+  it('does not let a view mutate the shared default sort constant', async () => {
+    mockApi(250)
+    const { win } = setup({ defaultSort: COLLECTION_DEFAULT_SORT })
+    await flush()
+    win.sort.value[0]!.dir = 'desc'
+
+    expect(COLLECTION_DEFAULT_SORT).toEqual([{ field: 'collectionOrder', dir: 'asc' }])
   })
 
   it('debounces external progress events and reloads the current book window', async () => {
@@ -238,6 +289,44 @@ describe('useBookViewWindow', () => {
       q: 'dune',
       filter,
     })
+  })
+
+  it('reloads uncollapsed books for selection mode and restores collapse afterward', async () => {
+    mockApi(120)
+    const { win, collapsePreference, selectionMode } = setup({ collapse: true })
+    await flush()
+
+    expect(listRequestBodies()).toHaveLength(1)
+    expect(listRequestBodies()[0]).toMatchObject({ collapseSeries: true, pagination: { page: 0 } })
+
+    fetchMock.mockClear()
+    selectionMode.value = true
+    await flush()
+
+    expect(win.query.value).not.toHaveProperty('collapseSeries')
+    expect(listRequestBodies()).toHaveLength(1)
+    expect(listRequestBodies()[0]).not.toHaveProperty('collapseSeries')
+    expect(collapsePreference.value).toBe(true)
+
+    fetchMock.mockClear()
+    selectionMode.value = false
+    await flush()
+
+    expect(listRequestBodies()).toHaveLength(1)
+    expect(listRequestBodies()[0]).toMatchObject({ collapseSeries: true, pagination: { page: 0 } })
+    expect(collapsePreference.value).toBe(true)
+  })
+
+  it('does not reload when selection mode cannot change the effective collapse state', async () => {
+    mockApi(120)
+    const { selectionMode } = setup({ collapse: false })
+    await flush()
+    fetchMock.mockClear()
+
+    selectionMode.value = true
+    await flush()
+
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('reverses the letter template for a descending sort', async () => {

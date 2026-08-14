@@ -470,6 +470,13 @@
       "when": 1786298257009,
       "tag": "0066_book_move_case_insensitive_paths",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1786734711417,
+      "tag": "0067_add-kobo-store-sync-and-collection-position",
+      "breakpoints": true
     }
   ]
 }

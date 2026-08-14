@@ -59,7 +59,7 @@ function makeService(bookDockPath = '/books/book-dock') {
   };
 
   const gateway = {
-    emitSummary: vi.fn(),
+    emitChanged: vi.fn(),
   };
 
   const service = new BookDockIngestService(
@@ -356,6 +356,7 @@ describe('BookDockIngestService', () => {
           title: expectedTitle,
           author: undefined,
           isbn: undefined,
+          isAudiobook: false,
         },
         {},
       );
@@ -384,9 +385,21 @@ describe('BookDockIngestService', () => {
           title: 'The Sandman #001',
           author: 'Neil Gaiman',
           isbn: '9781401284770',
+          isAudiobook: false,
         },
         {},
       );
+    });
+
+    it('searches audiobook editions for a docked audio file', async () => {
+      const { service, appSettings, repo, metadataFetchPipeline } = makeService();
+      appSettings.isBookDockAutoFetchEnabled.mockResolvedValue(true);
+      repo.findById.mockResolvedValue({ id: 8, fileName: 'dune.m4b', format: 'm4b', status: 'ready', embeddedMetadata: { title: 'Dune' } });
+      (metadataFetchPipeline as any).runWithSources = vi.fn().mockResolvedValue({ resolved: {}, sources: {} });
+
+      await (service as any).autoFetchMetadataAsync(8);
+
+      expect(metadataFetchPipeline.runWithSources).toHaveBeenCalledWith(expect.objectContaining({ isAudiobook: true }), {});
     });
 
     it('updates fetched metadata and confidence after pipeline resolution', async () => {
@@ -568,7 +581,7 @@ describe('BookDockIngestService', () => {
         status: 'ready',
         embeddedMetadata: { title: 'Dune' },
       });
-      const emitSummarySpy = vi.spyOn(service as any, 'emitSummary').mockResolvedValue(undefined);
+      const emitSummarySpy = vi.spyOn(service as any, 'emitChange').mockReturnValue(undefined);
       const runWithSources = vi.fn().mockResolvedValue({ resolved: {}, sources: {} });
       (metadataFetchPipeline as any).runWithSources = runWithSources;
 
@@ -583,7 +596,7 @@ describe('BookDockIngestService', () => {
   it('extractMetadataAsync emits summary and ingestion events after successful extraction chain', async () => {
     const { service, repo, metadataService, events } = makeService();
     const autoFetchSpy = vi.spyOn(service as any, 'autoFetchMetadataAsync').mockResolvedValue(undefined);
-    const emitSummarySpy = vi.spyOn(service as any, 'emitSummary').mockResolvedValue(undefined);
+    const emitSummarySpy = vi.spyOn(service as any, 'emitChange').mockReturnValue(undefined);
     repo.findById.mockResolvedValue({ id: 12, status: 'pending', format: 'epub', absolutePath: '/bucket/12.epub' });
 
     (service as any).extractMetadataAsync(12, 'epub');
@@ -625,7 +638,7 @@ describe('BookDockIngestService', () => {
       afterId: undefined,
       status: 'pending',
       userId: 0,
-      isSuperuser: true,
+      canManageAll: true,
     });
     expect(enqueueSpy).toHaveBeenCalledWith(1, { primary: 1, secondary: 1 });
     expect(enqueueSpy).toHaveBeenCalledWith(2, { primary: 2, secondary: 2 });

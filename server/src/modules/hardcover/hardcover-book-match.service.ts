@@ -1,6 +1,7 @@
-import type { HardcoverEdition } from '@bookorbit/types';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import type { HardcoverEdition as HardcoverEditionSummary, HardcoverEditionsResult } from '@bookorbit/types';
 
+import { parsePublishedDateKey } from '../../common/utils/published-date.utils';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import type { BookSyncData } from './hardcover.repository';
 import { HardcoverClientService } from './hardcover-client.service';
@@ -103,7 +104,6 @@ const AUDIO_FORMATS = new Set(['m4b', 'm4a', 'mp3', 'aax', 'aacx', 'aac', 'flac'
 
 // Hardcover reading_format_id: 1 = physical, 2 = audiobook, 4 = ebook.
 const AUDIOBOOK_READING_FORMAT_ID = 2;
-const READING_FORMAT_LABELS: Record<number, string> = { 1: 'Physical', 2: 'Audiobook', 4: 'E-book' };
 
 interface HardcoverEditionRaw {
   id: number;
@@ -121,6 +121,95 @@ interface BooksQueryResult {
     title?: string | null;
     editions?: HardcoverEditionRaw[];
   }>;
+}
+
+const EBOOK_READING_FORMAT_ID = 4;
+
+export const EDITION_DISPLAY_LIMIT = 50;
+
+const EDITION_DISPLAY_FIELDS = `
+      id
+      title
+      pages
+      isbn_10
+      isbn_13
+      publisher { name }
+      language { code2 }
+      release_date
+      reading_format_id
+      audio_seconds
+      image { url }`;
+
+// Ordered so the capped window is deterministic: without order_by, two calls can return a
+// different slice of the same catalogue and a legitimate pick would fail validation.
+// One over the cap, so the caller can tell a full page apart from a truncated one.
+const FIND_BOOK_EDITIONS_FOR_DISPLAY_QUERY = `
+query FindBookEditionsForDisplay($id: Int!) {
+  books(where: { id: { _eq: $id } }, limit: 1) {
+    id
+    editions(limit: ${EDITION_DISPLAY_LIMIT + 1}, order_by: { id: asc }) {${EDITION_DISPLAY_FIELDS}
+    }
+  }
+}`;
+
+// Validates a single edition by asking for it scoped to the book, instead of re-listing the
+// capped window and checking membership - an edition past the cap is still a valid pick.
+const FIND_BOOK_EDITION_BY_ID_QUERY = `
+query FindBookEditionById($id: Int!, $editionId: Int!) {
+  books(where: { id: { _eq: $id } }, limit: 1) {
+    id
+    editions(where: { id: { _eq: $editionId } }, limit: 1) {${EDITION_DISPLAY_FIELDS}
+    }
+  }
+}`;
+
+interface HardcoverEditionDisplayRow {
+  id: number;
+  title?: string | null;
+  pages?: number | null;
+  isbn_10?: string | null;
+  isbn_13?: string | null;
+  publisher?: { name?: string | null } | null;
+  language?: { code2?: string | null } | null;
+  release_date?: string | null;
+  reading_format_id?: number | null;
+  audio_seconds?: number | null;
+  image?: { url?: string | null } | null;
+}
+
+interface BooksDisplayQueryResult {
+  books: Array<{
+    id: number;
+    editions?: HardcoverEditionDisplayRow[];
+  }>;
+}
+
+function editionFormatLabel(edition: HardcoverEditionDisplayRow): string {
+  if (edition.reading_format_id === AUDIOBOOK_READING_FORMAT_ID || (edition.audio_seconds ?? 0) > 0) return 'Audiobook';
+  if (edition.reading_format_id === EBOOK_READING_FORMAT_ID) return 'E-Book';
+  return 'Physical Book';
+}
+
+function mapEditionForDisplay(edition: HardcoverEditionDisplayRow): HardcoverEditionSummary {
+  const publishedDate = parsePublishedDateKey(edition.release_date) ?? null;
+  const audioSeconds = typeof edition.audio_seconds === 'number' && edition.audio_seconds > 0 ? Math.round(edition.audio_seconds) : null;
+  const isAudio = edition.reading_format_id === AUDIOBOOK_READING_FORMAT_ID || audioSeconds != null;
+  const parsedYear = publishedDate ? Number.parseInt(publishedDate.slice(0, 4), 10) : Number.NaN;
+  return {
+    id: edition.id,
+    title: edition.title ?? null,
+    format: editionFormatLabel(edition),
+    pages: typeof edition.pages === 'number' && edition.pages > 0 ? edition.pages : null,
+    audioSeconds,
+    isAudio,
+    year: Number.isFinite(parsedYear) ? parsedYear : null,
+    isbn10: edition.isbn_10 ?? null,
+    isbn13: edition.isbn_13 ?? null,
+    publisher: edition.publisher?.name ?? null,
+    language: edition.language?.code2 ?? null,
+    publishedDate,
+    coverUrl: edition.image?.url ?? null,
+  };
 }
 
 interface SearchBooksResult {
@@ -312,6 +401,54 @@ export class HardcoverBookMatchService {
     }
   }
 
+  // A failed upstream lookup must not be reported as "no editions" - the caller (and the user)
+  // needs to be able to tell an empty catalog apart from a provider outage and retry.
+  async listEditions(userId: number, token: string, hardcoverBookId: number): Promise<HardcoverEditionsResult> {
+    const data = await this.queryEditions(userId, token, hardcoverBookId, 'list_editions', FIND_BOOK_EDITIONS_FOR_DISPLAY_QUERY, {
+      id: hardcoverBookId,
+    });
+
+    const rows = data.books?.[0]?.editions ?? [];
+    return {
+      editions: rows.slice(0, EDITION_DISPLAY_LIMIT).map(mapEditionForDisplay),
+      truncated: rows.length > EDITION_DISPLAY_LIMIT,
+    };
+  }
+
+  // Resolves one edition scoped to the book it must belong to. Null means Hardcover knows of no
+  // such edition on that book, which is exactly the "not yours to pick" case the caller rejects.
+  async findEditionForBook(userId: number, token: string, hardcoverBookId: number, editionId: number): Promise<HardcoverEditionSummary | null> {
+    const data = await this.queryEditions(userId, token, hardcoverBookId, 'find_edition', FIND_BOOK_EDITION_BY_ID_QUERY, {
+      id: hardcoverBookId,
+      editionId,
+    });
+
+    const edition = data.books?.[0]?.editions?.[0];
+    return edition ? mapEditionForDisplay(edition) : null;
+  }
+
+  // A failed upstream lookup must not be reported as "no editions" - the caller (and the user)
+  // needs to be able to tell an empty catalog apart from a provider outage and retry.
+  private async queryEditions(
+    userId: number,
+    token: string,
+    hardcoverBookId: number,
+    event: string,
+    query: string,
+    variables: Record<string, unknown>,
+  ): Promise<BooksDisplayQueryResult> {
+    const startedAt = Date.now();
+    try {
+      return await this.client.query<BooksDisplayQueryResult>(userId, token, query, variables);
+    } catch (err) {
+      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
+      this.logger.warn(
+        `[hardcover.${event}] [fail] userId=${userId} hardcoverBookId=${hardcoverBookId} durationMs=${Date.now() - startedAt} errorClass=${err?.constructor?.name ?? 'Error'} error="${error}" - edition lookup failed`,
+      );
+      throw new InternalServerErrorException('Failed to load Hardcover editions');
+    }
+  }
+
   private async resolveCachedMatch(
     userId: number,
     token: string,
@@ -432,7 +569,7 @@ export class HardcoverBookMatchService {
   }
 
   /**
-   * Resolves a manually-provided Hardcover URL, numeric book id, or slug directly — the user is
+   * Resolves a manually-provided Hardcover URL, numeric book id, or slug directly. The user is
    * telling us exactly which book is correct, so we just look it up and pick its best edition.
    */
   async resolveManualInput(
@@ -475,33 +612,5 @@ export class HardcoverBookMatchService {
 
     if (/^\d+$/.test(candidate)) return { kind: 'id', value: parseInt(candidate, 10) };
     return candidate ? { kind: 'slug', value: candidate } : null;
-  }
-
-  /** Lists the editions tracked against a Hardcover book (e.g. physical, ebook, audiobook). */
-  async getEditions(userId: number, token: string, hardcoverBookId: number): Promise<HardcoverEdition[]> {
-    try {
-      const data = await this.client.query<BooksQueryResult>(userId, token, FIND_BOOK_EDITIONS_BY_HARDCOVER_ID_QUERY, { id: hardcoverBookId });
-      const editions = data.books?.[0]?.editions ?? [];
-      return editions.map((edition) => this.toPublicEdition(edition));
-    } catch (err) {
-      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
-      this.logger.warn(`[hardcover.editions] [fail] userId=${userId} hardcoverBookId=${hardcoverBookId} error="${error}" - failed to fetch editions`);
-      return [];
-    }
-  }
-
-  private toPublicEdition(edition: HardcoverEditionRaw): HardcoverEdition {
-    const isAudio = this.editionIsAudio(edition);
-    const format = (edition.reading_format_id ? READING_FORMAT_LABELS[edition.reading_format_id] : undefined) ?? (isAudio ? 'Audiobook' : 'Unknown');
-    const year = edition.release_date && edition.release_date.length >= 4 ? parseInt(edition.release_date.slice(0, 4), 10) : null;
-
-    return {
-      id: edition.id,
-      format,
-      pages: this.normalizeEditionPages(edition.pages),
-      audioSeconds: this.normalizeEditionAudioSeconds(edition.audio_seconds),
-      isAudio,
-      year: year && Number.isFinite(year) ? year : null,
-    };
   }
 }

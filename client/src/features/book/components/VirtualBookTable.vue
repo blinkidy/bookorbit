@@ -39,6 +39,7 @@ import { BOOK_METADATA_LOCK_FIELDS } from '@bookorbit/types'
 import { isBookPlaceholder, type BookSlot } from '@/features/book/composables/useBookWindow'
 import { useNarratorSearch } from '@/features/book/composables/useNarratorSearch'
 import { sortFieldLabel } from '@/features/book/lib/filter-labels'
+import { DEFAULT_SORT } from '@/features/book/lib/sort-defaults'
 import { useDisplaySettings } from '@/composables/useDisplaySettings'
 import { useActiveCustomFields } from '@/features/book/composables/useActiveCustomFields'
 import { useI18n } from 'vue-i18n'
@@ -49,6 +50,7 @@ const props = withDefaults(
   defineProps<{
     books: BookSlot[]
     sort: SortSpec[]
+    defaultSort?: SortSpec[]
     viewType: TableViewType
     libraryId?: number
     selectionMode?: boolean
@@ -139,6 +141,7 @@ const { getSortDir, handleColumnSort, removeSortField } = useTableSorting(
   () => props.sort,
   () => props.sortable ?? true,
   (sort) => emit('update:sort', sort),
+  () => props.defaultSort ?? DEFAULT_SORT,
 )
 const { getQuickFilterOptions, buildQuickFilterRule } = useTableQuickFilters(props.viewType)
 const { getCellValue, isCellLocked, isCellReadOnly, isMandatoryFieldEmpty, isBookFileMissing, getPinnedCellBackground } = useTableCellHelpers(
@@ -389,11 +392,12 @@ function handleSelectAllToggle(event: Event) {
   emit('select-all', checked)
 }
 
-function handleCheckboxClick(bookId: number, event: MouseEvent) {
+function handleCheckboxClick(book: BookCard, event: MouseEvent) {
+  if (book.collapsedSeries) return
   if (!props.selectionMode) {
     emit('enter-selection')
   }
-  emit('select', bookId, event)
+  emit('select', book.id, event)
 }
 
 // Sort strip
@@ -459,7 +463,7 @@ const { focusedRowIndex, focusedColIndex, isFocusedCell, handleTableKeydown } = 
   virtualizer,
   isCellReadOnly,
   onActivate: handleActivate,
-  onSelect: (id, event) => emit('select', id, event),
+  onSelect: handleCheckboxClick,
   onCopyRow: () => {},
   columnMapGetter: () => combinedColumnMap.value,
 })
@@ -580,6 +584,7 @@ function handleNavigate(book: BookCard, colId: string, direction: 'next' | 'prev
 
 function handleRowClick(book: BookCard, e: MouseEvent) {
   if (props.selectionMode) {
+    if (book.collapsedSeries) return
     emit('select', book.id, e)
     return
   }
@@ -812,10 +817,11 @@ defineExpose({
               >
                 <div class="flex items-center justify-center">
                   <input
+                    v-if="!rowBook(vItem.index).collapsedSeries"
                     type="checkbox"
                     class="accent-primary h-3.5 w-3.5 cursor-pointer"
                     :checked="isSelected?.(rowBook(vItem.index).id) ?? false"
-                    @click.stop="handleCheckboxClick(rowBook(vItem.index).id, $event)"
+                    @click.stop="handleCheckboxClick(rowBook(vItem.index), $event)"
                   />
                 </div>
               </td>

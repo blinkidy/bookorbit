@@ -190,7 +190,7 @@ describe('MetadataFetchPipeline', () => {
     expect(fetchService.search).toHaveBeenCalledWith({ title: 'Query' }, [MetadataProviderKey.KOBO]);
   });
 
-  it('enables audiobook search when Field Rules select an audiobook provider', async () => {
+  it('lets Field Rules run an audiobook provider without switching the search to audiobook editions', async () => {
     const global = createPreferences((fields) => {
       fields.title = {
         enabled: true,
@@ -232,7 +232,8 @@ describe('MetadataFetchPipeline', () => {
         title: 'Yesteryear',
         author: 'Caro Claire Burke',
         isbn: '9780593804223',
-        isAudiobook: true,
+        isAudiobook: false,
+        includeAudiobookProviders: true,
       },
       [MetadataProviderKey.LIBROFM],
     );
@@ -640,7 +641,7 @@ describe('MetadataFetchPipeline', () => {
       };
     });
     prefs.options = {
-      genres: { mode: 'merge', blocklist: [] },
+      genres: { mode: 'merge', blocklist: [], maxCount: null },
       saveProviderIds: false,
     };
 
@@ -670,7 +671,7 @@ describe('MetadataFetchPipeline', () => {
       };
     });
     prefs.options = {
-      genres: { mode: 'merge', blocklist: ['audiobook', ' Adult '] },
+      genres: { mode: 'merge', blocklist: ['audiobook', ' Adult '], maxCount: null },
       saveProviderIds: false,
     };
 
@@ -691,6 +692,36 @@ describe('MetadataFetchPipeline', () => {
     expect(sources.genres).toBe(MetadataProviderKey.GOOGLE);
   });
 
+  it('limits merged genres after exclusions and case-insensitive de-duplication', async () => {
+    const prefs = createPreferences((fields) => {
+      fields.genres = {
+        enabled: true,
+        providers: [MetadataProviderKey.GOOGLE, MetadataProviderKey.OPEN_LIBRARY],
+        mergeStrategy: 'overwriteIfProvided',
+      };
+    });
+    prefs.options = {
+      genres: { mode: 'merge', blocklist: ['Adult'], maxCount: 3 },
+      saveProviderIds: false,
+    };
+
+    preferencesService.getGlobal.mockResolvedValue(prefs);
+    resolver.resolve.mockReturnValue(prefs);
+    resolver.withForwardCompatibility.mockReturnValue(prefs);
+    registry.all.mockReturnValue([{ key: MetadataProviderKey.GOOGLE }, { key: MetadataProviderKey.OPEN_LIBRARY }] as never);
+    fetchService.search.mockReturnValue(
+      of(
+        candidate(MetadataProviderKey.GOOGLE, 'g1', { genres: ['Fiction', 'Fantasy', 'fantasy', 'Adult'] }),
+        candidate(MetadataProviderKey.OPEN_LIBRARY, 'ol1', { genres: ['fiction', 'Mystery', 'Classic'] }),
+      ),
+    );
+
+    const { resolved, sources } = await pipeline.runWithSources({ title: 'Query' }, {});
+
+    expect(resolved.genres).toEqual(['Fiction', 'Fantasy', 'Mystery']);
+    expect(sources.genres).toBe(MetadataProviderKey.GOOGLE);
+  });
+
   it('filters blocklisted genres and falls back in first-provider mode when a provider has no remaining genres', async () => {
     const prefs = createPreferences((fields) => {
       fields.genres = {
@@ -700,7 +731,7 @@ describe('MetadataFetchPipeline', () => {
       };
     });
     prefs.options = {
-      genres: { mode: 'firstProvider', blocklist: ['Audiobook'] },
+      genres: { mode: 'firstProvider', blocklist: ['Audiobook'], maxCount: null },
       saveProviderIds: false,
     };
 
@@ -721,6 +752,36 @@ describe('MetadataFetchPipeline', () => {
     expect(sources.genres).toBe(MetadataProviderKey.OPEN_LIBRARY);
   });
 
+  it('limits genres from the selected provider in first-provider mode', async () => {
+    const prefs = createPreferences((fields) => {
+      fields.genres = {
+        enabled: true,
+        providers: [MetadataProviderKey.GOOGLE, MetadataProviderKey.OPEN_LIBRARY],
+        mergeStrategy: 'overwriteIfProvided',
+      };
+    });
+    prefs.options = {
+      genres: { mode: 'firstProvider', blocklist: [], maxCount: 2 },
+      saveProviderIds: false,
+    };
+
+    preferencesService.getGlobal.mockResolvedValue(prefs);
+    resolver.resolve.mockReturnValue(prefs);
+    resolver.withForwardCompatibility.mockReturnValue(prefs);
+    registry.all.mockReturnValue([{ key: MetadataProviderKey.GOOGLE }, { key: MetadataProviderKey.OPEN_LIBRARY }] as never);
+    fetchService.search.mockReturnValue(
+      of(
+        candidate(MetadataProviderKey.GOOGLE, 'g1', { genres: ['Fantasy', 'Adventure', 'Epic'] }),
+        candidate(MetadataProviderKey.OPEN_LIBRARY, 'ol1', { genres: ['Classic'] }),
+      ),
+    );
+
+    const { resolved, sources } = await pipeline.runWithSources({ title: 'Query' }, {});
+
+    expect(resolved.genres).toEqual(['Fantasy', 'Adventure']);
+    expect(sources.genres).toBe(MetadataProviderKey.GOOGLE);
+  });
+
   it('returns provider ids for matched providers when saveProviderIds is enabled', async () => {
     const prefs = createPreferences((fields) => {
       fields.title = {
@@ -730,7 +791,7 @@ describe('MetadataFetchPipeline', () => {
       };
     });
     prefs.options = {
-      genres: { mode: 'firstProvider', blocklist: [] },
+      genres: { mode: 'firstProvider', blocklist: [], maxCount: null },
       saveProviderIds: true,
     };
 
@@ -755,7 +816,7 @@ describe('MetadataFetchPipeline', () => {
       };
     });
     prefs.options = {
-      genres: { mode: 'firstProvider', blocklist: [] },
+      genres: { mode: 'firstProvider', blocklist: [], maxCount: null },
       saveProviderIds: true,
     };
 
@@ -786,7 +847,7 @@ describe('MetadataFetchPipeline', () => {
       };
     });
     prefs.options = {
-      genres: { mode: 'firstProvider', blocklist: [] },
+      genres: { mode: 'firstProvider', blocklist: [], maxCount: null },
       saveProviderIds: true,
     };
 
@@ -813,7 +874,7 @@ describe('MetadataFetchPipeline', () => {
       };
     });
     prefs.options = {
-      genres: { mode: 'firstProvider', blocklist: [] },
+      genres: { mode: 'firstProvider', blocklist: [], maxCount: null },
       saveProviderIds: false,
     };
 
@@ -837,7 +898,7 @@ describe('MetadataFetchPipeline', () => {
       };
     });
     prefs.options = {
-      genres: { mode: 'firstProvider', blocklist: [] },
+      genres: { mode: 'firstProvider', blocklist: [], maxCount: null },
       saveProviderIds: false,
     };
 

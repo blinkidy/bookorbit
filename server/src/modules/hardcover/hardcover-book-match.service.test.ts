@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { HardcoverBookMatchService } from './hardcover-book-match.service';
+import { EDITION_DISPLAY_LIMIT, HardcoverBookMatchService } from './hardcover-book-match.service';
 
 const mockRepo = {
   findBookState: vi.fn(),
@@ -399,44 +399,138 @@ describe('HardcoverBookMatchService', () => {
     });
   });
 
-  describe('getEditions', () => {
-    it('maps raw editions to the public shape', async () => {
+  describe('listEditions', () => {
+    it('maps editions for display, deriving a format label and published date', async () => {
       mockClient.query.mockResolvedValue({
         books: [
           {
-            id: 700,
+            id: 100,
             editions: [
-              { id: 1, pages: 320, audio_seconds: null, reading_format_id: 1, release_date: '2019-05-01' },
-              { id: 2, pages: null, audio_seconds: 36000, reading_format_id: 2, release_date: '2020-01-15' },
-              { id: 3, pages: 300, audio_seconds: null, reading_format_id: 4, release_date: null },
+              {
+                id: 200,
+                title: 'Test Book',
+                pages: 320,
+                isbn_10: '0756404079',
+                isbn_13: '9780756404079',
+                publisher: { name: 'DAW Books' },
+                language: { code2: 'en' },
+                release_date: '2007-03-27',
+                reading_format_id: 1,
+                image: { url: 'https://assets.hardcover.app/cover.jpg' },
+              },
+              {
+                id: 201,
+                pages: null,
+                reading_format_id: 2,
+                audio_seconds: 50000,
+              },
             ],
           },
         ],
       });
 
-      const result = await makeService().getEditions(1, 'tok', 700);
+      const result = await makeService().listEditions(1, 'tok', 100);
 
-      expect(result).toEqual([
-        { id: 1, format: 'Physical', pages: 320, audioSeconds: null, isAudio: false, year: 2019 },
-        { id: 2, format: 'Audiobook', pages: null, audioSeconds: 36000, isAudio: true, year: 2020 },
-        { id: 3, format: 'E-book', pages: 300, audioSeconds: null, isAudio: false, year: null },
-      ]);
+      expect(result).toEqual({
+        truncated: false,
+        editions: [
+          {
+            id: 200,
+            title: 'Test Book',
+            format: 'Physical Book',
+            pages: 320,
+            isbn10: '0756404079',
+            isbn13: '9780756404079',
+            publisher: 'DAW Books',
+            language: 'en',
+            publishedDate: '2007-03-27',
+            coverUrl: 'https://assets.hardcover.app/cover.jpg',
+            audioSeconds: null,
+            isAudio: false,
+            year: 2007,
+          },
+          {
+            id: 201,
+            title: null,
+            format: 'Audiobook',
+            pages: null,
+            isbn10: null,
+            isbn13: null,
+            publisher: null,
+            language: null,
+            publishedDate: null,
+            coverUrl: null,
+            audioSeconds: 50000,
+            isAudio: true,
+            year: null,
+          },
+        ],
+      });
     });
 
-    it('returns an empty array when the book has no editions', async () => {
+    it('reports no published date when the release date is missing', async () => {
+      mockClient.query.mockResolvedValue({
+        books: [{ id: 100, editions: [{ id: 200, release_date: null, reading_format_id: 1 }] }],
+      });
+
+      const result = await makeService().listEditions(1, 'tok', 100);
+
+      expect(result.editions[0].publishedDate).toBeNull();
+    });
+
+    it('requests a deterministic window so two calls agree on the same slice', async () => {
       mockClient.query.mockResolvedValue({ books: [] });
+      await makeService().listEditions(1, 'tok', 100);
 
-      const result = await makeService().getEditions(1, 'tok', 700);
-
-      expect(result).toEqual([]);
+      const query = mockClient.query.mock.calls[0][2] as string;
+      expect(query).toContain('order_by: { id: asc }');
     });
 
-    it('returns an empty array when the query throws', async () => {
-      mockClient.query.mockRejectedValue(new Error('network error'));
+    it('reports truncation instead of silently dropping editions past the cap', async () => {
+      const editions = Array.from({ length: EDITION_DISPLAY_LIMIT + 1 }, (_, index) => ({ id: index + 1, reading_format_id: 1 }));
+      mockClient.query.mockResolvedValue({ books: [{ id: 100, editions }] });
 
-      const result = await makeService().getEditions(1, 'tok', 700);
+      const result = await makeService().listEditions(1, 'tok', 100);
 
-      expect(result).toEqual([]);
+      expect(result.editions).toHaveLength(EDITION_DISPLAY_LIMIT);
+      expect(result.truncated).toBe(true);
+    });
+
+    it('returns an empty result when the book is not found', async () => {
+      mockClient.query.mockResolvedValue({ books: [] });
+      expect(await makeService().listEditions(1, 'tok', 999)).toEqual({ editions: [], truncated: false });
+    });
+
+    it('throws instead of masking an upstream failure as an empty catalog', async () => {
+      mockClient.query.mockRejectedValue(new Error('boom'));
+      await expect(makeService().listEditions(1, 'tok', 100)).rejects.toThrow('Failed to load Hardcover editions');
+    });
+  });
+
+  describe('findEditionForBook', () => {
+    it('resolves an edition scoped to the book it must belong to', async () => {
+      mockClient.query.mockResolvedValue({ books: [{ id: 100, editions: [{ id: 200, reading_format_id: 4 }] }] });
+
+      const result = await makeService().findEditionForBook(1, 'tok', 100, 200);
+
+      expect(result).toMatchObject({ id: 200, format: 'E-Book' });
+      expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('FindBookEditionById'), { id: 100, editionId: 200 });
+    });
+
+    it('resolves an edition that sits past the display cap', async () => {
+      mockClient.query.mockResolvedValue({ books: [{ id: 100, editions: [{ id: 9999, reading_format_id: 1 }] }] });
+
+      await expect(makeService().findEditionForBook(1, 'tok', 100, 9999)).resolves.toMatchObject({ id: 9999 });
+    });
+
+    it('returns null when the edition does not belong to the book', async () => {
+      mockClient.query.mockResolvedValue({ books: [{ id: 100, editions: [] }] });
+      expect(await makeService().findEditionForBook(1, 'tok', 100, 200)).toBeNull();
+    });
+
+    it('throws instead of reporting an upstream failure as a rejected edition', async () => {
+      mockClient.query.mockRejectedValue(new Error('boom'));
+      await expect(makeService().findEditionForBook(1, 'tok', 100, 200)).rejects.toThrow('Failed to load Hardcover editions');
     });
   });
 });
