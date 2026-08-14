@@ -4,7 +4,7 @@ import { basename, extname, join } from 'path';
 import { mkdir, realpath, stat } from 'fs/promises';
 import { Readable } from 'stream';
 
-import { MetadataProviderKey, resolveBookDockSearchTitle, type BookDockMetadata } from '@bookorbit/types';
+import { isAudioFormat, MetadataProviderKey, resolveBookDockSearchTitle, type BookDockMetadata } from '@bookorbit/types';
 import type { BookDockFileRow } from '../../db/schema';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { SUPPORTED_BOOK_FORMATS, UploadValidatorService } from '../upload/upload-validator.service';
@@ -168,7 +168,7 @@ export class BookDockIngestService implements OnApplicationBootstrap, OnModuleDe
         afterId,
         status: 'pending',
         userId: 0,
-        isSuperuser: true,
+        canManageAll: true,
       });
       if (rows.length === 0) break;
 
@@ -203,10 +203,10 @@ export class BookDockIngestService implements OnApplicationBootstrap, OnModuleDe
 
     const coversDir = join(this.bookDockPath, 'covers');
     await this.repo.update(fileId, { status: 'extracting' });
-    await this.emitSummary();
+    this.emitChange();
     await this.metadataService.extractAndSave(fileId, row.absolutePath, format, coversDir);
     await this.autoFetchMetadataAsync(fileId);
-    await this.emitSummary();
+    this.emitChange();
     this.events.emit(BOOK_DOCK_FILE_INGESTED, fileId);
   }
 
@@ -230,11 +230,12 @@ export class BookDockIngestService implements OnApplicationBootstrap, OnModuleDe
       title: resolveBookDockSearchTitle(row.fileName, meta?.title),
       author: meta?.authors?.[0] ?? undefined,
       isbn: meta?.isbn13 ?? meta?.isbn10 ?? undefined,
+      isAudiobook: row.format != null && isAudioFormat(row.format),
     };
     if (!params.title && !params.isbn) return;
 
     await this.repo.update(fileId, { status: 'fetching' });
-    await this.emitSummary();
+    this.emitChange();
     try {
       const { resolved, sources, providerIds = {} } = await this.metadataFetchPipeline.runWithSources(params, {});
       const fetched = normalizeBookDockMetadata(resolved) ?? {};
@@ -274,10 +275,8 @@ export class BookDockIngestService implements OnApplicationBootstrap, OnModuleDe
     return join(dir, uniqueName);
   }
 
-  private async emitSummary(): Promise<void> {
-    const summary = await this.repo.countsByStatus();
-    const paused = await this.processingState.isPaused();
-    this.gateway.emitSummary({ ...summary, paused });
+  private emitChange(): void {
+    this.gateway.emitChanged();
   }
 }
 

@@ -1,6 +1,6 @@
 import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
-import type { ApplyHardcoverImportPayload, UpdateHardcoverBookSyncPayload } from '@bookorbit/types';
+import type { ApplyHardcoverImportPayload, SetHardcoverEditionPayload, UpdateHardcoverBookSyncPayload } from '@bookorbit/types';
 
 export class UpsertHardcoverSettingsDto {
   @IsOptional()
@@ -56,6 +56,12 @@ export class UpdateHardcoverBookSyncDto implements UpdateHardcoverBookSyncPayloa
   syncEnabled!: boolean;
 }
 
+export class SetHardcoverEditionDto implements SetHardcoverEditionPayload {
+  @IsInt()
+  @Min(1)
+  editionId!: number;
+}
+
 export class ApplyHardcoverImportDto implements ApplyHardcoverImportPayload {
   @IsOptional()
   @IsArray()
@@ -75,9 +81,4 @@ export class LinkHardcoverBookDto {
   @IsString()
   @MaxLength(2048)
   input!: string;
-}
-
-export class SetHardcoverEditionDto {
-  @IsInt()
-  editionId!: number;
 }

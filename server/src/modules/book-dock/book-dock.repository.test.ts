@@ -7,7 +7,9 @@ vi.mock('drizzle-orm', () => ({
   gt: vi.fn((left: unknown, right: unknown) => ({ op: 'gt', left, right })),
   ilike: vi.fn((left: unknown, right: unknown) => ({ op: 'ilike', left, right })),
   inArray: vi.fn((left: unknown, right: unknown[]) => ({ op: 'inArray', left, right })),
+  isNotNull: vi.fn((value: unknown) => ({ op: 'isNotNull', value })),
   isNull: vi.fn((value: unknown) => ({ op: 'isNull', value })),
+  lt: vi.fn((left: unknown, right: unknown) => ({ op: 'lt', left, right })),
   notInArray: vi.fn((left: unknown, right: unknown[]) => ({ op: 'notInArray', left, right })),
   or: vi.fn((...clauses: unknown[]) => ({ op: 'or', clauses })),
   sql: Object.assign(
@@ -115,18 +117,21 @@ describe('BookDockRepository', () => {
   it('countsByStatus maps queue statuses and computes total', async () => {
     const { db, selectBuilder } = makeDb();
     selectBuilder.groupBy.mockResolvedValue([
-      { status: 'pending', cnt: '3' },
-      { status: 'ready', cnt: '5' },
-      { status: 'error', cnt: '2' },
-      { status: 'extracting', cnt: '1' },
-      { status: 'fetching', cnt: '4' },
+      { status: 'pending', cnt: '3', needsReview: '0', readyToFile: '0' },
+      { status: 'ready', cnt: '5', needsReview: '2', readyToFile: '3' },
+      { status: 'error', cnt: '2', needsReview: '0', readyToFile: '0' },
+      { status: 'extracting', cnt: '1', needsReview: '0', readyToFile: '0' },
+      { status: 'fetching', cnt: '4', needsReview: '0', readyToFile: '0' },
     ]);
     const repo = new BookDockRepository(db as never);
 
     await expect(repo.countsByStatus()).resolves.toEqual({
       pending: 8,
+      working: 5,
       ready: 5,
       error: 2,
+      needsReview: 2,
+      readyToFile: 3,
       total: 15,
     });
   });
@@ -162,7 +167,7 @@ describe('BookDockRepository', () => {
     const repo = new BookDockRepository(db as never);
 
     await expect(
-      repo.findSelectionBatch({ limit: 2, afterId: 10, excludedIds: [3], status: 'error', search: 'foo', userId: 1, isSuperuser: false }),
+      repo.findSelectionBatch({ limit: 2, afterId: 10, excludedIds: [3], status: 'error', search: 'foo', userId: 1, canManageAll: false }),
     ).resolves.toEqual([{ id: 11 }, { id: 12 }]);
     expect(selectBuilder.orderBy).toHaveBeenCalled();
     expect(selectBuilder.limit).toHaveBeenCalledWith(2);
@@ -183,7 +188,7 @@ describe('BookDockRepository', () => {
         order: 'asc',
         search: 'dune',
         userId: 1,
-        isSuperuser: true,
+        canManageAll: true,
       }),
     ).resolves.toEqual({
       items: [{ id: 1 }, { id: 2 }],
@@ -203,7 +208,7 @@ describe('BookDockRepository', () => {
       sort: 'createdAt',
       order: 'desc',
       userId: 1,
-      isSuperuser: true,
+      canManageAll: true,
     });
 
     expect(selectBuilder.orderBy).toHaveBeenCalledWith(expect.objectContaining({ op: 'desc' }), expect.objectContaining({ op: 'desc' }));
@@ -247,5 +252,35 @@ describe('BookDockRepository', () => {
 
     await expect(repo.findByIds([1, 2])).resolves.toEqual([{ id: 1 }, { id: 2 }]);
     await expect(repo.setTargetsByIds([1, 2], 4, 5)).resolves.toBe(2);
+  });
+
+  it('limits personal queries to files uploaded by that user', async () => {
+    const { db, selectBuilder } = makeDb();
+    selectBuilder.where.mockResolvedValueOnce([{ id: 1, uploadedBy: 7 }]);
+    const repo = new BookDockRepository(db as never);
+
+    await repo.findByIds([1, 2], 7, false);
+
+    expect(selectBuilder.where).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'and',
+        clauses: expect.arrayContaining([expect.objectContaining({ op: 'eq', right: 7 })]),
+      }),
+    );
+  });
+
+  it('does not add an uploader filter for global Book Dock managers', async () => {
+    const { db, selectBuilder } = makeDb();
+    selectBuilder.where.mockResolvedValueOnce([]);
+    const repo = new BookDockRepository(db as never);
+
+    await repo.findByIds([1, 2], 7, true);
+
+    expect(selectBuilder.where).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 'and',
+        clauses: [expect.objectContaining({ op: 'inArray' })],
+      }),
+    );
   });
 });
