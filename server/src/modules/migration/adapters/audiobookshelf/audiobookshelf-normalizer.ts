@@ -4,6 +4,7 @@ import type {
   SourceBook,
   SourceBookFile,
   SourceContributor,
+  SourceExportData,
   SourceExportDomains,
   SourceUserBookStatus,
   SourceUserFileProgress,
@@ -12,12 +13,17 @@ import type {
   AudiobookshelfAudioFileRecord,
   AudiobookshelfBookLibraryItemRecord,
   AudiobookshelfBookRecord,
+  AudiobookshelfBookmarkRecord,
   AudiobookshelfEbookFileRecord,
+  AudiobookshelfLibraryFolderRecord,
+  AudiobookshelfLibraryItemRecord,
   AudiobookshelfMediaProgressRecord,
   AudiobookshelfNormalizationCounters,
   AudiobookshelfNormalizationResult,
+  AudiobookshelfPlaybackSessionRecord,
   AudiobookshelfSourceRecords,
   AudiobookshelfTimestamp,
+  AudiobookshelfUserRecord,
 } from './audiobookshelf-source.types';
 
 const MAX_SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60;
@@ -48,75 +54,108 @@ interface NormalizedBookContext {
 @Injectable()
 export class AudiobookshelfNormalizer {
   normalize(records: AudiobookshelfSourceRecords): AudiobookshelfNormalizationResult {
-    const counters = createCounters();
-    const warnings = new Set(records.warnings?.map((warning) => warning.trim()).filter(Boolean) ?? []);
+    const accumulator = this.createAccumulator({
+      sourceVersion: records.sourceVersion,
+      libraryFolders: records.libraryFolders ?? [],
+      authorsAvailable: records.authorsAvailable !== false,
+      warnings: records.warnings ?? [],
+      playbackSessionsAvailable: records.playbackSessions !== null,
+    });
+    accumulator.addUsers(records.users);
+    accumulator.addLibraryItems(records.libraryItems);
+    accumulator.addMediaProgress(records.mediaProgress);
+    accumulator.addBookmarks(records.bookmarks);
+    if (records.playbackSessions) accumulator.addPlaybackSessions(records.playbackSessions);
+    return accumulator.finish();
+  }
 
-    const users = records.users.flatMap((record) => {
+  createAccumulator(metadata: AudiobookshelfNormalizationMetadata): AudiobookshelfNormalizationAccumulator {
+    return new AudiobookshelfNormalizationAccumulator(metadata);
+  }
+}
+
+export interface AudiobookshelfNormalizationMetadata {
+  sourceVersion: string | null;
+  libraryFolders: AudiobookshelfLibraryFolderRecord[];
+  authorsAvailable: boolean;
+  warnings: string[];
+  playbackSessionsAvailable: boolean;
+}
+
+export class AudiobookshelfNormalizationAccumulator {
+  private readonly counters = createCounters();
+  private readonly warnings: Set<string>;
+  private readonly users: SourceExportData['users'] = [];
+  private readonly sourceUserIds = new Set<string>();
+  private readonly books: SourceBook[] = [];
+  private readonly bookContextsById = new Map<string, NormalizedBookContext>();
+  private readonly itemKindById = new Map<string, 'book' | 'podcast'>();
+  private readonly bookIdByItemId = new Map<string, string>();
+  private readonly userBookStatuses: SourceUserBookStatus[] = [];
+  private readonly userFileProgress: SourceUserFileProgress[] = [];
+  private readonly bookmarks: SourceExportData['bookmarks'] = [];
+  private readonly readingSessions: SourceExportData['readingSessions'] = [];
+
+  constructor(private readonly metadata: AudiobookshelfNormalizationMetadata) {
+    this.warnings = new Set(metadata.warnings.map((warning) => warning.trim()).filter(Boolean));
+  }
+
+  addUsers(records: AudiobookshelfUserRecord[]): void {
+    for (const record of records) {
       const sourceUserId = normalizeId(record.id);
       const username = normalizeRequiredText(record.username);
       if (!sourceUserId || !username) {
-        counters.invalidUsersSkipped++;
-        return [];
-      }
-      if (record.isActive === false) counters.disabledUsersIncluded++;
-      return [
-        {
-          sourceUserId,
-          username,
-          name: null,
-          email: normalizeNullableText(record.email),
-        },
-      ];
-    });
-    const sourceUserIds = new Set(users.map((user) => user.sourceUserId));
-
-    const books: SourceBook[] = [];
-    const bookContextsById = new Map<string, NormalizedBookContext>();
-    const itemKindById = new Map<string, 'book' | 'podcast'>();
-    const bookIdByItemId = new Map<string, string>();
-
-    for (const item of records.libraryItems) {
-      const itemId = normalizeId(item.id);
-      if (!itemId) {
-        counters.invalidBooksSkipped++;
+        this.counters.invalidUsersSkipped++;
         continue;
       }
-      if (itemKindById.has(itemId)) {
-        counters.invalidBooksSkipped++;
+      if (record.isActive === false) this.counters.disabledUsersIncluded++;
+      this.sourceUserIds.add(sourceUserId);
+      this.users.push({ sourceUserId, username, name: null, email: normalizeNullableText(record.email) });
+    }
+  }
+
+  addLibraryItems(records: AudiobookshelfLibraryItemRecord[]): void {
+    for (const item of records) {
+      const itemId = normalizeId(item.id);
+      if (!itemId) {
+        this.counters.invalidBooksSkipped++;
+        continue;
+      }
+      if (this.itemKindById.has(itemId)) {
+        this.counters.invalidBooksSkipped++;
         continue;
       }
       if (item.mediaType !== 'book') {
-        itemKindById.set(itemId, 'podcast');
-        counters.podcastItemsSkipped++;
+        this.itemKindById.set(itemId, 'podcast');
+        this.counters.podcastItemsSkipped++;
         continue;
       }
 
       const context = normalizeBook(item);
-      if (!context || bookContextsById.has(context.sourceBook.sourceBookId)) {
-        counters.invalidBooksSkipped++;
+      if (!context || this.bookContextsById.has(context.sourceBook.sourceBookId)) {
+        this.counters.invalidBooksSkipped++;
         continue;
       }
 
-      itemKindById.set(itemId, 'book');
-      bookIdByItemId.set(itemId, context.sourceBook.sourceBookId);
-      bookContextsById.set(context.sourceBook.sourceBookId, context);
-      books.push(context.sourceBook);
+      this.itemKindById.set(itemId, 'book');
+      this.bookIdByItemId.set(itemId, context.sourceBook.sourceBookId);
+      this.bookContextsById.set(context.sourceBook.sourceBookId, context);
+      this.books.push(context.sourceBook);
     }
+  }
 
-    const userBookStatuses: SourceUserBookStatus[] = [];
-    const userFileProgress: SourceUserFileProgress[] = [];
-
-    for (const progress of records.mediaProgress) {
+  addMediaProgress(records: AudiobookshelfMediaProgressRecord[]): void {
+    for (const progress of records) {
       if (normalizeMediaItemType(progress.mediaItemType) !== 'book') {
-        counters.podcastProgressSkipped++;
+        this.counters.podcastProgressSkipped++;
         continue;
       }
 
       const sourceUserId = normalizeId(progress.userId);
       const sourceBookId = normalizeId(progress.mediaItemId);
-      const context = sourceBookId ? bookContextsById.get(sourceBookId) : null;
-      if (!sourceUserId || !sourceUserIds.has(sourceUserId) || !context) {
-        counters.orphanedProgressSkipped++;
+      const context = sourceBookId ? this.bookContextsById.get(sourceBookId) : null;
+      if (!sourceUserId || !this.sourceUserIds.has(sourceUserId) || !context) {
+        this.counters.orphanedProgressSkipped++;
         continue;
       }
 
@@ -128,7 +167,7 @@ export class AudiobookshelfNormalizer {
       // otherwise the imported file progress would contradict an "unread" status.
       const hasResumePosition = hasEpubLocation(progress) || hasPositiveAudioPosition(progress);
 
-      userBookStatuses.push({
+      this.userBookStatuses.push({
         sourceUserId,
         sourceBookId: context.sourceBook.sourceBookId,
         status: progress.isFinished === true ? 'read' : statusPercentage > 0 || hasResumePosition ? 'reading' : 'unread',
@@ -140,59 +179,61 @@ export class AudiobookshelfNormalizer {
 
       const audioProgress = normalizeAudioProgress(progress, context, sourceUserId, updatedAt);
       if (audioProgress) {
-        userFileProgress.push(audioProgress);
+        this.userFileProgress.push(audioProgress);
       } else if (hasPositiveAudioPosition(progress)) {
-        counters.unresolvedAudioProgressSkipped++;
+        this.counters.unresolvedAudioProgressSkipped++;
       }
 
       const ebookProgress = normalizeEbookProgress(progress, context, sourceUserId, updatedAt);
-      if (ebookProgress.progress) userFileProgress.push(ebookProgress.progress);
-      if (ebookProgress.unsupported) counters.unsupportedEbookProgressSkipped++;
+      if (ebookProgress.progress) this.userFileProgress.push(ebookProgress.progress);
+      if (ebookProgress.unsupported) this.counters.unsupportedEbookProgressSkipped++;
     }
+  }
 
-    const bookmarks = records.bookmarks.flatMap((bookmark) => {
+  addBookmarks(records: AudiobookshelfBookmarkRecord[]): void {
+    for (const bookmark of records) {
       const sourceUserId = normalizeId(bookmark.userId);
       const itemId = normalizeId(bookmark.libraryItemId);
-      if (itemId && itemKindById.get(itemId) === 'podcast') {
-        counters.podcastBookmarksSkipped++;
-        return [];
+      if (itemId && this.itemKindById.get(itemId) === 'podcast') {
+        this.counters.podcastBookmarksSkipped++;
+        continue;
       }
 
-      const sourceBookId = itemId ? bookIdByItemId.get(itemId) : null;
-      if (!sourceUserId || !sourceUserIds.has(sourceUserId) || !sourceBookId) {
-        counters.orphanedBookmarksSkipped++;
-        return [];
+      const sourceBookId = itemId ? this.bookIdByItemId.get(itemId) : null;
+      if (!sourceUserId || !this.sourceUserIds.has(sourceUserId) || !sourceBookId) {
+        this.counters.orphanedBookmarksSkipped++;
+        continue;
       }
       if (!Number.isFinite(bookmark.time) || bookmark.time < 0) {
-        counters.invalidBookmarksSkipped++;
-        return [];
+        this.counters.invalidBookmarksSkipped++;
+        continue;
       }
 
-      return [
-        {
-          sourceUserId,
-          sourceBookId,
-          title: normalizeNullableText(bookmark.title),
-          cfi: null,
-          positionSeconds: bookmark.time,
-          createdAt: normalizeTimestamp(bookmark.createdAt),
-        },
-      ];
-    });
+      this.bookmarks.push({
+        sourceUserId,
+        sourceBookId,
+        title: normalizeNullableText(bookmark.title),
+        cfi: null,
+        positionSeconds: bookmark.time,
+        createdAt: normalizeTimestamp(bookmark.createdAt),
+      });
+    }
+  }
 
-    const readingSessions = (records.playbackSessions ?? []).flatMap((session) => {
+  addPlaybackSessions(records: AudiobookshelfPlaybackSessionRecord[]): void {
+    for (const session of records) {
       if (normalizeMediaItemType(session.mediaItemType) !== 'book') {
-        counters.podcastSessionsSkipped++;
-        return [];
+        this.counters.podcastSessionsSkipped++;
+        continue;
       }
 
       const sourceSessionId = normalizeId(session.id);
       const sourceUserId = normalizeId(session.userId);
       const sourceBookId = normalizeId(session.mediaItemId);
-      const context = sourceBookId ? bookContextsById.get(sourceBookId) : null;
-      if (!sourceUserId || !sourceUserIds.has(sourceUserId) || !context) {
-        counters.orphanedSessionsSkipped++;
-        return [];
+      const context = sourceBookId ? this.bookContextsById.get(sourceBookId) : null;
+      if (!sourceUserId || !this.sourceUserIds.has(sourceUserId) || !context) {
+        this.counters.orphanedSessionsSkipped++;
+        continue;
       }
 
       const startedAt = normalizeTimestamp(session.startedAt) ?? normalizeTimestamp(session.createdAt);
@@ -220,37 +261,37 @@ export class AudiobookshelfNormalizer {
         !hasValidNumbers ||
         context.audioFiles.length === 0
       ) {
-        counters.invalidSessionsSkipped++;
-        return [];
+        this.counters.invalidSessionsSkipped++;
+        continue;
       }
 
-      return [
-        {
-          sourceSessionId,
-          sourceUserId,
-          sourceBookId: context.sourceBook.sourceBookId,
-          bookType: 'AUDIOBOOK',
-          startedAt,
-          endedAt,
-          durationSeconds: session.timeListening,
-          progressDelta: clampPercentage(((session.currentTime - session.startTime) / session.duration) * 100),
-          endProgress: clampPercentage((session.currentTime / session.duration) * 100),
-          createdAt: startedAt,
-        },
-      ];
-    });
+      this.readingSessions.push({
+        sourceSessionId,
+        sourceUserId,
+        sourceBookId: context.sourceBook.sourceBookId,
+        bookType: 'AUDIOBOOK',
+        startedAt,
+        endedAt,
+        durationSeconds: session.timeListening,
+        progressDelta: clampPercentage(((session.currentTime - session.startTime) / session.duration) * 100),
+        endProgress: clampPercentage((session.currentTime / session.duration) * 100),
+        createdAt: startedAt,
+      });
+    }
+  }
 
-    appendDiagnosticWarnings(warnings, counters, records.playbackSessions === null);
+  finish(): AudiobookshelfNormalizationResult {
+    appendDiagnosticWarnings(this.warnings, this.counters, !this.metadata.playbackSessionsAvailable);
 
     const availableDomains: SourceExportDomains = {
       metadata: true,
-      authors: records.authorsAvailable !== false,
+      authors: this.metadata.authorsAvailable,
       narrators: true,
       genres: true,
       tags: true,
       userBookStatuses: true,
       readingProgress: true,
-      readingSessions: records.playbackSessions !== null,
+      readingSessions: this.metadata.playbackSessionsAvailable,
       bookmarks: true,
       annotations: false,
       shelves: false,
@@ -259,21 +300,21 @@ export class AudiobookshelfNormalizer {
 
     return {
       data: {
-        users,
-        books,
-        userBookStatuses,
-        userFileProgress,
-        readingSessions,
-        bookmarks,
+        users: this.users,
+        books: this.books,
+        userBookStatuses: this.userBookStatuses,
+        userFileProgress: this.userFileProgress,
+        readingSessions: this.readingSessions,
+        bookmarks: this.bookmarks,
         annotations: [],
         shelves: [],
         shelfBooks: [],
         availableDomains,
       },
-      sourceVersion: normalizeNullableText(records.sourceVersion),
-      pathPrefixes: normalizePathPrefixes(records.libraryFolders?.map((folder) => folder.path) ?? []),
-      warnings: [...warnings],
-      counters,
+      sourceVersion: normalizeNullableText(this.metadata.sourceVersion),
+      pathPrefixes: normalizePathPrefixes(this.metadata.libraryFolders.map((folder) => folder.path)),
+      warnings: [...this.warnings],
+      counters: this.counters,
     };
   }
 }

@@ -17,7 +17,7 @@ import type {
   AudiobookshelfMediaProgressRecord,
   AudiobookshelfPlaybackSessionRecord,
   AudiobookshelfPodcastLibraryItemRecord,
-  AudiobookshelfSourceRecords,
+  AudiobookshelfSourceBatch,
   AudiobookshelfUserRecord,
 } from './audiobookshelf-source.types';
 
@@ -194,36 +194,33 @@ export class AudiobookshelfApiConnector {
     };
   }
 
-  async fetchSourceRecords(config: ApiConfig): Promise<AudiobookshelfSourceRecords> {
+  async *streamSourceBatches(config: ApiConfig): AsyncGenerator<AudiobookshelfSourceBatch> {
     const status = await this.getStatus(config);
     await this.authorize(config);
     const [users, libraries] = await Promise.all([this.getUsers(config), this.getLibraries(config)]);
-    const userDetails = await mapWithConcurrency(users, USER_DETAIL_CONCURRENCY, (user) => this.getUserDetails(config, user.id));
-
-    const libraryItems: AudiobookshelfLibraryItemRecord[] = [];
-    for (const library of libraries) {
-      if (library.mediaType !== 'book') continue;
-      const itemIds = await this.getAllLibraryItemIds(config, library.id);
-      for (let offset = 0; offset < itemIds.length; offset += ITEM_BATCH_SIZE) {
-        libraryItems.push(...(await this.getExpandedItems(config, itemIds.slice(offset, offset + ITEM_BATCH_SIZE))));
-      }
-    }
-
-    const playbackSessions = (
-      await mapWithConcurrency(users, USER_DETAIL_CONCURRENCY, (user) => this.getAllListeningSessions(config, user.id))
-    ).flat();
-
-    return {
+    yield {
+      kind: 'metadata',
       sourceVersion: status.sourceVersion,
-      users: userDetails.map((detail) => detail.user),
-      libraryItems,
-      mediaProgress: userDetails.flatMap((detail) => detail.mediaProgress),
-      bookmarks: userDetails.flatMap((detail) => detail.bookmarks),
-      playbackSessions,
       libraryFolders: libraries.flatMap((library) => library.folders),
       authorsAvailable: true,
       warnings: [],
+      playbackSessionsAvailable: true,
     };
+
+    for (const library of libraries) {
+      if (library.mediaType !== 'book') continue;
+      for await (const records of this.streamExpandedLibraryItems(config, library.id)) {
+        yield { kind: 'libraryItems', records };
+      }
+    }
+
+    for (const user of users) {
+      const detail = await this.getUserDetails(config, user.id);
+      yield { kind: 'userState', ...detail };
+      for await (const records of this.streamListeningSessions(config, user.id)) {
+        yield { kind: 'playbackSessions', records };
+      }
+    }
   }
 
   async fetchSnapshotSummary(config: ApiConfig): Promise<AudiobookshelfApiSnapshotSummary> {
@@ -254,52 +251,51 @@ export class AudiobookshelfApiConnector {
     return (await this.getLibraries(config)).flatMap((library) => library.folders);
   }
 
-  private async getAllLibraryItemIds(config: ApiConfig, libraryId: string): Promise<string[]> {
-    const ids: string[] = [];
+  private async *streamExpandedLibraryItems(config: ApiConfig, libraryId: string): AsyncGenerator<AudiobookshelfLibraryItemRecord[]> {
     const seen = new Set<string>();
     for (let page = 0; page < MAX_PAGE_COUNT; page++) {
       const result = await this.getLibraryItemsPage(config, libraryId, page);
-      const countBeforePage = ids.length;
+      const freshIds: string[] = [];
       for (const item of result.results) {
         if (!seen.has(item.id)) {
           seen.add(item.id);
-          ids.push(item.id);
+          freshIds.push(item.id);
         }
+      }
+      for (let offset = 0; offset < freshIds.length; offset += ITEM_BATCH_SIZE) {
+        yield await this.getExpandedItems(config, freshIds.slice(offset, offset + ITEM_BATCH_SIZE));
       }
       if (
         result.results.length === 0 ||
-        // A server that ignores `page` returns the same rows forever, and deduplication keeps
-        // `ids.length` below `total`, so no other condition here would ever terminate.
-        ids.length === countBeforePage ||
-        (result.total > 0 && ids.length >= result.total) ||
+        freshIds.length === 0 ||
+        (result.total > 0 && seen.size >= result.total) ||
         (result.total === 0 && result.results.length < LIBRARY_PAGE_SIZE)
       ) {
-        return ids;
+        return;
       }
     }
     throw new BadRequestException('Audiobookshelf library pagination exceeded the safety limit');
   }
 
-  private async getAllListeningSessions(config: ApiConfig, sourceUserId: string): Promise<AudiobookshelfPlaybackSessionRecord[]> {
-    const sessions: AudiobookshelfPlaybackSessionRecord[] = [];
+  private async *streamListeningSessions(config: ApiConfig, sourceUserId: string): AsyncGenerator<AudiobookshelfPlaybackSessionRecord[]> {
     const seen = new Set<string>();
     for (let page = 0; page < MAX_PAGE_COUNT; page++) {
       const result = await this.getUserListeningSessionsPage(config, sourceUserId, page);
-      const countBeforePage = sessions.length;
+      const freshSessions: AudiobookshelfPlaybackSessionRecord[] = [];
       for (const session of result.sessions) {
         if (seen.has(session.id)) continue;
         seen.add(session.id);
-        sessions.push(session);
+        freshSessions.push(session);
       }
+      if (freshSessions.length > 0) yield freshSessions;
       if (
         result.sessions.length === 0 ||
-        // Guards against a server that ignores `page` and replays the same rows indefinitely.
-        sessions.length === countBeforePage ||
-        (result.total > 0 && sessions.length >= result.total) ||
+        freshSessions.length === 0 ||
+        (result.total > 0 && seen.size >= result.total) ||
         (result.numPages > 0 && page + 1 >= result.numPages) ||
         (result.total === 0 && result.numPages === 0 && result.sessions.length < SESSION_PAGE_SIZE)
       ) {
-        return sessions;
+        return;
       }
     }
     throw new BadRequestException('Audiobookshelf listening-session pagination exceeded the safety limit');

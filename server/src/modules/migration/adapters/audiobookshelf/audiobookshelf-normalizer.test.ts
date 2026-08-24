@@ -76,6 +76,43 @@ function source(overrides: Partial<AudiobookshelfSourceRecords> = {}): Audiobook
 }
 
 describe('AudiobookshelfNormalizer books and users', () => {
+  it('keeps incremental normalization equivalent across bounded source batches', () => {
+    const records = source({
+      mediaProgress: [progress({ currentTime: 75 })],
+      bookmarks: [{ userId: 'user-1', libraryItemId: 'item-1', time: 42 }],
+      playbackSessions: [
+        {
+          id: 'session-1',
+          userId: 'user-1',
+          mediaItemId: 'book-1',
+          mediaItemType: 'book',
+          duration: 150,
+          startTime: 30,
+          currentTime: 75,
+          timeListening: 300,
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:10:00.000Z',
+        },
+      ],
+    });
+    const expected = normalizer.normalize(records);
+    const accumulator = normalizer.createAccumulator({
+      sourceVersion: records.sourceVersion,
+      libraryFolders: records.libraryFolders ?? [],
+      authorsAvailable: records.authorsAvailable !== false,
+      warnings: records.warnings ?? [],
+      playbackSessionsAvailable: records.playbackSessions !== null,
+    });
+
+    accumulator.addLibraryItems(records.libraryItems.slice(0, 1));
+    accumulator.addUsers(records.users);
+    accumulator.addMediaProgress(records.mediaProgress);
+    accumulator.addBookmarks(records.bookmarks);
+    accumulator.addPlaybackSessions(records.playbackSessions ?? []);
+
+    expect(accumulator.finish()).toEqual(expected);
+  });
+
   it('normalizes users, metadata, contributors, identifiers, files, and path prefixes', () => {
     const result = normalizer.normalize(
       source({

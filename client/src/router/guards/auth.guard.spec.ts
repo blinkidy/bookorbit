@@ -104,6 +104,43 @@ describe('registerAuthGuard', () => {
     await expect(guard(route)).resolves.toBe(true)
   })
 
+  it('requires at least one permission when a route accepts alternatives', async () => {
+    if (!guard) throw new Error('Expected guard to be registered')
+    const route = {
+      name: 'settings-email',
+      path: '/settings/email',
+      fullPath: '/settings/email',
+      meta: {
+        requiredAnyPermission: [Permission.EmailSend, Permission.ManageEmail],
+        permissionFallback: 'settings-account-profile',
+      },
+    }
+
+    await expect(guard(route)).resolves.toEqual({ name: 'settings-account-profile' })
+
+    mocks.user.value.permissions = [Permission.EmailSend]
+    await expect(guard(route)).resolves.toBe(true)
+
+    mocks.user.value.permissions = [Permission.ManageEmail]
+    await expect(guard(route)).resolves.toBe(true)
+  })
+
+  it('keeps superuser-only routes unavailable to permission-bearing non-superusers', async () => {
+    if (!guard) throw new Error('Expected guard to be registered')
+    const route = {
+      name: 'settings-admin-magic-links',
+      path: '/settings/admin/magic-links',
+      fullPath: '/settings/admin/magic-links',
+      meta: { superuserOnly: true, permissionFallback: 'settings-account-profile' },
+    }
+
+    mocks.user.value.permissions = [Permission.ManageUsers, Permission.ManageAppSettings]
+    await expect(guard(route)).resolves.toEqual({ name: 'settings-account-profile' })
+
+    mocks.user.value.isSuperuser = true
+    await expect(guard(route)).resolves.toBe(true)
+  })
+
   it('redirects demo-restricted users even when notification access would otherwise allow the route', async () => {
     if (!guard) throw new Error('Expected guard to be registered')
     mocks.user.value.isSuperuser = true

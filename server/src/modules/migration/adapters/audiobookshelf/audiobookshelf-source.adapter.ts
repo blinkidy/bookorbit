@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 import type { SourceAdapter, SourceExportData, SourceSnapshot, SourceValidationResult } from '../source-adapter.types';
 import { AudiobookshelfApiConnector } from './audiobookshelf-api.connector';
@@ -19,7 +19,7 @@ export class AudiobookshelfSourceAdapter implements SourceAdapter<Audiobookshelf
 
   async validate(config: AudiobookshelfConnectionConfig): Promise<SourceValidationResult> {
     if (config.mode === 'backup') {
-      const normalized = await this.fetchNormalized(config);
+      const normalized = await this.fetchNormalizedBackup(config);
       return {
         ok: true,
         sourceType: this.type,
@@ -45,7 +45,7 @@ export class AudiobookshelfSourceAdapter implements SourceAdapter<Audiobookshelf
 
   async snapshot(config: AudiobookshelfConnectionConfig): Promise<SourceSnapshot> {
     if (config.mode === 'backup') {
-      const normalized = await this.fetchNormalized(config);
+      const normalized = await this.fetchNormalizedBackup(config);
       return {
         generatedAt: new Date().toISOString(),
         sourceType: this.type,
@@ -63,11 +63,11 @@ export class AudiobookshelfSourceAdapter implements SourceAdapter<Audiobookshelf
   }
 
   async exportData(config: AudiobookshelfConnectionConfig): Promise<SourceExportData> {
-    return (await this.fetchNormalized(config)).data;
+    return (config.mode === 'api' ? await this.fetchNormalizedApi(config) : await this.fetchNormalizedBackup(config)).data;
   }
 
   async fetchPathPrefixes(config: AudiobookshelfConnectionConfig): Promise<string[]> {
-    if (config.mode === 'backup') return (await this.fetchNormalized(config)).pathPrefixes;
+    if (config.mode === 'backup') return (await this.fetchNormalizedBackup(config)).pathPrefixes;
     const folders = await this.apiConnector.fetchLibraryFolders(config);
     const prefixes = new Set<string>();
     for (const folder of folders) {
@@ -78,10 +78,32 @@ export class AudiobookshelfSourceAdapter implements SourceAdapter<Audiobookshelf
     return [...prefixes].sort((left, right) => left.localeCompare(right));
   }
 
-  private async fetchNormalized(config: AudiobookshelfConnectionConfig): Promise<AudiobookshelfNormalizationResult> {
-    const records =
-      config.mode === 'api' ? await this.apiConnector.fetchSourceRecords(config) : await this.backupConnector.fetchSourceRecords(config);
-    return this.normalizer.normalize(records);
+  private async fetchNormalizedApi(config: Extract<AudiobookshelfConnectionConfig, { mode: 'api' }>): Promise<AudiobookshelfNormalizationResult> {
+    let accumulator: ReturnType<AudiobookshelfNormalizer['createAccumulator']> | null = null;
+    for await (const batch of this.apiConnector.streamSourceBatches(config)) {
+      if (batch.kind === 'metadata') {
+        accumulator = this.normalizer.createAccumulator(batch);
+        continue;
+      }
+      if (!accumulator) throw new BadRequestException('Audiobookshelf import metadata was unavailable');
+      if (batch.kind === 'libraryItems') {
+        accumulator.addLibraryItems(batch.records);
+      } else if (batch.kind === 'userState') {
+        accumulator.addUsers([batch.user]);
+        accumulator.addMediaProgress(batch.mediaProgress);
+        accumulator.addBookmarks(batch.bookmarks);
+      } else {
+        accumulator.addPlaybackSessions(batch.records);
+      }
+    }
+    if (!accumulator) throw new BadRequestException('Audiobookshelf import metadata was unavailable');
+    return accumulator.finish();
+  }
+
+  private async fetchNormalizedBackup(
+    config: Extract<AudiobookshelfConnectionConfig, { mode: 'backup' }>,
+  ): Promise<AudiobookshelfNormalizationResult> {
+    return this.normalizer.normalize(await this.backupConnector.fetchSourceRecords(config));
   }
 }
 

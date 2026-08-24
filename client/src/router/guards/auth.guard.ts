@@ -50,7 +50,19 @@ export function registerAuthGuard(router: Router): void {
       return permissionFallback(to.meta.permissionFallback)
     }
 
+    if (to.meta.superuserOnly && !user.value.isSuperuser) {
+      return permissionFallback(to.meta.permissionFallback)
+    }
+
     if (to.meta.requiredPermission && !user.value.isSuperuser && !permissions.includes(to.meta.requiredPermission)) {
+      return permissionFallback(to.meta.permissionFallback)
+    }
+
+    if (
+      to.meta.requiredAnyPermission?.length &&
+      !user.value.isSuperuser &&
+      !to.meta.requiredAnyPermission.some((permission) => permissions.includes(permission))
+    ) {
       return permissionFallback(to.meta.permissionFallback)
     }
 

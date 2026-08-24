@@ -56,6 +56,53 @@ describe('router redirects', () => {
     })
   })
 
+  it('protects permission-scoped settings routes from direct navigation', () => {
+    const expected = new Map<string, Permission>([
+      ['settings-libraries', Permission.ManageLibraries],
+      ['settings-metadata-providers', Permission.ManageMetadataConfig],
+      ['settings-metadata-field-rules', Permission.ManageMetadataConfig],
+      ['settings-metadata-custom-fields', Permission.ManageLibraries],
+      ['settings-metadata-score', Permission.ManageMetadataConfig],
+      ['settings-metadata-auto-fetch', Permission.ManageMetadataConfig],
+      ['settings-metadata-authors', Permission.ManageMetadataConfig],
+      ['settings-metadata-genre-blocklist', Permission.ManageMetadataConfig],
+      ['settings-file-naming', Permission.ManageAppSettings],
+      ['settings-maintenance', Permission.ManageAppSettings],
+      ['settings-kobo', Permission.KoboSync],
+      ['settings-koreader', Permission.KoreaderSync],
+      ['settings-opds', Permission.OpdsAccess],
+      ['settings-hardcover', Permission.HardcoverSync],
+      ['settings-readwise', Permission.ReadwiseSync],
+      ['settings-storygraph', Permission.StorygraphSync],
+      ['settings-admin-users', Permission.ManageUsers],
+      ['settings-admin-account-activity', Permission.ViewUserActivity],
+      ['settings-admin-shared-insights', Permission.ViewUserActivity],
+      ['settings-admin-oidc', Permission.ManageAppSettings],
+      ['settings-admin-server-fonts', Permission.ManageAppSettings],
+      ['settings-admin-book-dock', Permission.ManageBookDock],
+    ])
+
+    for (const [name, requiredPermission] of expected) {
+      expect(findRoute(routes, name)?.meta).toMatchObject({
+        requiredPermission,
+        permissionFallback: 'settings-account-profile',
+      })
+    }
+  })
+
+  it('protects alternative-permission and superuser-only settings routes', () => {
+    expect(findRoute(routes, 'settings-email')?.meta).toMatchObject({
+      requiredAnyPermission: [Permission.EmailSend, Permission.ManageEmail],
+      permissionFallback: 'settings-account-profile',
+    })
+    for (const name of ['settings-admin-magic-links', 'settings-admin-audit-log']) {
+      expect(findRoute(routes, name)?.meta).toMatchObject({
+        superuserOnly: true,
+        permissionFallback: 'settings-account-profile',
+      })
+    }
+  })
+
   it('redirects the legacy Integrations tab URL to the Readwise page', () => {
     const route = findRoute(routes, 'settings-integrations')
     expect(route?.redirect).toBeTypeOf('function')

@@ -8,7 +8,9 @@ declare module 'vue-router' {
   interface RouteMeta {
     public?: boolean
     requiredPermission?: Permission
+    requiredAnyPermission?: Permission[]
     forbiddenPermission?: Permission
+    superuserOnly?: boolean
     permissionFallback?: string
     maxWidth?: string
     title?: string | ((to: RouteLocationNormalizedLoaded) => string)

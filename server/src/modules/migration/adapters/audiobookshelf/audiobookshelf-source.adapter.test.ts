@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Readable } from 'node:stream';
 
 import { AudiobookshelfSourceAdapter } from './audiobookshelf-source.adapter';
 import type { AudiobookshelfNormalizationResult, AudiobookshelfSourceRecords } from './audiobookshelf-source.types';
@@ -90,8 +91,30 @@ function normalized(): AudiobookshelfNormalizationResult {
 function buildAdapter() {
   const sourceRecords = records();
   const normalizationResult = normalized();
+  const accumulator = {
+    addUsers: vi.fn(),
+    addLibraryItems: vi.fn(),
+    addMediaProgress: vi.fn(),
+    addBookmarks: vi.fn(),
+    addPlaybackSessions: vi.fn(),
+    finish: vi.fn().mockReturnValue(normalizationResult),
+  };
   const connector = {
-    fetchSourceRecords: vi.fn().mockResolvedValue(sourceRecords),
+    streamSourceBatches: vi.fn(() =>
+      Readable.from([
+        {
+          kind: 'metadata' as const,
+          sourceVersion: '2.36.0',
+          libraryFolders: [],
+          authorsAvailable: true,
+          warnings: [],
+          playbackSessionsAvailable: true,
+        },
+        { kind: 'libraryItems' as const, records: [] },
+        { kind: 'userState' as const, user: { id: 'u1', username: 'reader' }, mediaProgress: [], bookmarks: [] },
+        { kind: 'playbackSessions' as const, records: [] },
+      ]),
+    ),
     fetchSnapshotSummary: vi.fn().mockResolvedValue({
       sourceVersion: '2.36.0',
       counts: { users: 1, libraryItems: 1, mediaProgress: 0, bookmarks: 0, readingSessions: 0 },
@@ -99,7 +122,10 @@ function buildAdapter() {
     fetchLibraryFolders: vi.fn().mockResolvedValue([{ path: '/audiobooks/' }, { path: '/audiobooks' }, { path: '/other\\' }]),
   };
   const backupConnector = { fetchSourceRecords: vi.fn().mockResolvedValue(sourceRecords) };
-  const normalizer = { normalize: vi.fn().mockReturnValue(normalizationResult) };
+  const normalizer = {
+    normalize: vi.fn().mockReturnValue(normalizationResult),
+    createAccumulator: vi.fn().mockReturnValue(accumulator),
+  };
   return {
     adapter: new AudiobookshelfSourceAdapter(connector as never, backupConnector as never, normalizer as never),
     connector,
@@ -107,6 +133,7 @@ function buildAdapter() {
     normalizer,
     sourceRecords,
     normalizationResult,
+    accumulator,
   };
 }
 
@@ -123,7 +150,7 @@ describe('AudiobookshelfSourceAdapter', () => {
       counts: { users: 1, libraryItems: 1, mediaProgress: 0, bookmarks: 0, readingSessions: 0 },
     });
     expect(connector.fetchSnapshotSummary).toHaveBeenCalledWith(apiConfig);
-    expect(connector.fetchSourceRecords).not.toHaveBeenCalled();
+    expect(connector.streamSourceBatches).not.toHaveBeenCalled();
     expect(normalizer.normalize).not.toHaveBeenCalled();
   });
 
@@ -153,7 +180,7 @@ describe('AudiobookshelfSourceAdapter', () => {
   });
 
   it('builds a stable snapshot and returns the normalized export contract', async () => {
-    const { adapter, connector, normalizationResult } = buildAdapter();
+    const { adapter, connector, normalizationResult, normalizer, accumulator } = buildAdapter();
     const snapshot = await adapter.snapshot(apiConfig);
 
     expect(snapshot).toMatchObject({
@@ -164,6 +191,13 @@ describe('AudiobookshelfSourceAdapter', () => {
     expect(Date.parse(snapshot.generatedAt)).not.toBeNaN();
     expect(connector.fetchSnapshotSummary).toHaveBeenCalledWith(apiConfig);
     await expect(adapter.exportData(apiConfig)).resolves.toBe(normalizationResult.data);
+    expect(normalizer.createAccumulator).toHaveBeenCalledWith(expect.objectContaining({ sourceVersion: '2.36.0' }));
+    expect(accumulator.addLibraryItems).toHaveBeenCalledWith([]);
+    expect(accumulator.addUsers).toHaveBeenCalledWith([{ id: 'u1', username: 'reader' }]);
+    expect(accumulator.addMediaProgress).toHaveBeenCalledWith([]);
+    expect(accumulator.addBookmarks).toHaveBeenCalledWith([]);
+    expect(accumulator.addPlaybackSessions).toHaveBeenCalledWith([]);
+    expect(accumulator.finish).toHaveBeenCalledOnce();
   });
 
   it('normalizes unique path prefixes from live library folders', async () => {
@@ -177,7 +211,7 @@ describe('AudiobookshelfSourceAdapter', () => {
 
     await expect(adapter.exportData(backupConfig)).resolves.toBe(normalizationResult.data);
     expect(backupConnector.fetchSourceRecords).toHaveBeenCalledWith(backupConfig);
-    expect(connector.fetchSourceRecords).not.toHaveBeenCalled();
+    expect(connector.streamSourceBatches).not.toHaveBeenCalled();
     expect(normalizer.normalize).toHaveBeenCalledWith(sourceRecords);
 
     await expect(adapter.fetchPathPrefixes(backupConfig)).resolves.toEqual(['/audiobooks']);

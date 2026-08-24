@@ -144,6 +144,24 @@ export interface AudiobookshelfSourceRecords {
   warnings?: string[];
 }
 
+export type AudiobookshelfSourceBatch =
+  | {
+      kind: 'metadata';
+      sourceVersion: string | null;
+      libraryFolders: AudiobookshelfLibraryFolderRecord[];
+      authorsAvailable: boolean;
+      warnings: string[];
+      playbackSessionsAvailable: boolean;
+    }
+  | { kind: 'libraryItems'; records: AudiobookshelfLibraryItemRecord[] }
+  | {
+      kind: 'userState';
+      user: AudiobookshelfUserRecord;
+      mediaProgress: AudiobookshelfMediaProgressRecord[];
+      bookmarks: AudiobookshelfBookmarkRecord[];
+    }
+  | { kind: 'playbackSessions'; records: AudiobookshelfPlaybackSessionRecord[] };
+
 export interface AudiobookshelfNormalizationCounters {
   invalidUsersSkipped: number;
   disabledUsersIncluded: number;

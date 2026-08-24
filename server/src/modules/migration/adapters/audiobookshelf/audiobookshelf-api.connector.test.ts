@@ -20,6 +20,12 @@ function mockRequest(connector: AudiobookshelfApiConnector) {
   return vi.spyOn(connector as unknown as { requestJson: RequestJson }, 'requestJson');
 }
 
+async function collectSourceBatches(connector: AudiobookshelfApiConnector) {
+  const batches = [];
+  for await (const batch of connector.streamSourceBatches(config)) batches.push(batch);
+  return batches;
+}
+
 describe('AudiobookshelfApiConnector validation and field selection', () => {
   it('validates status and authorizes with POST for an admin identity', async () => {
     const connector = new AudiobookshelfApiConnector();
@@ -135,6 +141,30 @@ describe('AudiobookshelfApiConnector validation and field selection', () => {
 });
 
 describe('AudiobookshelfApiConnector pagination and batching', () => {
+  it('applies backpressure before fetching the next library page', async () => {
+    const connector = new AudiobookshelfApiConnector();
+    vi.spyOn(connector, 'getStatus').mockResolvedValue({ sourceVersion: '2.36.0' });
+    vi.spyOn(connector, 'authorize').mockResolvedValue({ id: 'root', username: 'root', type: 'root' });
+    vi.spyOn(connector, 'getUsers').mockResolvedValue([]);
+    vi.spyOn(connector, 'getLibraries').mockResolvedValue([{ id: 'lib1', mediaType: 'book', folders: [] }]);
+    const pages = vi.spyOn(connector, 'getLibraryItemsPage').mockImplementation((_config, _libraryId, page) =>
+      Promise.resolve({
+        results: Array.from({ length: 200 }, (_, index) => ({ id: `page-${page}-${index}`, mediaType: 'book' })),
+        total: 400,
+        page,
+      }),
+    );
+    vi.spyOn(connector, 'getExpandedItems').mockImplementation((_config, ids) =>
+      Promise.resolve(ids.map((id) => ({ id, mediaType: 'podcast' as const }))),
+    );
+
+    const batches = connector.streamSourceBatches(config);
+    await expect(batches.next()).resolves.toMatchObject({ value: { kind: 'metadata' } });
+    await expect(batches.next()).resolves.toMatchObject({ value: { kind: 'libraryItems', records: { length: 100 } } });
+    expect(pages.mock.calls.map((call) => call[2])).toEqual([0]);
+    await batches.return(undefined);
+  });
+
   it('builds snapshot counts without expanding every library item or session page', async () => {
     const connector = new AudiobookshelfApiConnector();
     vi.spyOn(connector, 'getStatus').mockResolvedValue({ sourceVersion: '2.36.0' });
@@ -205,7 +235,7 @@ describe('AudiobookshelfApiConnector pagination and batching', () => {
       .spyOn(connector, 'getExpandedItems')
       .mockImplementation((_config, ids) => Promise.resolve(ids.map((id) => ({ id, mediaType: 'podcast' as const }))));
 
-    const result = await connector.fetchSourceRecords(config);
+    const batches = await collectSourceBatches(connector);
 
     expect(pageSpy.mock.calls.map((call) => [call[1], call[2]])).toEqual([
       ['lib1', 0],
@@ -213,7 +243,7 @@ describe('AudiobookshelfApiConnector pagination and batching', () => {
       ['lib2', 0],
     ]);
     expect(batchSpy.mock.calls.map((call) => call[1].length)).toEqual([100, 100, 1, 1]);
-    expect(result.libraryItems).toHaveLength(202);
+    expect(batches.flatMap((batch) => (batch.kind === 'libraryItems' ? batch.records : []))).toHaveLength(202);
   });
 
   it('collects users with no progress and paginates listening sessions', async () => {
@@ -264,10 +294,12 @@ describe('AudiobookshelfApiConnector pagination and batching', () => {
         page: 1,
       });
 
-    const result = await connector.fetchSourceRecords(config);
-    expect(result.users).toEqual([{ id: 'u1', username: 'reader', email: null, isActive: true }]);
-    expect(result.mediaProgress).toEqual([]);
-    expect(result.playbackSessions.map((session) => session.id)).toEqual(['s1', 's2']);
+    const batches = await collectSourceBatches(connector);
+    expect(batches.find((batch) => batch.kind === 'userState')).toMatchObject({
+      user: { id: 'u1', username: 'reader', email: null, isActive: true },
+      mediaProgress: [],
+    });
+    expect(batches.flatMap((batch) => (batch.kind === 'playbackSessions' ? batch.records : [])).map((session) => session.id)).toEqual(['s1', 's2']);
     expect(sessions.mock.calls.map((call) => call[2])).toEqual([0, 1]);
   });
 
@@ -302,12 +334,12 @@ describe('AudiobookshelfApiConnector pagination and batching', () => {
       }),
     );
 
-    const result = await connector.fetchSourceRecords(config);
+    const batches = await collectSourceBatches(connector);
 
     expect(itemPages.mock.calls).toHaveLength(2);
-    expect(result.libraryItems).toHaveLength(200);
+    expect(batches.flatMap((batch) => (batch.kind === 'libraryItems' ? batch.records : []))).toHaveLength(200);
     expect(sessionPages.mock.calls).toHaveLength(2);
-    expect(result.playbackSessions.map((session) => session.id)).toEqual(['s1']);
+    expect(batches.flatMap((batch) => (batch.kind === 'playbackSessions' ? batch.records : [])).map((session) => session.id)).toEqual(['s1']);
   });
 });
 
