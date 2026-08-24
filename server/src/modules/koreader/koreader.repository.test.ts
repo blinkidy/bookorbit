@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCapturingDb } from '../../common/test-utils/capture-sql-db';
 import { sqlChunkText } from '../../common/test-utils/sql-chunk-text';
 import { KoreaderRepository } from './koreader.repository';
 
@@ -42,6 +43,49 @@ describe('KoreaderRepository', () => {
   beforeEach(() => {
     db = makeDb();
     repo = new KoreaderRepository(db as never);
+  });
+
+  describe('progress resets', () => {
+    it('returns the reset timestamp when one is outstanding', async () => {
+      const resetAt = new Date('2026-02-02T12:00:00.000Z');
+      db.select.mockReturnValue(makeQueryChain([{ resetAt }]));
+
+      await expect(repo.getProgressReset(10, 7)).resolves.toEqual(resetAt);
+    });
+
+    it('returns null when no reset is outstanding', async () => {
+      db.select.mockReturnValue(makeQueryChain([]));
+
+      await expect(repo.getProgressReset(10, 7)).resolves.toBeNull();
+    });
+
+    it('records convergence per device rather than retiring the marker', async () => {
+      const onConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+      const values = vi.fn().mockReturnValue({ onConflictDoNothing });
+      db.insert.mockReturnValue({ values });
+
+      await repo.recordResetConvergence(10, 7, 'device-1');
+
+      // One device taking the reset says nothing about the others, so the marker stays.
+      expect(values).toHaveBeenCalledWith({ userId: 7, bookFileId: 10, deviceId: 'device-1' });
+      expect(db.delete).not.toHaveBeenCalled();
+    });
+
+    it('reads back the devices that have taken the reset', async () => {
+      db.select.mockReturnValue(makeQueryChain([{ deviceId: 'device-1' }, { deviceId: 'device-2' }]));
+
+      await expect(repo.getConvergedResetDeviceIds(10, 7)).resolves.toEqual(new Set(['device-1', 'device-2']));
+    });
+
+    it('retires a marker when the outcome is settled for every device', async () => {
+      const where = vi.fn().mockResolvedValue(undefined);
+      db.delete.mockReturnValue({ where });
+
+      await repo.clearProgressReset(10, 7);
+
+      expect(db.delete).toHaveBeenCalledTimes(1);
+      expect(where).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('resolveBookFileByHash', () => {
@@ -633,8 +677,8 @@ describe('KoreaderRepository', () => {
       });
 
       await expect(repo.getDevicesList(42)).resolves.toEqual([
-        { device: 'Kobo', deviceId: 'device-1', lastSyncAt: lastSync, lastBookTitle: 'Book' },
-        { device: 'Phone', deviceId: 'device-2', lastSyncAt: lastSync, lastBookTitle: null },
+        { device: 'Kobo', deviceId: 'device-1', lastSyncAt: lastSync, lastBookTitle: 'Book', retiredAt: null },
+        { device: 'Phone', deviceId: 'device-2', lastSyncAt: lastSync, lastBookTitle: null, retiredAt: null },
       ]);
     });
 
@@ -843,6 +887,53 @@ describe('KoreaderRepository', () => {
       await repo.upsertReadingProgress({ bookFileId: 44, userId: 12, percentage: 30, pageNumber: null });
 
       expect(conflictSet(onConflictDoUpdate)).toEqual(expect.objectContaining({ pageNumber: null }));
+    });
+
+    // Regression: sorting by "Last Read" ordered on reading_progress.updated_at, which this path
+    // freezes on purpose so it stays a "last local write" marker. A KOReader-only reader therefore
+    // kept the timestamp of their first ever sync forever and the sort looked random.
+    describe('last-read timestamps in the compiled SQL', () => {
+      async function compileUpsert() {
+        const { db: capturingDb, queries } = createCapturingDb();
+        const capturingRepo = new KoreaderRepository(capturingDb as never);
+
+        await capturingRepo.upsertReadingProgress({ bookFileId: 44, userId: 12, percentage: 41.25 });
+
+        expect(queries).toHaveLength(1);
+        return queries[0]!;
+      }
+
+      function stampedLastReadAt({ sql: text, params }: { sql: string; params: unknown[] }) {
+        const match = /"last_read_at" = \$(\d+)/.exec(text);
+        expect(match).not.toBeNull();
+        return new Date(String(params[Number(match![1]) - 1])).getTime();
+      }
+
+      it('freezes updated_at but advances last_read_at on conflict', async () => {
+        const query = await compileUpsert();
+
+        expect(query.sql).toContain('"updated_at" = "reading_progress"."updated_at"');
+        expect(query.sql).toMatch(/"last_read_at" = \$\d+/);
+        expect(query.sql).not.toMatch(/"last_read_at" = "reading_progress"\."last_read_at"/);
+        expect(stampedLastReadAt(query)).not.toBeNaN();
+      });
+
+      it('stamps last_read_at close to now rather than reusing a stored value', async () => {
+        const before = Date.now();
+        const query = await compileUpsert();
+        const after = Date.now();
+
+        const stamped = stampedLastReadAt(query);
+        expect(stamped).toBeGreaterThanOrEqual(before);
+        expect(stamped).toBeLessThanOrEqual(after);
+      });
+
+      it('lets the insert branch default last_read_at instead of leaving it unset', async () => {
+        const { sql: text } = await compileUpsert();
+
+        expect(text).toContain('"last_read_at"');
+        expect(text.indexOf('"last_read_at"')).toBeLessThan(text.indexOf('on conflict'));
+      });
     });
   });
 

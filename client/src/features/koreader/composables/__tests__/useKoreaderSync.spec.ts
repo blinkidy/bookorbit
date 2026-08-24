@@ -32,6 +32,7 @@ function makeSyncStatus(overrides: Partial<KoreaderSyncStatus> = {}): KoreaderSy
         deviceId: 'device-1',
         lastSyncAt: '2026-01-02T00:00:00.000Z',
         lastBookTitle: 'Project Hail Mary',
+        retiredAt: null,
       },
     ],
     totalSyncedBooks: 14,

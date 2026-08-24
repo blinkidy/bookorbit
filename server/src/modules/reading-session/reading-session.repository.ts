@@ -169,6 +169,26 @@ export class ReadingSessionRepository {
     return row?.endProgress ?? null;
   }
 
+  // Deliberately unscoped by the list filters: this feeds the book's progress ring, which
+  // must not move when the reading log is filtered by date range or format.
+  async findLatestEndProgress(userId: number, bookId: number): Promise<number | null> {
+    const [row] = await this.db
+      .select({ endProgress: readingSessions.endProgress })
+      .from(readingSessions)
+      .where(
+        and(
+          eq(readingSessions.userId, userId),
+          eq(readingSessions.bookId, bookId),
+          isNotNull(readingSessions.endProgress),
+          loggedReadingSessionFilter(),
+        ),
+      )
+      .orderBy(desc(readingSessions.startedAt), desc(readingSessions.id))
+      .limit(1);
+
+    return row?.endProgress ?? null;
+  }
+
   async listByBook(
     userId: number,
     bookId: number,
@@ -205,7 +225,7 @@ export class ReadingSessionRepository {
     const orderExpr = sortDir === 'asc' ? asc(orderCol) : desc(orderCol);
     const offset = (page - 1) * pageSize;
 
-    const [rows, countRows, statsRows, summaryRows, sourceRows] = await Promise.all([
+    const [rows, countRows, statsRows, summaryRows, sourceRows, latestEndProgress] = await Promise.all([
       this.db
         .select({
           id: readingSessions.id,
@@ -263,6 +283,8 @@ export class ReadingSessionRepository {
         .leftJoin(bookFiles, eq(bookFiles.id, readingSessions.bookFileId))
         .where(whereClause)
         .groupBy(readingSessions.source),
+
+      this.findLatestEndProgress(userId, bookId),
     ]);
 
     const total = countRows[0]?.total ?? 0;
@@ -318,6 +340,7 @@ export class ReadingSessionRepository {
       paceProgressDelta: statsRow?.paceProgressDelta ?? 0,
       paceDurationSeconds: statsRow?.paceDurationSeconds ?? 0,
       progressSummary,
+      latestEndProgress,
       bySource,
     };
 
