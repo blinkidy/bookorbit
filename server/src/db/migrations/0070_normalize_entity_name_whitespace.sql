@@ -8,10 +8,15 @@
 
 -- ── authors ──────────────────────────────────────────────────────────────────
 WITH normalized AS (
-  SELECT id, name, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
+  SELECT *, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
   FROM authors
 ), canonical AS (
-  SELECT id, first_value(id) OVER (PARTITION BY norm ORDER BY (name = norm) DESC, id ASC) AS canonical_id
+  SELECT id, first_value(id) OVER (
+    PARTITION BY norm
+    ORDER BY has_photo DESC,
+      ((description IS NOT NULL)::int + (last_enriched_at IS NOT NULL)::int) DESC,
+      last_enriched_at DESC NULLS LAST, (name = norm) DESC, id ASC
+  ) AS canonical_id
   FROM normalized WHERE norm <> ''
 ), duplicates AS (
   SELECT id AS duplicate_id, canonical_id FROM canonical WHERE id <> canonical_id
@@ -24,22 +29,53 @@ ORDER BY ba.book_id, d.canonical_id, ba.display_order ASC
 ON CONFLICT (book_id, author_id) DO NOTHING;--> statement-breakpoint
 
 WITH normalized AS (
-  SELECT id, name, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
+  SELECT *, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
   FROM authors
 ), canonical AS (
-  SELECT id, first_value(id) OVER (PARTITION BY norm ORDER BY (name = norm) DESC, id ASC) AS canonical_id
+  SELECT id, first_value(id) OVER (
+    PARTITION BY norm
+    ORDER BY has_photo DESC,
+      ((description IS NOT NULL)::int + (last_enriched_at IS NOT NULL)::int) DESC,
+      last_enriched_at DESC NULLS LAST, (name = norm) DESC, id ASC
+  ) AS canonical_id
   FROM normalized WHERE norm <> ''
 ), duplicates AS (
   SELECT id AS duplicate_id FROM canonical WHERE id <> canonical_id
 )
 DELETE FROM book_authors ba USING duplicates d WHERE ba.author_id = d.duplicate_id;--> statement-breakpoint
 
--- author_enrichment_queue cascades; a merged-away author simply loses its queued entry.
 WITH normalized AS (
-  SELECT id, name, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
+  SELECT *, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
   FROM authors
 ), canonical AS (
-  SELECT id, first_value(id) OVER (PARTITION BY norm ORDER BY (name = norm) DESC, id ASC) AS canonical_id
+  SELECT id, first_value(id) OVER (
+    PARTITION BY norm
+    ORDER BY has_photo DESC,
+      ((description IS NOT NULL)::int + (last_enriched_at IS NOT NULL)::int) DESC,
+      last_enriched_at DESC NULLS LAST, (name = norm) DESC, id ASC
+  ) AS canonical_id
+  FROM normalized WHERE norm <> ''
+), canonical_groups AS (
+  SELECT DISTINCT canonical_id FROM canonical
+)
+UPDATE authors target SET
+  sort_name = COALESCE(target.sort_name, (SELECT source.sort_name FROM authors source JOIN canonical c ON c.id = source.id WHERE c.canonical_id = target.id AND source.sort_name IS NOT NULL ORDER BY source.last_enriched_at DESC NULLS LAST, source.id ASC LIMIT 1)),
+  description = COALESCE(target.description, (SELECT source.description FROM authors source JOIN canonical c ON c.id = source.id WHERE c.canonical_id = target.id AND source.description IS NOT NULL ORDER BY source.last_enriched_at DESC NULLS LAST, source.id ASC LIMIT 1)),
+  last_enriched_at = (SELECT max(source.last_enriched_at) FROM authors source JOIN canonical c ON c.id = source.id WHERE c.canonical_id = target.id)
+FROM canonical_groups g
+WHERE target.id = g.canonical_id;--> statement-breakpoint
+
+-- author_enrichment_queue cascades; a merged-away author simply loses its queued entry.
+WITH normalized AS (
+  SELECT *, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
+  FROM authors
+), canonical AS (
+  SELECT id, first_value(id) OVER (
+    PARTITION BY norm
+    ORDER BY has_photo DESC,
+      ((description IS NOT NULL)::int + (last_enriched_at IS NOT NULL)::int) DESC,
+      last_enriched_at DESC NULLS LAST, (name = norm) DESC, id ASC
+  ) AS canonical_id
   FROM normalized WHERE norm <> ''
 ), duplicates AS (
   SELECT id AS duplicate_id FROM canonical WHERE id <> canonical_id

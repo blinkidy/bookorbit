@@ -74,13 +74,36 @@ describe('CalibreWebAutomatedSnapshotConnector', () => {
     expect(records.statuses).toEqual([expect.objectContaining({ id: 200, userId: 1, bookId: 10, readStatus: 2 })]);
     expect(records.webProgress).toEqual([expect.objectContaining({ id: 201, userId: 1, bookId: 10, format: 'EPUB' })]);
     expect(records.koboBookmarks).toEqual([expect.objectContaining({ id: 203, readingStateId: 202, progressPercent: 42 })]);
-    expect(records.koreaderProgress).toEqual([expect.objectContaining({ id: 204, userId: 1, document: 'partial-checksum', percentage: 43 })]);
+    expect(records.koreaderProgress).toEqual([expect.objectContaining({ id: 204, userId: 1, document: 'partial-checksum', percentage: 0.43 })]);
     expect(records.shelfBooks).toEqual([{ id: 206, bookId: 10, shelfId: 205, position: 3 }]);
     expect(JSON.stringify(records)).not.toContain('password-secret');
     expect(JSON.stringify(records)).not.toContain('hardcover-secret');
     expect(JSON.stringify(records)).not.toContain('mail-secret');
     expect(JSON.stringify(records)).not.toContain('oauth-secret');
     expect(JSON.stringify(records)).not.toContain('session-secret');
+  });
+
+  it('streams book-scoped source batches without losing related records', async () => {
+    const pair = await createCompatiblePair(importRoot);
+    const batches = [];
+
+    for await (const batch of makeConnector(importRoot).streamSourceRecordBatches(configFor(pair))) {
+      batches.push(batch);
+    }
+
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toMatchObject({
+      books: [expect.objectContaining({ id: 10 })],
+      files: [expect.objectContaining({ bookId: 10 })],
+      authorLinks: [expect.objectContaining({ bookId: 10 })],
+      statuses: [expect.objectContaining({ bookId: 10 })],
+      webProgress: [expect.objectContaining({ bookId: 10 })],
+      koboReadingStates: [expect.objectContaining({ bookId: 10 })],
+      koboBookmarks: [expect.objectContaining({ readingStateId: 202 })],
+      koreaderProgress: [expect.objectContaining({ document: 'partial-checksum' })],
+      checksums: [expect.objectContaining({ bookId: 10 })],
+      shelfBooks: [expect.objectContaining({ bookId: 10 })],
+    });
   });
 
   it('continues with reduced capabilities when optional tables or columns are missing', async () => {
@@ -201,10 +224,19 @@ describe('CalibreWebAutomatedSnapshotConnector', () => {
     });
     const connector = makeConnector(importRoot);
 
-    const records = await connector.fetchSourceRecords(configFor(pair));
+    let bookCount = 0;
+    let lastBookId = 0;
+    let batchCount = 0;
+    for await (const batch of connector.streamSourceRecordBatches(configFor(pair))) {
+      expect(batch.books.length).toBeLessThanOrEqual(500);
+      bookCount += batch.books.length;
+      lastBookId = batch.books.at(-1)?.id ?? lastBookId;
+      batchCount += 1;
+    }
 
-    expect(records.books).toHaveLength(25_001);
-    expect(records.books[25_000].id).toBe(25_001);
+    expect(bookCount).toBe(25_001);
+    expect(lastBookId).toBe(25_001);
+    expect(batchCount).toBeGreaterThan(1);
   });
 
   it('summarizes malformed scalar values and impossible foreign keys by category', async () => {
@@ -391,7 +423,7 @@ async function createCompatiblePair(root: string, prefix = 'compatible'): Promis
       .run(203, 202, '2026-01-04T00:00:00Z', 'body', 'epub', 'epubcfi(/6/4)', 42, 41);
     database
       .prepare('INSERT INTO kosync_progress VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(204, 1, 'partial-checksum', 'epubcfi(/6/6)', 43, 'KOReader', 'device', '2026-01-05T00:00:00Z');
+      .run(204, 1, 'partial-checksum', 'epubcfi(/6/6)', 0.43, 'KOReader', 'device', '2026-01-05T00:00:00Z');
     database.prepare('INSERT INTO shelf (id, name, is_public, user_id) VALUES (?, ?, ?, ?)').run(205, 'Favorites', 0, 1);
     database.prepare('INSERT INTO book_shelf_link (id, book_id, "order", shelf) VALUES (?, ?, ?, ?)').run(206, 10, 3, 205);
   });

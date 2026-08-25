@@ -654,7 +654,7 @@ function normalizeKoreaderProgress(
       counters.add('unresolved_koreader_progress');
       continue;
     }
-    const percentage = normalizePercentage(record.percentage);
+    const percentage = normalizePercentage(Math.round(record.percentage * 10_000) / 100);
     if (percentage == null) {
       counters.add('invalid_koreader_percentages');
       continue;

@@ -186,6 +186,46 @@ export class CalibreWebAutomatedSnapshotConnector {
       if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
     }
   }
+
+  async *streamSourceRecordBatches(config: CalibreWebAutomatedConnectionConfig): AsyncGenerator<CalibreWebAutomatedSourceRecords> {
+    let appFile: AuthorizedCalibreWebAutomatedSnapshotFile | null = null;
+    let metadataFile: AuthorizedCalibreWebAutomatedSnapshotFile | null = null;
+    let temporaryDirectory: string | null = null;
+    let appDatabase: DatabaseSync | null = null;
+    let metadataDatabase: DatabaseSync | null = null;
+
+    try {
+      appFile = await authorizeCalibreWebAutomatedSnapshotFile(this.config.importRoot, config.appDatabasePath);
+      metadataFile = await authorizeCalibreWebAutomatedSnapshotFile(this.config.importRoot, config.metadataDatabasePath);
+      if (sameFile(appFile, metadataFile)) {
+        throw new BadRequestException('Calibre-Web Automated snapshot paths must identify different database files');
+      }
+
+      temporaryDirectory = await mkdtemp(join(tmpdir(), 'bookorbit-cwa-migration-'));
+      await chmod(temporaryDirectory, 0o700);
+      const appCopyPath = join(temporaryDirectory, 'app.db');
+      const metadataCopyPath = join(temporaryDirectory, 'metadata.db');
+      await copyAuthorizedCalibreWebAutomatedSnapshotFile(appFile, appCopyPath);
+      await copyAuthorizedCalibreWebAutomatedSnapshotFile(metadataFile, metadataCopyPath);
+      await assertNoActiveSidecars(appFile);
+      await assertNoActiveSidecars(metadataFile);
+
+      appDatabase = openDefensiveDatabase(appCopyPath);
+      metadataDatabase = openDefensiveDatabase(metadataCopyPath);
+      verifyIntegrity(appDatabase);
+      verifyIntegrity(metadataDatabase);
+      yield* readSourceRecordBatches(appDatabase, metadataDatabase);
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('The Calibre-Web Automated snapshot could not be read safely');
+    } finally {
+      closeDatabaseQuietly(appDatabase);
+      closeDatabaseQuietly(metadataDatabase);
+      await appFile?.handle.close().catch(() => undefined);
+      await metadataFile?.handle.close().catch(() => undefined);
+      if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
 }
 
 export async function authorizeCalibreWebAutomatedSnapshotFile(
@@ -515,6 +555,330 @@ function readSourceRecords(appDatabase: DatabaseSync, metadataDatabase: Database
     shelves,
     shelfBooks,
   };
+}
+
+function* readSourceRecordBatches(appDatabase: DatabaseSync, metadataDatabase: DatabaseSync): Generator<CalibreWebAutomatedSourceRecords> {
+  const warnings = new WarningCollector();
+  const { compatibilityWarnings, capabilities } = inspectSource(appDatabase, metadataDatabase);
+  const users = readMapped(appDatabase, USER_SQL, CORE_PAGE_SIZE, (row) => mapUser(row, warnings));
+  const userIds = new Set(users.map((row) => row.id));
+  const bookIds = readIdSet(metadataDatabase, 'books');
+  const settings = capabilities.settings ? readSettings(appDatabase, getColumns(appDatabase, 'settings'), warnings) : [];
+  const shelves = capabilities.shelves ? readMapped(appDatabase, SHELF_SQL, CORE_PAGE_SIZE, (row) => mapShelf(row, userIds, warnings)) : [];
+  const shelfIds = new Set(shelves.map((row) => row.id));
+  const statement = metadataDatabase.prepare(BOOK_SQL);
+  let lastId = -1;
+  let yielded = false;
+
+  while (true) {
+    const rows = statement.all(lastId, CORE_PAGE_SIZE) as SqlRow[];
+    const books = rows.flatMap((row) => {
+      const id = positiveInteger(row.id);
+      if (id == null || id <= lastId) throw new BadRequestException('Calibre-Web Automated snapshot contains an invalid pagination key');
+      lastId = id;
+      const mapped = mapBook(row, warnings);
+      return mapped ? [mapped] : [];
+    });
+    if (rows.length === 0) break;
+    const currentBookIds = books.map((book) => book.id);
+    if (currentBookIds.length === 0) {
+      if (rows.length < CORE_PAGE_SIZE) break;
+      continue;
+    }
+
+    const files = readMappedForValues(metadataDatabase, FILE_SQL, 'bookId', currentBookIds, CORE_PAGE_SIZE, (row) => mapFile(row, bookIds, warnings));
+    const authorLinks = capabilities.authors
+      ? readMappedForValues(metadataDatabase, AUTHOR_LINK_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapAuthorLink(row, bookIds, warnings),
+        )
+      : [];
+    const publisherLinks = capabilities.publishers
+      ? readMappedForValues(metadataDatabase, PUBLISHER_LINK_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapNamedLink(row, bookIds, warnings, 'publisher'),
+        )
+      : [];
+    const languageLinks = capabilities.languages
+      ? readMappedForValues(metadataDatabase, LANGUAGE_LINK_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapLanguageLink(row, bookIds, warnings),
+        )
+      : [];
+    const seriesLinks = capabilities.series
+      ? readMappedForValues(metadataDatabase, SERIES_LINK_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapSeriesLink(row, bookIds, warnings),
+        )
+      : [];
+    const ratingLinks = capabilities.ratings
+      ? readMappedForValues(metadataDatabase, RATING_LINK_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapRatingLink(row, bookIds, warnings),
+        )
+      : [];
+    const comments = capabilities.comments
+      ? readMappedForValues(metadataDatabase, COMMENT_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) => mapComment(row, bookIds, warnings))
+      : [];
+    const tagLinks = capabilities.tags
+      ? readMappedForValues(metadataDatabase, TAG_LINK_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapNamedLink(row, bookIds, warnings, 'tag'),
+        )
+      : [];
+    const identifiers = capabilities.identifiers
+      ? readMappedForValues(metadataDatabase, IDENTIFIER_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapIdentifier(row, bookIds, warnings),
+        )
+      : [];
+    const statuses = capabilities.userBookStatuses
+      ? readMappedForValues(appDatabase, STATUS_SQL, 'bookId', currentBookIds, CORE_PAGE_SIZE, (row) => mapStatus(row, userIds, bookIds, warnings))
+      : [];
+    const webProgress = capabilities.webProgress
+      ? readMappedForValues(appDatabase, WEB_PROGRESS_SQL, 'bookId', currentBookIds, CORE_PAGE_SIZE, (row) =>
+          mapWebProgress(row, userIds, bookIds, warnings),
+        )
+      : [];
+    const koboReadingStates = capabilities.koboProgress
+      ? readMappedForValues(appDatabase, KOBO_STATE_SQL, 'bookId', currentBookIds, CORE_PAGE_SIZE, (row) =>
+          mapKoboState(row, userIds, bookIds, warnings),
+        )
+      : [];
+    const koboStateIds = new Set(koboReadingStates.map((row) => row.id));
+    const koboBookmarks = capabilities.koboProgress
+      ? readMappedForValues(appDatabase, KOBO_BOOKMARK_SQL, 'readingStateId', [...koboStateIds], CORE_PAGE_SIZE, (row) =>
+          mapKoboBookmark(row, koboStateIds, warnings),
+        )
+      : [];
+    const batchChecksums = capabilities.koreaderProgress
+      ? readMappedForValues(metadataDatabase, CHECKSUM_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapChecksum(row, bookIds, warnings),
+        )
+      : [];
+    const checksumValues = [...new Set(batchChecksums.map((row) => row.checksum))];
+    const checksums = capabilities.koreaderProgress
+      ? readMappedForValues(metadataDatabase, CHECKSUM_SQL, 'checksum', checksumValues, RELATION_PAGE_SIZE, (row) =>
+          mapChecksum(row, bookIds, warnings),
+        )
+      : [];
+    const koreaderProgress = capabilities.koreaderProgress
+      ? readMappedForValues(appDatabase, KOREADER_PROGRESS_SQL, 'document', checksumValues, CORE_PAGE_SIZE, (row) =>
+          mapKoreaderProgress(row, userIds, warnings),
+        )
+      : [];
+    const shelfBooks = capabilities.shelves
+      ? readMappedForValues(appDatabase, SHELF_BOOK_SQL, 'bookId', currentBookIds, RELATION_PAGE_SIZE, (row) =>
+          mapShelfBook(row, shelfIds, bookIds, warnings),
+        )
+      : [];
+
+    yielded = true;
+    yield {
+      sourceVersion: null,
+      compatibilityWarnings,
+      warnings: warnings.values(),
+      capabilities,
+      settings,
+      users,
+      books,
+      files,
+      authorLinks,
+      publisherLinks,
+      languageLinks,
+      seriesLinks,
+      ratingLinks,
+      comments,
+      tagLinks,
+      identifiers,
+      statuses,
+      webProgress,
+      koboReadingStates,
+      koboBookmarks,
+      koreaderProgress,
+      checksums,
+      shelves,
+      shelfBooks,
+    };
+    if (rows.length < CORE_PAGE_SIZE) break;
+  }
+
+  if (!yielded) {
+    yield {
+      sourceVersion: null,
+      compatibilityWarnings,
+      warnings: warnings.values(),
+      capabilities,
+      settings,
+      users,
+      books: [],
+      files: [],
+      authorLinks: [],
+      publisherLinks: [],
+      languageLinks: [],
+      seriesLinks: [],
+      ratingLinks: [],
+      comments: [],
+      tagLinks: [],
+      identifiers: [],
+      statuses: [],
+      webProgress: [],
+      koboReadingStates: [],
+      koboBookmarks: [],
+      koreaderProgress: [],
+      checksums: [],
+      shelves,
+      shelfBooks: [],
+    };
+  }
+}
+
+function inspectSource(
+  appDatabase: DatabaseSync,
+  metadataDatabase: DatabaseSync,
+): { compatibilityWarnings: string[]; capabilities: CalibreWebAutomatedCapabilities } {
+  const compatibilityWarnings = ['Schema compatibility was verified against Calibre-Web Automated v4.0.6'];
+  const appTables = getAvailableTables(appDatabase);
+  const metadataTables = getAvailableTables(metadataDatabase);
+  if (!appTables.has('user') && appTables.has('books') && metadataTables.has('user')) {
+    throw new BadRequestException('Calibre-Web Automated app.db and metadata.db snapshot paths appear to be reversed');
+  }
+  verifyRequiredSchema(appDatabase, appTables, APP_REQUIRED_SCHEMA, 'app.db');
+  verifyRequiredSchema(metadataDatabase, metadataTables, METADATA_REQUIRED_SCHEMA, 'metadata.db');
+  const userColumns = getColumns(appDatabase, 'user');
+  if (!['magic_shelf', 'kosync_progress', 'kobo_annotation_sync'].some((table) => appTables.has(table)) && !userColumns.has('hardcover_token')) {
+    compatibilityWarnings.push('No Calibre-Web Automated schema signatures were found; the snapshot may come from stock Calibre-Web');
+  }
+  return {
+    compatibilityWarnings,
+    capabilities: {
+      settings: verifyOptionalSchema(appDatabase, appTables, ['settings'], APP_OPTIONAL_SCHEMA, compatibilityWarnings, 'settings'),
+      authors: verifyOptionalSchema(
+        metadataDatabase,
+        metadataTables,
+        ['books_authors_link', 'authors'],
+        METADATA_OPTIONAL_SCHEMA,
+        compatibilityWarnings,
+        'authors',
+      ),
+      publishers: verifyOptionalSchema(
+        metadataDatabase,
+        metadataTables,
+        ['books_publishers_link', 'publishers'],
+        METADATA_OPTIONAL_SCHEMA,
+        compatibilityWarnings,
+        'publishers',
+      ),
+      languages: verifyOptionalSchema(
+        metadataDatabase,
+        metadataTables,
+        ['books_languages_link', 'languages'],
+        METADATA_OPTIONAL_SCHEMA,
+        compatibilityWarnings,
+        'languages',
+      ),
+      series: verifyOptionalSchema(
+        metadataDatabase,
+        metadataTables,
+        ['books_series_link', 'series'],
+        METADATA_OPTIONAL_SCHEMA,
+        compatibilityWarnings,
+        'series',
+      ),
+      ratings: verifyOptionalSchema(
+        metadataDatabase,
+        metadataTables,
+        ['books_ratings_link', 'ratings'],
+        METADATA_OPTIONAL_SCHEMA,
+        compatibilityWarnings,
+        'ratings',
+      ),
+      comments: verifyOptionalSchema(metadataDatabase, metadataTables, ['comments'], METADATA_OPTIONAL_SCHEMA, compatibilityWarnings, 'comments'),
+      tags: verifyOptionalSchema(
+        metadataDatabase,
+        metadataTables,
+        ['books_tags_link', 'tags'],
+        METADATA_OPTIONAL_SCHEMA,
+        compatibilityWarnings,
+        'tags',
+      ),
+      identifiers: verifyOptionalSchema(
+        metadataDatabase,
+        metadataTables,
+        ['identifiers'],
+        METADATA_OPTIONAL_SCHEMA,
+        compatibilityWarnings,
+        'identifiers',
+      ),
+      userBookStatuses: verifyOptionalSchema(appDatabase, appTables, ['book_read_link'], APP_OPTIONAL_SCHEMA, compatibilityWarnings, 'read status'),
+      webProgress: verifyOptionalSchema(appDatabase, appTables, ['bookmark'], APP_OPTIONAL_SCHEMA, compatibilityWarnings, 'web progress'),
+      koboProgress: verifyOptionalSchema(
+        appDatabase,
+        appTables,
+        ['kobo_reading_state', 'kobo_bookmark'],
+        APP_OPTIONAL_SCHEMA,
+        compatibilityWarnings,
+        'Kobo progress',
+      ),
+      koreaderProgress:
+        verifyOptionalSchema(appDatabase, appTables, ['kosync_progress'], APP_OPTIONAL_SCHEMA, compatibilityWarnings, 'KOReader progress') &&
+        verifyOptionalSchema(
+          metadataDatabase,
+          metadataTables,
+          ['book_format_checksums'],
+          METADATA_OPTIONAL_SCHEMA,
+          compatibilityWarnings,
+          'KOReader checksum index',
+        ),
+      shelves: verifyOptionalSchema(appDatabase, appTables, ['shelf', 'book_shelf_link'], APP_OPTIONAL_SCHEMA, compatibilityWarnings, 'shelves'),
+    },
+  };
+}
+
+function readIdSet(database: DatabaseSync, table: string): Set<number> {
+  const statement = database.prepare(`SELECT id FROM "${table}" WHERE id > ? ORDER BY id LIMIT ?`);
+  const ids = new Set<number>();
+  let lastId = -1;
+  while (true) {
+    const rows = statement.all(lastId, CORE_PAGE_SIZE) as SqlRow[];
+    if (rows.length === 0) return ids;
+    for (const row of rows) {
+      const id = positiveInteger(row.id);
+      if (id == null || id <= lastId) throw new BadRequestException('Calibre-Web Automated snapshot contains an invalid pagination key');
+      lastId = id;
+      ids.add(id);
+    }
+    if (rows.length < CORE_PAGE_SIZE) return ids;
+  }
+}
+
+function readMappedForValues<T>(
+  database: DatabaseSync,
+  query: string,
+  column: string,
+  values: Array<number | string>,
+  pageSize: number,
+  map: (row: SqlRow) => T | null,
+): T[] {
+  const uniqueValues = [...new Set(values)];
+  if (uniqueValues.length === 0) return [];
+  const whereIndex = query.lastIndexOf(' WHERE ');
+  if (whereIndex < 0) throw new BadRequestException('Calibre-Web Automated snapshot query could not be paginated safely');
+  const baseQuery = query.slice(0, whereIndex);
+  const placeholders = uniqueValues.map(() => '?').join(', ');
+  const statement = database.prepare(
+    `SELECT * FROM (${baseQuery}) source WHERE source."${column}" IN (${placeholders}) AND source.id > ? ORDER BY source.id LIMIT ?`,
+  );
+  const results: T[] = [];
+  let lastId = -1;
+  let processed = 0;
+  while (processed < MAX_ROWS_PER_QUERY) {
+    const rows = statement.all(...uniqueValues, lastId, pageSize) as SqlRow[];
+    if (rows.length === 0) return results;
+    for (const row of rows) {
+      const rowId = positiveInteger(row.id);
+      if (rowId == null || rowId <= lastId) throw new BadRequestException('Calibre-Web Automated snapshot contains an invalid pagination key');
+      lastId = rowId;
+      processed += 1;
+      const mapped = map(row);
+      if (mapped) results.push(mapped);
+    }
+    if (rows.length < pageSize) return results;
+  }
+  throw new BadRequestException('Calibre-Web Automated snapshot table exceeds the migration row limit');
 }
 
 function getAvailableTables(database: DatabaseSync): Set<string> {

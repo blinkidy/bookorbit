@@ -124,7 +124,11 @@ function normalized(): CalibreWebAutomatedNormalizationResult {
 function buildAdapter() {
   const records = sourceRecords();
   const normalizationResult = normalized();
-  const connector = { fetchSourceRecords: vi.fn().mockResolvedValue(records) };
+  const streamSourceRecordBatches = vi.fn(async function* () {
+    await Promise.resolve();
+    yield records;
+  });
+  const connector = { streamSourceRecordBatches };
   const normalizer = { normalize: vi.fn().mockReturnValue(normalizationResult) };
   return {
     adapter: new CalibreWebAutomatedSourceAdapter(connector as never, normalizer as never),
@@ -158,7 +162,7 @@ describe('CalibreWebAutomatedSourceAdapter', () => {
         shelfBooks: 0,
       },
     });
-    expect(connector.fetchSourceRecords).toHaveBeenCalledWith(config);
+    expect(connector.streamSourceRecordBatches).toHaveBeenCalledWith(config);
     expect(normalizer.normalize).toHaveBeenCalledWith(records);
   });
 
@@ -186,7 +190,11 @@ describe('CalibreWebAutomatedSourceAdapter', () => {
 
   it('propagates sanitized connector failures without inventing validation results', async () => {
     const connector = {
-      fetchSourceRecords: vi.fn().mockRejectedValue(new BadRequestException('Calibre-Web Automated snapshot database failed its integrity check')),
+      streamSourceRecordBatches: vi.fn(() => ({
+        [Symbol.asyncIterator]: () => ({
+          next: vi.fn().mockRejectedValue(new BadRequestException('Calibre-Web Automated snapshot database failed its integrity check')),
+        }),
+      })),
     };
     const adapter = new CalibreWebAutomatedSourceAdapter(connector as never, { normalize: vi.fn() } as never);
 

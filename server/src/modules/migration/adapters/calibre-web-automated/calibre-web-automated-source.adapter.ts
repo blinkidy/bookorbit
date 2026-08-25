@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 import type { SourceAdapter, SourceExportData, SourceSnapshot, SourceValidationResult } from '../source-adapter.types';
 import type { CalibreWebAutomatedConnectionConfig } from './calibre-web-automated-connection-config';
@@ -46,7 +46,25 @@ export class CalibreWebAutomatedSourceAdapter implements SourceAdapter<CalibreWe
   }
 
   private async fetchNormalized(config: CalibreWebAutomatedConnectionConfig): Promise<CalibreWebAutomatedNormalizationResult> {
-    return this.normalizer.normalize(await this.connector.fetchSourceRecords(config));
+    let combined: CalibreWebAutomatedNormalizationResult | null = null;
+    for await (const records of this.connector.streamSourceRecordBatches(config)) {
+      const batch = this.normalizer.normalize(records);
+      if (!combined) {
+        combined = batch;
+        continue;
+      }
+      combined.data.books.push(...batch.data.books);
+      combined.data.userBookStatuses.push(...batch.data.userBookStatuses);
+      combined.data.userFileProgress.push(...batch.data.userFileProgress);
+      combined.data.shelfBooks.push(...batch.data.shelfBooks);
+      combined.pathPrefixes = [...new Set([...combined.pathPrefixes, ...batch.pathPrefixes])].sort((left, right) => left.localeCompare(right));
+      combined.warnings = [...new Set([...combined.warnings, ...batch.warnings])];
+      for (const [category, count] of Object.entries(batch.counters)) {
+        combined.counters[category] = (combined.counters[category] ?? 0) + count;
+      }
+    }
+    if (!combined) throw new BadRequestException('Calibre-Web Automated snapshot did not produce an import batch');
+    return combined;
   }
 }
 

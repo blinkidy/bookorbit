@@ -310,7 +310,7 @@ describe('CalibreWebAutomatedNormalizer status and progress', () => {
           },
         ],
         checksums: [{ id: 30, bookId: 10, format: 'EPUB', checksum: 'partial', version: 'koreader', created: null }],
-        koreaderProgress: [{ id: 31, userId: 1, document: 'partial', progress: 'not-a-cfi', percentage: 55, timestamp: '2024-01-04T00:00:00Z' }],
+        koreaderProgress: [{ id: 31, userId: 1, document: 'partial', progress: 'not-a-cfi', percentage: 0.55, timestamp: '2024-01-04T00:00:00Z' }],
         statuses: [
           { id: 40, userId: 1, bookId: 10, readStatus: 2, lastModified: '2024-01-05T00:00:00Z', lastTimeStartedReading: '2024-01-01T00:00:00Z' },
         ],
@@ -413,8 +413,8 @@ describe('CalibreWebAutomatedNormalizer status and progress', () => {
           { id: 5, bookId: 11, format: 'EPUB', checksum: 'ambiguous', version: 'koreader', created: null },
         ],
         koreaderProgress: [
-          { id: 6, userId: 1, document: 'unique', progress: 'epubcfi(/6/8)', percentage: 60, timestamp: '2024-01-02T00:00:00Z' },
-          { id: 7, userId: 1, document: 'ambiguous', progress: 'epubcfi(/6/10)', percentage: 70, timestamp: '2024-01-03T00:00:00Z' },
+          { id: 6, userId: 1, document: 'unique', progress: 'epubcfi(/6/8)', percentage: 0.6, timestamp: '2024-01-02T00:00:00Z' },
+          { id: 7, userId: 1, document: 'ambiguous', progress: 'epubcfi(/6/10)', percentage: 0.7, timestamp: '2024-01-03T00:00:00Z' },
         ],
       }),
     );
