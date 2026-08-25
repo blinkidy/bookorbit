@@ -190,5 +190,7 @@ export interface SourceAdapter<TConnectionConfig = unknown> {
 
   exportData(config: TConnectionConfig): Promise<SourceExportData>;
 
+  exportWithSnapshot?(config: TConnectionConfig): Promise<{ snapshot: SourceSnapshot; data: SourceExportData }>;
+
   fetchPathPrefixes?(config: TConnectionConfig): Promise<string[]>;
 }

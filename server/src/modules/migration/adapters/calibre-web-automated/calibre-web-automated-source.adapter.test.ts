@@ -187,6 +187,21 @@ describe('CalibreWebAutomatedSourceAdapter', () => {
     await expect(adapter.exportData(config)).resolves.toBe(normalizationResult.data);
   });
 
+  it('exports snapshot counts and data from one normalized read', async () => {
+    const { adapter, connector, normalizer, normalizationResult } = buildAdapter();
+
+    const result = await adapter.exportWithSnapshot(config);
+
+    expect(result.data).toBe(normalizationResult.data);
+    expect(result.snapshot).toMatchObject({
+      sourceType: 'calibre_web_automated',
+      sourceVersion: null,
+      counts: { users: 1, books: 1, files: 1 },
+    });
+    expect(connector.streamSourceRecordBatches).toHaveBeenCalledTimes(1);
+    expect(normalizer.normalize).toHaveBeenCalledTimes(1);
+  });
+
   it('aggregates warning counters across source batches before rendering them', async () => {
     const records = sourceRecords();
     const first = normalized();

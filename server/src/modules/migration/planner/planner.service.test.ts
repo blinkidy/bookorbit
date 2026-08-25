@@ -80,16 +80,18 @@ describe('MigrationPlannerService', () => {
       },
     };
 
+    const snapshot = {
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      sourceType: 'booklore',
+      sourceVersion: '1.0.0',
+      counts: { books: 3 },
+    };
     const adapter = {
       type: 'booklore',
       validate: vi.fn(),
-      snapshot: vi.fn().mockResolvedValue({
-        generatedAt: '2026-01-01T00:00:00.000Z',
-        sourceType: 'booklore',
-        sourceVersion: '1.0.0',
-        counts: { books: 3 },
-      }),
+      snapshot: vi.fn().mockResolvedValue(snapshot),
       exportData: vi.fn().mockResolvedValue(sourceData),
+      exportWithSnapshot: vi.fn().mockResolvedValue({ snapshot, data: sourceData }),
     };
 
     const adapterRegistry = {
@@ -136,6 +138,9 @@ describe('MigrationPlannerService', () => {
     });
 
     expect(adapterRegistry.get).toHaveBeenCalledWith('booklore');
+    expect(adapter.exportWithSnapshot).toHaveBeenCalledTimes(1);
+    expect(adapter.snapshot).not.toHaveBeenCalled();
+    expect(adapter.exportData).not.toHaveBeenCalled();
     expect(matchingService.matchBooks).toHaveBeenCalledWith(sourceData.books, [
       { sourcePrefix: '/src', targetPrefix: '/library' },
       { sourcePrefix: '/legacy', targetPrefix: '/new-library' },

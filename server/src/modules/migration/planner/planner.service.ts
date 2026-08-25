@@ -31,8 +31,10 @@ export class MigrationPlannerService {
     const adapter = this.adapterRegistry.get(source.type);
 
     const connectionConfig = parseConnectionConfig(source.type, source.connectionConfig);
-    const snapshot = await adapter.snapshot(connectionConfig);
-    const sourceData = await adapter.exportData(connectionConfig);
+    const exported = adapter.exportWithSnapshot
+      ? await adapter.exportWithSnapshot(connectionConfig)
+      : { snapshot: await adapter.snapshot(connectionConfig), data: await adapter.exportData(connectionConfig) };
+    const { snapshot, data: sourceData } = exported;
 
     const userMappings = parseUserMappings(profile.userMappings);
     const pathMappings = parsePathMappings(profile.pathMappings);

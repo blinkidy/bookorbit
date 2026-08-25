@@ -28,17 +28,19 @@ export class CalibreWebAutomatedSourceAdapter implements SourceAdapter<CalibreWe
   }
 
   async snapshot(config: CalibreWebAutomatedConnectionConfig): Promise<SourceSnapshot> {
-    const normalized = await this.fetchNormalized(config);
-    return {
-      generatedAt: new Date().toISOString(),
-      sourceType: this.type,
-      sourceVersion: normalized.sourceVersion,
-      counts: buildCounts(normalized),
-    };
+    return this.buildSnapshot(await this.fetchNormalized(config));
   }
 
   async exportData(config: CalibreWebAutomatedConnectionConfig): Promise<SourceExportData> {
     return (await this.fetchNormalized(config)).data;
+  }
+
+  async exportWithSnapshot(config: CalibreWebAutomatedConnectionConfig): Promise<{ snapshot: SourceSnapshot; data: SourceExportData }> {
+    const normalized = await this.fetchNormalized(config);
+    return {
+      snapshot: this.buildSnapshot(normalized),
+      data: normalized.data,
+    };
   }
 
   async fetchPathPrefixes(config: CalibreWebAutomatedConnectionConfig): Promise<string[]> {
@@ -69,6 +71,15 @@ export class CalibreWebAutomatedSourceAdapter implements SourceAdapter<CalibreWe
       ...Object.entries(combined.counters).map(([category, count]) => `${count} source rows reported ${category.replaceAll('_', ' ')}`),
     ];
     return combined;
+  }
+
+  private buildSnapshot(normalized: CalibreWebAutomatedNormalizationResult): SourceSnapshot {
+    return {
+      generatedAt: new Date().toISOString(),
+      sourceType: this.type,
+      sourceVersion: normalized.sourceVersion,
+      counts: buildCounts(normalized),
+    };
   }
 }
 

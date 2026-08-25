@@ -553,6 +553,8 @@ describe('ReadingSessionRepository - findLatestEndProgress', () => {
     await expect(repo.findLatestEndProgress(1, 2)).resolves.toBe(42.5);
     expect(orderBy).toHaveBeenCalledTimes(1);
     expect(orderBy.mock.calls[0]).toHaveLength(2);
+    expect((orderBy.mock.calls[0]![0] as { queryChunks: unknown[] }).queryChunks).toContain(readingSessions.endedAt);
+    expect((orderBy.mock.calls[0]![1] as { queryChunks: unknown[] }).queryChunks).toContain(readingSessions.id);
     expect(limit).toHaveBeenCalledWith(1);
   });
 

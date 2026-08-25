@@ -183,7 +183,7 @@ export class ReadingSessionRepository {
           loggedReadingSessionFilter(),
         ),
       )
-      .orderBy(desc(readingSessions.startedAt), desc(readingSessions.id))
+      .orderBy(desc(readingSessions.endedAt), desc(readingSessions.id))
       .limit(1);
 
     return row?.endProgress ?? null;

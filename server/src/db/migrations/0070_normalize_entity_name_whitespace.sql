@@ -122,6 +122,20 @@ WITH normalized AS (
 DELETE FROM book_narrators bn USING duplicates d WHERE bn.narrator_id = d.duplicate_id;--> statement-breakpoint
 
 WITH normalized AS (
+  SELECT id, name, sort_name, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
+  FROM narrators
+), canonical AS (
+  SELECT id, first_value(id) OVER (PARTITION BY norm ORDER BY (name = norm) DESC, id ASC) AS canonical_id
+  FROM normalized WHERE norm <> ''
+), canonical_groups AS (
+  SELECT DISTINCT canonical_id FROM canonical
+)
+UPDATE narrators target SET
+  sort_name = COALESCE(target.sort_name, (SELECT source.sort_name FROM narrators source JOIN canonical c ON c.id = source.id WHERE c.canonical_id = target.id AND source.sort_name IS NOT NULL ORDER BY source.id ASC LIMIT 1))
+FROM canonical_groups g
+WHERE target.id = g.canonical_id;--> statement-breakpoint
+
+WITH normalized AS (
   SELECT id, name, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
   FROM narrators
 ), canonical AS (
