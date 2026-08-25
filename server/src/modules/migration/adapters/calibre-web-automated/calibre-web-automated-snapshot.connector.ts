@@ -558,19 +558,20 @@ function readSourceRecords(appDatabase: DatabaseSync, metadataDatabase: Database
 }
 
 function* readSourceRecordBatches(appDatabase: DatabaseSync, metadataDatabase: DatabaseSync): Generator<CalibreWebAutomatedSourceRecords> {
-  const warnings = new WarningCollector();
+  const sharedWarnings = new WarningCollector();
   const { compatibilityWarnings, capabilities } = inspectSource(appDatabase, metadataDatabase);
-  const users = readMapped(appDatabase, USER_SQL, CORE_PAGE_SIZE, (row) => mapUser(row, warnings));
+  const users = readMapped(appDatabase, USER_SQL, CORE_PAGE_SIZE, (row) => mapUser(row, sharedWarnings));
   const userIds = new Set(users.map((row) => row.id));
   const bookIds = readIdSet(metadataDatabase, 'books');
-  const settings = capabilities.settings ? readSettings(appDatabase, getColumns(appDatabase, 'settings'), warnings) : [];
-  const shelves = capabilities.shelves ? readMapped(appDatabase, SHELF_SQL, CORE_PAGE_SIZE, (row) => mapShelf(row, userIds, warnings)) : [];
+  const settings = capabilities.settings ? readSettings(appDatabase, getColumns(appDatabase, 'settings'), sharedWarnings) : [];
+  const shelves = capabilities.shelves ? readMapped(appDatabase, SHELF_SQL, CORE_PAGE_SIZE, (row) => mapShelf(row, userIds, sharedWarnings)) : [];
   const shelfIds = new Set(shelves.map((row) => row.id));
   const statement = metadataDatabase.prepare(BOOK_SQL);
   let lastId = -1;
   let yielded = false;
 
   while (true) {
+    const warnings = new WarningCollector();
     const rows = statement.all(lastId, CORE_PAGE_SIZE) as SqlRow[];
     const books = rows.flatMap((row) => {
       const id = positiveInteger(row.id);
@@ -581,10 +582,6 @@ function* readSourceRecordBatches(appDatabase: DatabaseSync, metadataDatabase: D
     });
     if (rows.length === 0) break;
     const currentBookIds = books.map((book) => book.id);
-    if (currentBookIds.length === 0) {
-      if (rows.length < CORE_PAGE_SIZE) break;
-      continue;
-    }
 
     const files = readMappedForValues(metadataDatabase, FILE_SQL, 'bookId', currentBookIds, CORE_PAGE_SIZE, (row) => mapFile(row, bookIds, warnings));
     const authorLinks = capabilities.authors
@@ -666,11 +663,12 @@ function* readSourceRecordBatches(appDatabase: DatabaseSync, metadataDatabase: D
         )
       : [];
 
+    const includeSharedWarnings = !yielded;
     yielded = true;
     yield {
       sourceVersion: null,
       compatibilityWarnings,
-      warnings: warnings.values(),
+      warnings: mergeConnectorWarnings(includeSharedWarnings ? sharedWarnings.values() : [], warnings.values()),
       capabilities,
       settings,
       users,
@@ -700,7 +698,7 @@ function* readSourceRecordBatches(appDatabase: DatabaseSync, metadataDatabase: D
     yield {
       sourceVersion: null,
       compatibilityWarnings,
-      warnings: warnings.values(),
+      warnings: sharedWarnings.values(),
       capabilities,
       settings,
       users,
@@ -1288,6 +1286,12 @@ class WarningCollector {
   values(): CalibreWebAutomatedConnectorWarning[] {
     return [...this.counts].map(([category, count]) => ({ category, count }));
   }
+}
+
+function mergeConnectorWarnings(...groups: CalibreWebAutomatedConnectorWarning[][]): CalibreWebAutomatedConnectorWarning[] {
+  const totals = new Map<string, number>();
+  for (const warning of groups.flat()) totals.set(warning.category, (totals.get(warning.category) ?? 0) + warning.count);
+  return [...totals].map(([category, count]) => ({ category, count }));
 }
 
 function requiredText(value: unknown, maximumBytes: number, warnings: WarningCollector, category: string): string | null {

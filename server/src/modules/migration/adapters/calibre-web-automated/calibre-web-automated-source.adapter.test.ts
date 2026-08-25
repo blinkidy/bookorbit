@@ -13,7 +13,10 @@ const config = {
 function sourceRecords(): CalibreWebAutomatedSourceRecords {
   return {
     sourceVersion: null,
-    compatibilityWarnings: ['Schema compatibility was verified against Calibre-Web Automated v4.0.6'],
+    compatibilityWarnings: [
+      'Schema compatibility was verified against Calibre-Web Automated v4.0.6',
+      'Compatible shelf data is unavailable because table shelf is missing',
+    ],
     warnings: [],
     capabilities: {
       settings: true,
@@ -58,6 +61,10 @@ function normalized(): CalibreWebAutomatedNormalizationResult {
   return {
     sourceVersion: null,
     pathPrefixes: ['/logical/calibre-library'],
+    compatibilityWarnings: [
+      'Schema compatibility was verified against Calibre-Web Automated v4.0.6',
+      'Compatible shelf data is unavailable because table shelf is missing',
+    ],
     warnings: [
       'Schema compatibility was verified against Calibre-Web Automated v4.0.6',
       'Compatible shelf data is unavailable because table shelf is missing',
@@ -163,7 +170,7 @@ describe('CalibreWebAutomatedSourceAdapter', () => {
       },
     });
     expect(connector.streamSourceRecordBatches).toHaveBeenCalledWith(config);
-    expect(normalizer.normalize).toHaveBeenCalledWith(records);
+    expect(normalizer.normalize).toHaveBeenCalledWith(records, true);
   });
 
   it('builds stable snapshot counts and returns the normalized export contract', async () => {
@@ -178,6 +185,35 @@ describe('CalibreWebAutomatedSourceAdapter', () => {
     });
     expect(Date.parse(snapshot.generatedAt)).not.toBeNaN();
     await expect(adapter.exportData(config)).resolves.toBe(normalizationResult.data);
+  });
+
+  it('aggregates warning counters across source batches before rendering them', async () => {
+    const records = sourceRecords();
+    const first = normalized();
+    first.compatibilityWarnings = ['Schema compatibility was verified against Calibre-Web Automated v4.0.6'];
+    first.counters = { invalid_published_dates: 1 };
+    first.warnings = ['1 source rows reported invalid published dates'];
+    const second = structuredClone(first);
+    second.data.users = [];
+    second.data.books = [];
+    const connector = {
+      streamSourceRecordBatches: vi.fn(async function* () {
+        await Promise.resolve();
+        yield records;
+        yield records;
+      }),
+    };
+    const normalizer = { normalize: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second) };
+    const adapter = new CalibreWebAutomatedSourceAdapter(connector as never, normalizer as never);
+
+    const result = await adapter.validate(config);
+
+    expect(result.warnings).toEqual([
+      'Schema compatibility was verified against Calibre-Web Automated v4.0.6',
+      '2 source rows reported invalid published dates',
+    ]);
+    expect(normalizer.normalize).toHaveBeenNthCalledWith(1, records, true);
+    expect(normalizer.normalize).toHaveBeenNthCalledWith(2, records, false);
   });
 
   it('returns only the logical CWA media root and preserves inactive domains', async () => {

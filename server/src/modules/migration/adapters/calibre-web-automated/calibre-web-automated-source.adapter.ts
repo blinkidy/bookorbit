@@ -48,7 +48,7 @@ export class CalibreWebAutomatedSourceAdapter implements SourceAdapter<CalibreWe
   private async fetchNormalized(config: CalibreWebAutomatedConnectionConfig): Promise<CalibreWebAutomatedNormalizationResult> {
     let combined: CalibreWebAutomatedNormalizationResult | null = null;
     for await (const records of this.connector.streamSourceRecordBatches(config)) {
-      const batch = this.normalizer.normalize(records);
+      const batch = this.normalizer.normalize(records, combined == null);
       if (!combined) {
         combined = batch;
         continue;
@@ -58,12 +58,16 @@ export class CalibreWebAutomatedSourceAdapter implements SourceAdapter<CalibreWe
       combined.data.userFileProgress.push(...batch.data.userFileProgress);
       combined.data.shelfBooks.push(...batch.data.shelfBooks);
       combined.pathPrefixes = [...new Set([...combined.pathPrefixes, ...batch.pathPrefixes])].sort((left, right) => left.localeCompare(right));
-      combined.warnings = [...new Set([...combined.warnings, ...batch.warnings])];
+      combined.compatibilityWarnings = [...new Set([...combined.compatibilityWarnings, ...batch.compatibilityWarnings])];
       for (const [category, count] of Object.entries(batch.counters)) {
         combined.counters[category] = (combined.counters[category] ?? 0) + count;
       }
     }
     if (!combined) throw new BadRequestException('Calibre-Web Automated snapshot did not produce an import batch');
+    combined.warnings = [
+      ...combined.compatibilityWarnings,
+      ...Object.entries(combined.counters).map(([category, count]) => `${count} source rows reported ${category.replaceAll('_', ' ')}`),
+    ];
     return combined;
   }
 }

@@ -91,26 +91,29 @@ interface NormalizedIdentifiers {
 
 @Injectable()
 export class CalibreWebAutomatedNormalizer {
-  normalize(records: CalibreWebAutomatedSourceRecords): CalibreWebAutomatedNormalizationResult {
+  normalize(records: CalibreWebAutomatedSourceRecords, includeSharedData = true): CalibreWebAutomatedNormalizationResult {
     const counters = new CounterCollector(records.warnings.map((warning) => [warning.category, warning.count]));
     const compatibilityWarnings = new Set(records.compatibilityWarnings.map((warning) => warning.trim()).filter(Boolean));
-    const logicalRoots = normalizeLogicalRoots(records, counters);
+    const sharedCounters = includeSharedData ? counters : new CounterCollector();
+    const logicalRoots = normalizeLogicalRoots(records, sharedCounters);
     const logicalRoot = logicalRoots.length === 1 ? logicalRoots[0] : null;
 
     const anonymousUserIds = new Set(records.users.filter((record) => (record.role & ANONYMOUS_ROLE) !== 0).map((record) => record.id));
     const users = records.users.flatMap((record) => {
       if (anonymousUserIds.has(record.id)) {
-        counters.add('anonymous_users_excluded');
+        sharedCounters.add('anonymous_users_excluded');
         return [];
       }
       const name = normalizeText(record.name);
       if (!name) {
-        counters.add('invalid_users_skipped');
+        sharedCounters.add('invalid_users_skipped');
         return [];
       }
-      return [{ sourceUserId: String(record.id), username: name, name, email: normalizeText(record.email) }];
+      return includeSharedData ? [{ sourceUserId: String(record.id), username: name, name, email: normalizeText(record.email) }] : [];
     });
-    const sourceUserIds = new Set(users.map((user) => user.sourceUserId));
+    const sourceUserIds = new Set(
+      records.users.filter((record) => (record.role & ANONYMOUS_ROLE) === 0 && normalizeText(record.name)).map((record) => String(record.id)),
+    );
 
     const authorLinks = groupBy(records.authorLinks, (record) => record.bookId);
     const publisherLinks = groupBy(records.publisherLinks, (record) => record.bookId);
@@ -187,7 +190,7 @@ export class CalibreWebAutomatedNormalizer {
     ];
     const userFileProgress = mergeProgress(progressCandidates);
     const userBookStatuses = normalizeStatuses(records.statuses, contexts, sourceUserIds, userFileProgress, counters);
-    const { shelves, shelfBooks } = normalizeShelves(records, contexts, sourceUserIds, counters);
+    const { shelves, shelfBooks } = normalizeShelves(records, contexts, sourceUserIds, counters, includeSharedData);
 
     const availableDomains: SourceExportDomains = {
       metadata: true,
@@ -224,6 +227,7 @@ export class CalibreWebAutomatedNormalizer {
       },
       sourceVersion: records.sourceVersion,
       pathPrefixes: logicalRoots,
+      compatibilityWarnings: [...compatibilityWarnings],
       warnings,
       counters: counterValues,
     };
@@ -764,15 +768,16 @@ function normalizeShelves(
   contexts: Map<string, BookContext>,
   sourceUserIds: Set<string>,
   counters: CounterCollector,
+  includeSharedData: boolean,
 ): { shelves: Array<{ sourceShelfId: string; sourceUserId: string; name: string }>; shelfBooks: SourceShelfBook[] } {
   if (!records.capabilities.shelves) return { shelves: [], shelfBooks: [] };
   const shelves = records.shelves.flatMap((record) => {
     const sourceUserId = String(record.userId);
     if (!sourceUserIds.has(sourceUserId)) {
-      counters.add('orphaned_shelves');
+      if (includeSharedData) counters.add('orphaned_shelves');
       return [];
     }
-    if (record.isPublic) counters.add('public_shelves_privatized');
+    if (record.isPublic && includeSharedData) counters.add('public_shelves_privatized');
     return [{ sourceShelfId: String(record.id), sourceUserId, name: record.name.trim() }];
   });
   const shelvesById = new Map(shelves.map((shelf) => [shelf.sourceShelfId, shelf]));

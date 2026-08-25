@@ -26,7 +26,8 @@ SELECT DISTINCT ON (ba.book_id, d.canonical_id) ba.book_id, d.canonical_id, ba.d
 FROM book_authors ba
 JOIN duplicates d ON d.duplicate_id = ba.author_id
 ORDER BY ba.book_id, d.canonical_id, ba.display_order ASC
-ON CONFLICT (book_id, author_id) DO NOTHING;--> statement-breakpoint
+ON CONFLICT (book_id, author_id) DO UPDATE
+SET display_order = LEAST(book_authors.display_order, EXCLUDED.display_order);--> statement-breakpoint
 
 WITH normalized AS (
   SELECT *, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm
@@ -106,7 +107,8 @@ SELECT DISTINCT ON (bn.book_id, d.canonical_id) bn.book_id, d.canonical_id, bn.d
 FROM book_narrators bn
 JOIN duplicates d ON d.duplicate_id = bn.narrator_id
 ORDER BY bn.book_id, d.canonical_id, bn.display_order ASC
-ON CONFLICT (book_id, narrator_id) DO NOTHING;--> statement-breakpoint
+ON CONFLICT (book_id, narrator_id) DO UPDATE
+SET display_order = LEAST(book_narrators.display_order, EXCLUDED.display_order);--> statement-breakpoint
 
 WITH normalized AS (
   SELECT id, name, btrim(regexp_replace(replace(name, chr(160), ' '), '[[:space:]]+', ' ', 'g')) AS norm

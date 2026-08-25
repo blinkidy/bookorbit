@@ -194,6 +194,7 @@ export interface CalibreWebAutomatedNormalizationResult {
   data: SourceExportData;
   sourceVersion: string | null;
   pathPrefixes: string[];
+  compatibilityWarnings: string[];
   warnings: string[];
   counters: Record<string, number>;
 }
