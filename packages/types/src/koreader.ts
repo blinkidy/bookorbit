@@ -11,6 +11,7 @@ export interface KoreaderDeviceInfo {
   deviceId: string;
   lastSyncAt: string;
   lastBookTitle: string | null;
+  retiredAt: string | null;
   fileNamingPattern?: string | null;
   seriesFileNamingPattern?: string | null;
   standaloneFileNamingPattern?: string | null;
@@ -40,6 +41,7 @@ export interface KoreaderDeviceSweepInfo {
   lastSweepBooksMatched: number;
   lastSweepPageStats: number;
   lastSweepAnnotations: number;
+  retiredAt: string | null;
   fileNamingPattern?: string | null;
   seriesFileNamingPattern?: string | null;
   standaloneFileNamingPattern?: string | null;
@@ -76,6 +78,19 @@ export interface KoreaderBookSyncInfo {
   canonicalUpdatedAt: string;
   devices: KoreaderBookProgress[];
   fileModifiedSinceLastSync: boolean;
+  /**
+   * Devices sitting on a position the user reset away from. Their pushes are recorded but do
+   * not move the book until the device takes the reset, so this is the state behind a device
+   * and a book that visibly disagree.
+   */
+  heldByReset: KoreaderResetHeldDevice[];
+}
+
+export interface KoreaderResetHeldDevice {
+  device: string;
+  deviceId: string;
+  percentage: number;
+  updatedAt: string;
 }
 
 export interface KoreaderUnmatchedBook {

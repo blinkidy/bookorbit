@@ -37,6 +37,8 @@ export interface SourceBookFile {
   fileName: string | null;
   fileSubPath: string | null;
   durationSeconds: number | null;
+  format?: string | null;
+  sortOrder?: number | null;
 }
 
 export interface SourceBook {
@@ -50,6 +52,7 @@ export interface SourceBook {
   subtitle: string | null;
   isbn10: string | null;
   isbn13: string | null;
+  asin?: string | null;
   description: string | null;
   publisher: string | null;
   publishedYear: number | null;
@@ -147,6 +150,7 @@ export interface SourceShelfBook {
   sourceShelfId: string;
   sourceUserId: string;
   sourceBookId: string;
+  position?: number | null;
 }
 
 export interface SourceExportDomains {
@@ -185,6 +189,8 @@ export interface SourceAdapter<TConnectionConfig = unknown> {
   snapshot(config: TConnectionConfig): Promise<SourceSnapshot>;
 
   exportData(config: TConnectionConfig): Promise<SourceExportData>;
+
+  exportWithSnapshot?(config: TConnectionConfig): Promise<{ snapshot: SourceSnapshot; data: SourceExportData }>;
 
   fetchPathPrefixes?(config: TConnectionConfig): Promise<string[]>;
 }

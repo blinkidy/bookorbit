@@ -80,16 +80,18 @@ describe('MigrationPlannerService', () => {
       },
     };
 
+    const snapshot = {
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      sourceType: 'booklore',
+      sourceVersion: '1.0.0',
+      counts: { books: 3 },
+    };
     const adapter = {
       type: 'booklore',
       validate: vi.fn(),
-      snapshot: vi.fn().mockResolvedValue({
-        generatedAt: '2026-01-01T00:00:00.000Z',
-        sourceType: 'booklore',
-        sourceVersion: '1.0.0',
-        counts: { books: 3 },
-      }),
+      snapshot: vi.fn().mockResolvedValue(snapshot),
       exportData: vi.fn().mockResolvedValue(sourceData),
+      exportWithSnapshot: vi.fn().mockResolvedValue({ snapshot, data: sourceData }),
     };
 
     const adapterRegistry = {
@@ -99,7 +101,7 @@ describe('MigrationPlannerService', () => {
       matchBooks: vi.fn().mockResolvedValue({
         matches: [
           { sourceBookId: 's1', targetBookId: 100, strategy: 'isbn' },
-          { sourceBookId: 's2', targetBookId: 100, strategy: 'path_mapping' },
+          { sourceBookId: 's2', targetBookId: 100, strategy: 'asin' },
           { sourceBookId: 's3', targetBookId: 101, strategy: 'title_author' },
         ],
         unresolved: [{ sourceBookId: 'sx', title: 'Missing', reason: 'unmatched' }],
@@ -122,6 +124,7 @@ describe('MigrationPlannerService', () => {
         userMappings: [
           { sourceUserId: 'u1', targetUserId: 501 },
           { source_user_id: 'u2', target_user_id: 502 },
+          { sourceUserId: 'u3', targetUserId: null },
           { sourceUserId: '', targetUserId: 503 },
         ],
         pathMappings: [
@@ -135,6 +138,9 @@ describe('MigrationPlannerService', () => {
     });
 
     expect(adapterRegistry.get).toHaveBeenCalledWith('booklore');
+    expect(adapter.exportWithSnapshot).toHaveBeenCalledTimes(1);
+    expect(adapter.snapshot).not.toHaveBeenCalled();
+    expect(adapter.exportData).not.toHaveBeenCalled();
     expect(matchingService.matchBooks).toHaveBeenCalledWith(sourceData.books, [
       { sourcePrefix: '/src', targetPrefix: '/library' },
       { sourcePrefix: '/legacy', targetPrefix: '/new-library' },
@@ -143,18 +149,21 @@ describe('MigrationPlannerService', () => {
     expect(result.plan.userMappings).toEqual([
       { sourceUserId: 'u1', targetUserId: 501 },
       { sourceUserId: 'u2', targetUserId: 502 },
+      { sourceUserId: 'u3', targetUserId: null },
     ]);
     expect(result.plan.pathMappings).toEqual([
       { sourcePrefix: '/src', targetPrefix: '/library' },
       { sourcePrefix: '/legacy', targetPrefix: '/new-library' },
     ]);
     expect(result.plan.scope).toEqual({ metadata: true, tags: false, readingProgress: true });
+    expect(result.plan.matchingPriority).toEqual(['isbn', 'asin', 'file_hash', 'path_mapping', 'title_author']);
 
     expect(result.execution.matchedBooks).toEqual([{ sourceBookId: 's3', targetBookId: 101, strategy: 'title_author' }]);
     expect(result.execution.duplicateBookMatches).toEqual([
       expect.objectContaining({
         targetBookId: 100,
         sourceBookIds: ['s1', 's2'],
+        strategies: ['isbn', 'asin'],
       }),
     ]);
 

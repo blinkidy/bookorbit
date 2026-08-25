@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RouteRecordRaw } from 'vue-router'
+import { Permission } from '@bookorbit/types'
 import { routes } from '@/router'
 
 type MissingRoute = {
@@ -45,11 +46,99 @@ describe('router title metadata', () => {
 })
 
 describe('router redirects', () => {
-  it('redirects the legacy Readwise route to the Integrations sub-tab', () => {
-    const route = findRoute(routes, 'settings-readwise')
+  it('protects the notification settings route from direct navigation', () => {
+    const route = findRoute(routes, 'settings-notifications')
+
+    expect(route?.meta).toMatchObject({
+      requiredPermission: Permission.NotificationAccess,
+      forbiddenPermission: Permission.DemoRestricted,
+      permissionFallback: 'settings-account-profile',
+    })
+  })
+
+  it('protects permission-scoped settings routes from direct navigation', () => {
+    const expected = new Map<string, Permission>([
+      ['settings-libraries', Permission.ManageLibraries],
+      ['settings-metadata-providers', Permission.ManageMetadataConfig],
+      ['settings-metadata-field-rules', Permission.ManageMetadataConfig],
+      ['settings-metadata-custom-fields', Permission.ManageLibraries],
+      ['settings-metadata-score', Permission.ManageMetadataConfig],
+      ['settings-metadata-auto-fetch', Permission.ManageMetadataConfig],
+      ['settings-metadata-authors', Permission.ManageMetadataConfig],
+      ['settings-metadata-genre-blocklist', Permission.ManageMetadataConfig],
+      ['settings-file-naming', Permission.ManageAppSettings],
+      ['settings-maintenance', Permission.ManageAppSettings],
+      ['settings-kobo', Permission.KoboSync],
+      ['settings-koreader', Permission.KoreaderSync],
+      ['settings-opds', Permission.OpdsAccess],
+      ['settings-hardcover', Permission.HardcoverSync],
+      ['settings-readwise', Permission.ReadwiseSync],
+      ['settings-storygraph', Permission.StorygraphSync],
+      ['settings-admin-users', Permission.ManageUsers],
+      ['settings-admin-account-activity', Permission.ViewUserActivity],
+      ['settings-admin-shared-insights', Permission.ViewUserActivity],
+      ['settings-admin-oidc', Permission.ManageAppSettings],
+      ['settings-admin-server-fonts', Permission.ManageAppSettings],
+      ['settings-admin-book-dock', Permission.ManageBookDock],
+    ])
+
+    for (const [name, requiredPermission] of expected) {
+      expect(findRoute(routes, name)?.meta).toMatchObject({
+        requiredPermission,
+        permissionFallback: 'settings-account-profile',
+      })
+    }
+  })
+
+  it('protects alternative-permission and superuser-only settings routes', () => {
+    expect(findRoute(routes, 'settings-email')?.meta).toMatchObject({
+      requiredAnyPermission: [Permission.EmailSend, Permission.ManageEmail],
+      permissionFallback: 'settings-account-profile',
+    })
+    for (const name of ['settings-admin-magic-links', 'settings-admin-audit-log']) {
+      expect(findRoute(routes, name)?.meta).toMatchObject({
+        superuserOnly: true,
+        permissionFallback: 'settings-account-profile',
+      })
+    }
+  })
+
+  it('redirects the legacy Integrations tab URL to the Readwise page', () => {
+    const route = findRoute(routes, 'settings-integrations')
     expect(route?.redirect).toBeTypeOf('function')
 
     const redirect = route!.redirect as (to: { query: Record<string, unknown> }) => unknown
-    expect(redirect({ query: {} })).toEqual({ name: 'settings-integrations', query: { tab: 'readwise' } })
+    expect(redirect({ query: { tab: 'readwise' } })).toEqual({ name: 'settings-readwise', query: {} })
+  })
+
+  it('redirects the legacy Integrations tab URL to the standalone Kobo page', () => {
+    const route = findRoute(routes, 'settings-integrations')
+    const redirect = route!.redirect as (to: { query: Record<string, unknown> }) => unknown
+    expect(redirect({ query: { tab: 'kobo' } })).toEqual({ name: 'settings-kobo', query: {} })
+  })
+
+  it('maps every legacy settings tab query to its own route', () => {
+    const cases: { name: string; tab: string; expected: string }[] = [
+      { name: 'settings-admin', tab: 'oidc', expected: 'settings-admin-oidc' },
+      { name: 'settings-admin', tab: 'magic-links', expected: 'settings-admin-magic-links' },
+      { name: 'settings-system', tab: 'audit-log', expected: 'settings-admin-audit-log' },
+      { name: 'settings-system', tab: 'file-naming', expected: 'settings-file-naming' },
+      { name: 'settings-admin-metadata', tab: 'auto-fetch', expected: 'settings-metadata-auto-fetch' },
+      { name: 'settings-appearance', tab: 'layout', expected: 'settings-appearance-layout' },
+      { name: 'settings-reader', tab: 'comics', expected: 'settings-reader-comics' },
+      { name: 'settings-account', tab: 'notifications', expected: 'settings-notifications' },
+    ]
+
+    for (const { name, tab, expected } of cases) {
+      const route = findRoute(routes, name)
+      const redirect = route!.redirect as (to: { query: Record<string, unknown> }) => { name: string }
+      expect(redirect({ query: { tab } }).name).toBe(expected)
+    }
+  })
+
+  it('keeps unrelated query parameters when dropping the legacy tab parameter', () => {
+    const route = findRoute(routes, 'settings-admin')
+    const redirect = route!.redirect as (to: { query: Record<string, unknown> }) => { query: Record<string, unknown> }
+    expect(redirect({ query: { tab: 'users', page: '2' } }).query).toEqual({ page: '2' })
   })
 })
