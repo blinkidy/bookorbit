@@ -223,12 +223,34 @@ describe('AuthorEnrichmentExecutorService', () => {
     expect(result).toMatchObject({ kind: 'failed', provider: AuthorMetadataProviderKey.GOODREADS, httpStatus: 429, transient: true });
   });
 
-  it('surfaces an image storage failure', async () => {
-    imageStorage.saveFromUrl.mockRejectedValue(new AuthorImageStorageError('too big', { httpStatus: 413, transient: false }));
+  it('surfaces a transient image storage failure', async () => {
+    imageStorage.saveFromUrl.mockRejectedValue(new AuthorImageStorageError('upstream unavailable', { httpStatus: 503, transient: true }));
 
     const result = await service.execute({ authorId: 5, preferences: prefs() });
 
-    expect(result).toMatchObject({ kind: 'failed', message: 'too big', httpStatus: 413, transient: false });
+    expect(result).toMatchObject({ kind: 'failed', message: 'upstream unavailable', httpStatus: 503, transient: true });
+  });
+
+  it('falls back to the next photo provider after a permanent image failure', async () => {
+    imageStorage.saveFromUrl
+      .mockRejectedValueOnce(new AuthorImageStorageError('invalid image', { httpStatus: 415, transient: false }))
+      .mockResolvedValueOnce(true);
+
+    const result = await service.execute({ authorId: 5, preferences: prefs() });
+
+    expect(imageStorage.saveFromUrl).toHaveBeenNthCalledWith(1, 5, 'https://img.example/goodreads.jpg');
+    expect(imageStorage.saveFromUrl).toHaveBeenNthCalledWith(2, 5, 'https://img.example/audnexus.jpg');
+    expect(result).toMatchObject({ kind: 'done', imageUpdated: true });
+  });
+
+  it('keeps resolved metadata when every photo candidate fails permanently', async () => {
+    imageStorage.saveFromUrl.mockRejectedValue(new AuthorImageStorageError('invalid image', { httpStatus: 415, transient: false }));
+    imageStorage.getThumbnailPath.mockResolvedValue(null);
+
+    const result = await service.execute({ authorId: 5, preferences: prefs() });
+
+    expect(result).toMatchObject({ kind: 'done', descriptionUpdated: true, imageUpdated: false });
+    expect(authorsRepo.updateAuthorById).toHaveBeenCalledWith(5, expect.objectContaining({ description: 'Goodreads bio', hasPhoto: false }));
   });
 
   it('stores a photo and marks hasPhoto from what is on disk', async () => {

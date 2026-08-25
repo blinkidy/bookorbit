@@ -899,6 +899,24 @@ describe('KoreaderService', () => {
       expect(mockRepo.upsertReadingProgress).toHaveBeenCalledTimes(1);
     });
 
+    it('retires a reset when the same sweep converges and then advances the file', async () => {
+      mockRepo.getProgressResetsForFiles.mockResolvedValue(new Map([[10, resetAt]]));
+
+      const result = await service.applyBulkProgress(
+        7,
+        [
+          { bookFile: bookFile(10), percentage: 0, progress: '/body/DocFragment[1]' },
+          { bookFile: bookFile(10), percentage: 0.42, progress: '/body/DocFragment[6]/body' },
+        ],
+        device,
+      );
+
+      expect(result).toEqual({ shared: 2, stale: 0, held: 0 });
+      expect(mockRepo.recordResetConvergence).toHaveBeenCalledWith(10, 7, 'device-a');
+      expect(mockRepo.clearProgressReset).toHaveBeenCalledWith(10, 7);
+      expect(mockRepo.upsertReadingProgress).toHaveBeenCalledTimes(2);
+    });
+
     it('does not report a held device as KOReader-latest', async () => {
       mockRepo.findBookFileIdByBookId.mockResolvedValue(10);
       mockRepo.getProgressReset.mockResolvedValue(resetAt);

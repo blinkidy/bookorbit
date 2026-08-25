@@ -216,6 +216,7 @@ export class AuthorEnrichmentExecutorService {
         return { kind: 'stored', provider };
       } catch (error) {
         const storageError = error instanceof AuthorImageStorageError ? error : null;
+        if (storageError?.transient === false) continue;
         return {
           kind: 'failed',
           result: {

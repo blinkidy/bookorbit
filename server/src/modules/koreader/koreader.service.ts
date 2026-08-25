@@ -354,8 +354,12 @@ export class KoreaderService {
         if (!atStart) retiredResetFileIds.add(bookFileId);
         continue;
       }
-      if (atStart) convergedResetFileIds.add(bookFileId);
-      else plan.heldByReset = true;
+      if (atStart) {
+        convergedResetFileIds.add(bookFileId);
+        const convergedDevices = convergedByFile.get(bookFileId) ?? new Set<string>();
+        convergedDevices.add(device.deviceId);
+        convergedByFile.set(bookFileId, convergedDevices);
+      } else plan.heldByReset = true;
     }
     for (const bookFileId of convergedResetFileIds) await this.repo.recordResetConvergence(bookFileId, userId, device.deviceId);
     for (const bookFileId of retiredResetFileIds) await this.repo.clearProgressReset(bookFileId, userId);
