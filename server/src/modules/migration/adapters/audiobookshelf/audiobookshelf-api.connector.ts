@@ -228,19 +228,33 @@ export class AudiobookshelfApiConnector {
     await this.authorize(config);
     const [users, libraries] = await Promise.all([this.getUsers(config), this.getLibraries(config)]);
     const bookLibraries = libraries.filter((library) => library.mediaType === 'book');
-    const [firstItemPages, userDetails, firstSessionPages] = await Promise.all([
-      mapWithConcurrency(bookLibraries, USER_DETAIL_CONCURRENCY, (library) => this.getLibraryItemsPage(config, library.id, 0)),
-      mapWithConcurrency(users, USER_DETAIL_CONCURRENCY, (user) => this.getUserDetails(config, user.id)),
-      mapWithConcurrency(users, USER_DETAIL_CONCURRENCY, (user) => this.getUserListeningSessionsPage(config, user.id, 0)),
+    let libraryItems = 0;
+    let mediaProgress = 0;
+    let bookmarks = 0;
+    let readingSessions = 0;
+    await Promise.all([
+      forEachWithConcurrency(bookLibraries, USER_DETAIL_CONCURRENCY, async (library) => {
+        const page = await this.getLibraryItemsPage(config, library.id, 0);
+        libraryItems += page.total;
+      }),
+      forEachWithConcurrency(users, USER_DETAIL_CONCURRENCY, async (user) => {
+        const detail = await this.getUserDetails(config, user.id);
+        mediaProgress += detail.mediaProgress.length;
+        bookmarks += detail.bookmarks.length;
+      }),
+      forEachWithConcurrency(users, USER_DETAIL_CONCURRENCY, async (user) => {
+        const page = await this.getUserListeningSessionsPage(config, user.id, 0);
+        readingSessions += page.total;
+      }),
     ]);
     return {
       sourceVersion: status.sourceVersion,
       counts: {
         users: users.length,
-        libraryItems: firstItemPages.reduce((total, page) => total + page.total, 0),
-        mediaProgress: userDetails.reduce((total, detail) => total + detail.mediaProgress.length, 0),
-        bookmarks: userDetails.reduce((total, detail) => total + detail.bookmarks.length, 0),
-        readingSessions: firstSessionPages.reduce((total, page) => total + page.total, 0),
+        libraryItems,
+        mediaProgress,
+        bookmarks,
+        readingSessions,
       },
     };
   }
@@ -678,17 +692,15 @@ function mapPlaybackSession(raw: unknown): AudiobookshelfPlaybackSessionRecord |
   };
 }
 
-async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper: (value: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(values.length);
+async function forEachWithConcurrency<T>(values: T[], concurrency: number, task: (value: T) => Promise<void>): Promise<void> {
   let nextIndex = 0;
   async function worker(): Promise<void> {
     while (nextIndex < values.length) {
       const index = nextIndex++;
-      results[index] = await mapper(values[index]);
+      await task(values[index]);
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, () => worker()));
-  return results;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
