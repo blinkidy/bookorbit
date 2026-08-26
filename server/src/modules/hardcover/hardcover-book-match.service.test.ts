@@ -91,6 +91,32 @@ describe('HardcoverBookMatchService', () => {
     expect(mockRepo.upsertBookState).not.toHaveBeenCalled();
   });
 
+  it('validates the exact cached edition instead of relying on the capped selection window', async () => {
+    mockRepo.findBookState.mockResolvedValue({
+      hardcoverBookId: 1,
+      hardcoverEditionId: 1589497,
+      matchError: null,
+    });
+    mockClient.query.mockResolvedValue({
+      books: [{ id: 1, editions: [{ id: 1589497, pages: 375, isbn_13: '9780439023481' }] }],
+    });
+
+    const result = await makeService().matchBook(1, 'tok', baseBook);
+
+    expect(result).toMatchObject({
+      hardcoverBookId: 1,
+      hardcoverEditionId: 1589497,
+      editionPages: 375,
+      matchMethod: 'cached',
+    });
+    expect(mockClient.query).toHaveBeenCalledOnce();
+    expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookEditionById'), {
+      id: 1,
+      editionId: 1589497,
+    });
+    expect(mockRepo.upsertBookState).not.toHaveBeenCalled();
+  });
+
   it('re-points a cached match when the cached edition no longer exists on Hardcover', async () => {
     mockRepo.findBookState.mockResolvedValue({
       hardcoverBookId: 100,
@@ -104,6 +130,7 @@ describe('HardcoverBookMatchService', () => {
     const result = await makeService().matchBook(1, 'tok', { ...baseBook, isbn13: '9781234567890', pageCount: 410 });
 
     expect(result?.hardcoverEditionId).toBe(301);
+    expect(mockClient.query).toHaveBeenCalledTimes(2);
     expect(mockRepo.upsertBookState).toHaveBeenCalledWith(
       expect.objectContaining({ hardcoverBookId: 100, hardcoverEditionId: 301, matchMethod: 'cached' }),
     );

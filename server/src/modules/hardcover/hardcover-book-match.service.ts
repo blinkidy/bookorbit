@@ -467,19 +467,17 @@ export class HardcoverBookMatchService {
     cachedEditionId: number | null,
   ): Promise<{ hardcoverEditionId: number | null; editionPages: number | null; editionAudioSeconds: number | null; editionIsAudio: boolean }> {
     try {
-      const data = await this.client.query<BooksQueryResult>(userId, token, FIND_BOOK_EDITIONS_BY_HARDCOVER_ID_QUERY, {
-        id: hardcoverBookId,
-      });
-      const hardcoverBook = data.books?.[0];
-      if (!hardcoverBook) {
-        return { hardcoverEditionId: cachedEditionId, editionPages: null, editionAudioSeconds: null, editionIsAudio: false };
-      }
-
-      const editions = hardcoverBook.editions ?? [];
-
-      // A missing page count is not a reason to silently re-point the user's edition.
       if (cachedEditionId != null) {
-        const cachedEdition = editions.find((edition) => edition.id === cachedEditionId);
+        const exactData = await this.client.query<BooksQueryResult>(userId, token, FIND_BOOK_EDITION_BY_ID_QUERY, {
+          id: hardcoverBookId,
+          editionId: cachedEditionId,
+        });
+        const exactBook = exactData.books?.[0];
+        if (!exactBook) {
+          return { hardcoverEditionId: cachedEditionId, editionPages: null, editionAudioSeconds: null, editionIsAudio: false };
+        }
+
+        const cachedEdition = exactBook.editions?.find((edition) => edition.id === cachedEditionId);
         if (cachedEdition) {
           return {
             hardcoverEditionId: cachedEditionId,
@@ -489,6 +487,16 @@ export class HardcoverBookMatchService {
           };
         }
       }
+
+      const data = await this.client.query<BooksQueryResult>(userId, token, FIND_BOOK_EDITIONS_BY_HARDCOVER_ID_QUERY, {
+        id: hardcoverBookId,
+      });
+      const hardcoverBook = data.books?.[0];
+      if (!hardcoverBook) {
+        return { hardcoverEditionId: cachedEditionId, editionPages: null, editionAudioSeconds: null, editionIsAudio: false };
+      }
+
+      const editions = hardcoverBook.editions ?? [];
 
       const edition = this.pickBestEdition(editions, book);
       if (!edition) {
