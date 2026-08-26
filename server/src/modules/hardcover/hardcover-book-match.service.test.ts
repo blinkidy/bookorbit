@@ -375,6 +375,28 @@ describe('HardcoverBookMatchService', () => {
       expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookBySlug'), { slug: 'fyrebirds' });
     });
 
+    it('resolves a Hardcover edition URL to its book slug and exact edition', async () => {
+      mockClient.query.mockResolvedValue({
+        books: [{ id: 1, title: 'The Hunger Games', editions: [{ id: 1589497, pages: 374 }] }],
+      });
+
+      const result = await makeService().resolveManualInput(1, 'tok', 'https://hardcover.app/books/the-hunger-games/editions/1589497', baseBook);
+
+      expect(result).toEqual({ hardcoverBookId: 1, hardcoverEditionId: 1589497, title: 'The Hunger Games' });
+      expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookEditionBySlug'), {
+        slug: 'the-hunger-games',
+        editionId: 1589497,
+      });
+    });
+
+    it('rejects an edition URL when the edition does not belong to the URL book', async () => {
+      mockClient.query.mockResolvedValue({ books: [{ id: 1, title: 'The Hunger Games', editions: [] }] });
+
+      const result = await makeService().resolveManualInput(1, 'tok', 'https://hardcover.app/books/the-hunger-games/editions/1589497', baseBook);
+
+      expect(result).toBeNull();
+    });
+
     it('returns null when the book cannot be found', async () => {
       mockClient.query.mockResolvedValue({ books: [] });
 
