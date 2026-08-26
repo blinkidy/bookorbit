@@ -91,6 +91,16 @@ query FindBookBySlug($slug: String!) {
   }
 }`;
 
+const FIND_BOOK_EDITION_BY_SLUG_QUERY = `
+query FindBookEditionBySlug($slug: String!, $editionId: Int!) {
+  books(where: { slug: { _eq: $slug } }, limit: 1) {
+    id
+    title
+    editions(where: { id: { _eq: $editionId } }, limit: 1) {${EDITION_FIELDS}
+    }
+  }
+}`;
+
 const FIND_BOOK_EDITIONS_BY_HARDCOVER_ID_QUERY = `
 query FindBookEditionsById($id: Int!) {
   books(where: { id: { _eq: $id } }, limit: 1) {
@@ -582,13 +592,24 @@ export class HardcoverBookMatchService {
     if (!identifier) return null;
 
     try {
-      const query = identifier.kind === 'id' ? FIND_BOOK_BY_HARDCOVER_ID_QUERY : FIND_BOOK_BY_HARDCOVER_SLUG_QUERY;
-      const variables = identifier.kind === 'id' ? { id: identifier.value } : { slug: identifier.value };
+      const query =
+        identifier.kind === 'id'
+          ? FIND_BOOK_BY_HARDCOVER_ID_QUERY
+          : identifier.kind === 'edition'
+            ? FIND_BOOK_EDITION_BY_SLUG_QUERY
+            : FIND_BOOK_BY_HARDCOVER_SLUG_QUERY;
+      const variables =
+        identifier.kind === 'id'
+          ? { id: identifier.value }
+          : identifier.kind === 'edition'
+            ? { slug: identifier.slug, editionId: identifier.editionId }
+            : { slug: identifier.value };
       const data = await this.client.query<BooksQueryResult>(userId, token, query, variables);
       const hardcoverBook = data.books?.[0];
       if (!hardcoverBook) return null;
 
-      const edition = this.pickBestEdition(hardcoverBook.editions ?? [], book);
+      const edition = identifier.kind === 'edition' ? hardcoverBook.editions?.[0] : this.pickBestEdition(hardcoverBook.editions ?? [], book);
+      if (identifier.kind === 'edition' && !edition) return null;
       return { hardcoverBookId: hardcoverBook.id, hardcoverEditionId: edition?.id ?? null, title: hardcoverBook.title ?? '' };
     } catch (err) {
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
@@ -597,7 +618,9 @@ export class HardcoverBookMatchService {
     }
   }
 
-  private extractBookIdentifierFromInput(input: string): { kind: 'id'; value: number } | { kind: 'slug'; value: string } | null {
+  private extractBookIdentifierFromInput(
+    input: string,
+  ): { kind: 'id'; value: number } | { kind: 'slug'; value: string } | { kind: 'edition'; slug: string; editionId: number } | null {
     const value = input.trim();
     if (!value) return null;
 
@@ -605,6 +628,14 @@ export class HardcoverBookMatchService {
     try {
       const parsed = new URL(value);
       const segments = parsed.pathname.split('/').filter(Boolean);
+      const booksIndex = segments.indexOf('books');
+      if (booksIndex >= 0 && segments[booksIndex + 1] && segments[booksIndex + 2] === 'editions' && /^\d+$/.test(segments[booksIndex + 3] ?? '')) {
+        return {
+          kind: 'edition',
+          slug: segments[booksIndex + 1]!,
+          editionId: parseInt(segments[booksIndex + 3]!, 10),
+        };
+      }
       if (segments.length > 0) candidate = segments[segments.length - 1]!;
     } catch {
       // Not a URL - treat the raw input as an id or slug.
