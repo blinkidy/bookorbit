@@ -172,7 +172,6 @@ jobs:
   docker-promote:
     name: Build Release Docker Image
     needs: [release]
-    if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
