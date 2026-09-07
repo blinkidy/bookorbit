@@ -18,8 +18,9 @@ import { MAX_BOOK_QUERY_OFFSET_ROWS, isBookQueryOffsetWithinLimit } from '../../
 import { resolveIsAudiobook } from '../../common/utils/book-media.utils';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { normalizeMetadataText, normalizeMetadataTextKey } from '../../common/utils/metadata-text-normalize.utils';
+import { naturalCompare } from '../../common/utils/natural-sort.utils';
 import { normalizePublishedDate, publishedYearFromDateKey } from '../../common/utils/published-date.utils';
-import { formatSeriesIndex } from '../../common/utils/series-index-format.utils';
+import { buildPatternTokens } from '../../common/utils/pattern-tokens.utils';
 import { SeriesExpectedCountService } from '../../common/services/series-expected-count.service';
 import { SeriesMembershipService } from '../../common/services/series-membership.service';
 import { isDateKey, resolveTimeZone, toDateKeyInTimeZone, toTimeZoneStartOfDay } from '../../common/utils/timezone.utils';
@@ -29,7 +30,7 @@ import { extractCbzMetadata, extractCbrMetadata, extractCb7Metadata } from '../m
 import { parseFb2File } from '../metadata/lib/fb2-parser';
 import { parseMobiFile } from '../metadata/lib/mobi-parser';
 import { parsePdfFile, type PdfParseWarning } from '../metadata/lib/pdf-parser';
-import { basename, dirname, extname, join } from 'path';
+import { basename, dirname, extname, join, relative } from 'path';
 
 import {
   BOOK_METADATA_LOCK_FIELDS,
@@ -399,7 +400,7 @@ export class BookService {
     if (r.pageCount !== undefined) preview.pageCount = r.pageCount as number | null;
     if (r.communityRatings !== undefined) preview.communityRatings = r.communityRatings as BookCommunityRating[];
     if (r.seriesName !== undefined) preview.seriesName = r.seriesName as string | null;
-    if (r.seriesIndex !== undefined) preview.seriesIndex = r.seriesIndex as number | null;
+    if (r.seriesIndex !== undefined) preview.seriesIndex = r.seriesIndex as string | null;
     if (r.seriesMemberships !== undefined) preview.seriesMemberships = r.seriesMemberships as BookMetadataRefreshPreviewFields['seriesMemberships'];
     if (r.coverUrl !== undefined) preview.coverUrl = r.coverUrl as string;
     if (r.hardcoverEditionId !== undefined) preview.hardcoverEditionId = r.hardcoverEditionId as string | null;
@@ -1136,6 +1137,7 @@ export class BookService {
           userId,
           customFieldTypes,
           ...(options?.defaultCollectionId !== undefined ? { defaultCollectionId: options.defaultCollectionId } : {}),
+          ...(query.randomSeed !== undefined ? { randomSeed: query.randomSeed } : {}),
         });
       // Collapsed rows render BookTableCollapsedSeriesCell which does not display custom metadata.
       const result = {
@@ -1163,10 +1165,10 @@ export class BookService {
       return result;
     }
 
-    const orderBy =
-      options?.defaultCollectionId !== undefined
-        ? this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes, { defaultCollectionId: options.defaultCollectionId })
-        : this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes);
+    const orderBy = this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes, {
+      ...(options?.defaultCollectionId !== undefined ? { defaultCollectionId: options.defaultCollectionId } : {}),
+      ...(query.randomSeed !== undefined ? { randomSeed: query.randomSeed } : {}),
+    });
     const { rows, authorRows, fileRows, genreRows, tagRows, progressRows, statusRows, narratorRows, seriesMembershipRows, total } =
       await this.bookRepo.findCards({
         where,
@@ -1205,7 +1207,9 @@ export class BookService {
 
   async executeBookIdsQuery(userId: number, where: SQL | undefined, query: BookQuery): Promise<number[]> {
     const customFieldTypes = await this.resolveCustomSortFieldTypes(query.sort);
-    const orderBy = this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes);
+    const orderBy = this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes, {
+      ...(query.randomSeed !== undefined ? { randomSeed: query.randomSeed } : {}),
+    });
     return this.bookRepo.findCardIds({
       where,
       orderBy,
@@ -1272,11 +1276,12 @@ export class BookService {
         // rows inside a bucket, so they can reference custom fields. The temporal path
         // never applies the full sort, which is why this only matters here.
         const customFieldTypes = await this.resolveCustomSortFieldTypes(query.sort);
+        const randomSeedOption = query.randomSeed !== undefined ? { randomSeed: query.randomSeed } : {};
         response = shouldCollapse
-          ? await this.bookRepo.findJumpBucketsCollapsed({ ...discreteOpts, sort: query.sort, customFieldTypes })
+          ? await this.bookRepo.findJumpBucketsCollapsed({ ...discreteOpts, sort: query.sort, customFieldTypes, ...randomSeedOption })
           : await this.bookRepo.findJumpBuckets({
               ...discreteOpts,
-              orderBy: this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes),
+              orderBy: this.queryBuilder.buildOrderBy(query.sort, userId, customFieldTypes, randomSeedOption),
             });
       }
       this.logger.log(
@@ -1412,23 +1417,15 @@ export class BookService {
     const pathExtension = extname(absolutePath).toLowerCase().slice(1);
     const extension = pathExtension || (format && format !== 'unknown' ? format : 'bin');
     const stem = basename(absolutePath, extname(absolutePath));
-    const tokens: Record<string, string> = { originalFilename: stem, extension };
 
-    if (!meta) return tokens;
-    if (meta.libraryName) tokens['library'] = meta.libraryName;
-    if (meta.title) tokens['title'] = meta.title;
-    if (meta.subtitle) tokens['subtitle'] = meta.subtitle;
-    if (meta.publisher) tokens['publisher'] = meta.publisher;
-    if (meta.language) tokens['language'] = meta.language;
-    if (meta.isbn13) tokens['isbn'] = meta.isbn13;
-    if (meta.publishedYear) tokens['year'] = String(meta.publishedYear);
-    if (meta.seriesName) tokens['series'] = meta.seriesName;
-
-    const seriesIndex = formatSeriesIndex(meta.seriesIndex);
-    if (seriesIndex) tokens['seriesIndex'] = seriesIndex;
-    if (meta.authors.length > 0) tokens['authors'] = meta.authors.join(', ');
-
-    return tokens;
+    return buildPatternTokens({
+      metadata: meta ?? {},
+      authors: meta?.authors,
+      narrators: meta?.narrators,
+      originalStem: stem,
+      format: extension,
+      libraryName: meta?.libraryName,
+    });
   }
 
   private async resolveDownloadFilenameForFile(file: { bookId: number; absolutePath: string; format: string | null }): Promise<string> {
@@ -1508,6 +1505,7 @@ export class BookService {
 
       await this.bookRepo.updateBookFile(fileId, {
         absolutePath: newAbsolutePath !== file.absolutePath ? newAbsolutePath : undefined,
+        relPath: newAbsolutePath !== file.absolutePath ? relative(file.libraryFolderPath, newAbsolutePath) : undefined,
       });
 
       this.logger.log(`[${event}] [end] fileId=${fileId} durationMs=${Date.now() - startedAt} - rename file completed`);
@@ -1593,7 +1591,7 @@ export class BookService {
         return row ? [row] : [];
       });
       const files = await this.bookRepo.findAllFilesByBookIds(bookIds);
-      await this.bookRepo.deleteByIds(bookIds);
+      await this.bookRepo.deleteByIdsAndInvalidateScanState(deletedBookIds);
       const deleteTargets = [
         ...rows.map((row) => ({
           path: join(this.appDataPath, 'covers', String(row.id)),
@@ -2785,7 +2783,7 @@ export class BookService {
       if (r.pageCount !== undefined) dto.pageCount = r.pageCount as number | null;
       if (r.communityRatings !== undefined) dto.communityRatings = r.communityRatings as UpdateBookMetadataDto['communityRatings'];
       if (r.seriesName !== undefined) dto.seriesName = r.seriesName as string | null;
-      if (r.seriesIndex !== undefined) dto.seriesIndex = r.seriesIndex as number | null;
+      if (r.seriesIndex !== undefined) dto.seriesIndex = r.seriesIndex as string | null;
       if (r.seriesMemberships !== undefined) dto.seriesMemberships = r.seriesMemberships as UpdateBookMetadataDto['seriesMemberships'];
       if (r.hardcoverEditionId !== undefined) dto.hardcoverEditionId = r.hardcoverEditionId as string | null;
       if (r.narrators !== undefined || r.duration !== undefined || r.abridged !== undefined || r.chapters !== undefined) {
@@ -3080,7 +3078,10 @@ export class BookService {
     const meta = book.book_metadata;
     const customMetadata = await this.customMetadataService.getBookValues(id, book.books.libraryId);
     const hasAudioFiles = fileRows.some((f) => f.format && isAudioFormat(f.format));
-    const resolvedChapters = this.resolveChapters(meta?.chapters as AudiobookChapter[] | null | undefined, fileRows);
+    const orderedFileRows = hasAudioFiles
+      ? [...fileRows].sort((a, b) => naturalCompare(basename(a.absolutePath), basename(b.absolutePath)))
+      : fileRows;
+    const resolvedChapters = this.resolveChapters(meta?.chapters as AudiobookChapter[] | null | undefined, orderedFileRows);
     const supplementalFields = buildBookDetailSupplementalFields({
       readStatus,
       hasAudioFiles,
@@ -3141,7 +3142,7 @@ export class BookService {
       authors: authorRows,
       genres: genreRows.map((g) => g.name),
       tags: tagRows.map((t) => t.name),
-      files: fileRows.map((f) => ({
+      files: orderedFileRows.map((f) => ({
         id: f.id,
         format: f.format,
         role: f.id === book.books.primaryFileId ? 'primary' : f.role,
@@ -3155,7 +3156,7 @@ export class BookService {
       metadataScore: meta?.metadataScore ?? null,
       formatPriority: (book.libraries?.formatPriority as string[] | null) ?? [],
       customMetadata,
-      fileWriteStatus: this.fileWriteService?.resolveBookFileWriteStatus(book.libraries, fileRows, book.books.primaryFileId) ?? {
+      fileWriteStatus: this.fileWriteService?.resolveBookFileWriteStatus(book.libraries, orderedFileRows, book.books.primaryFileId) ?? {
         enabled: false,
         reason: 'library_disabled',
         writableFormats: [],
@@ -3368,6 +3369,7 @@ export class BookService {
       default: {
         if (isAudioFormat(format)) {
           const parsed = await extractAudioMetadata(absolutePath);
+          if (!parsed) return {};
           const result: Record<string, unknown> = {};
           if (parsed.title !== null) result.title = parsed.title;
           if (parsed.subtitle !== null) result.subtitle = parsed.subtitle;

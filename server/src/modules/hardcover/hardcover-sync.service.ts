@@ -1,14 +1,14 @@
-import type {
-  HardcoverActiveSyncStatus,
-  HardcoverBookSyncState,
-  HardcoverLinkResult,
-  HardcoverEditionsResult,
-  HardcoverLinkedBooksResult,
-  HardcoverSettings,
-  HardcoverSyncPendingSummary,
-  ReadStatus,
-  SetHardcoverEditionResult,
-  UpdateHardcoverBookSyncPayload,
+import {
+  type HardcoverActiveSyncStatus,
+  type HardcoverBookSyncState,
+  type HardcoverEditionsResult,
+  type HardcoverLinkResult,
+  type HardcoverLinkedBooksResult,
+  type HardcoverSettings,
+  type HardcoverSyncPendingSummary,
+  type ReadStatus,
+  type SetHardcoverEditionResult,
+  type UpdateHardcoverBookSyncPayload,
 } from '@bookorbit/types';
 
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
@@ -19,6 +19,7 @@ import { BookService } from '../book/book.service';
 import { HARDCOVER_STATUS } from './hardcover.constants';
 import { HardcoverBookMatchService } from './hardcover-book-match.service';
 import { HardcoverClientService } from './hardcover-client.service';
+import { parseHardcoverBookId } from './hardcover-id.utils';
 import {
   attemptOwnedReadId,
   type HardcoverReadCandidate,
@@ -108,6 +109,7 @@ query FindUserBookReads($userBookId: Int!) {
     started_at
     finished_at
     progress_pages
+    progress_seconds
   }
 }`;
 
@@ -117,7 +119,13 @@ type FindUserBookResult = { me: { user_books: { id: number }[] } };
 type InsertUserBookReadResult = { insert_user_book_read: { user_book_read: { id: number } | null; error: string | null } };
 type UpdateUserBookReadResult = { update_user_book_read: { user_book_read: { id: number } | null; error: string | null } };
 type FindUserBookReadsResult = {
-  user_book_reads: Array<{ id: number; started_at: string | null; finished_at: string | null; progress_pages: number | null }>;
+  user_book_reads: Array<{
+    id: number;
+    started_at: string | null;
+    finished_at: string | null;
+    progress_pages: number | null;
+    progress_seconds: number | null;
+  }>;
 };
 
 export type HardcoverSyncBookResult = 'synced' | 'skipped' | 'failed';
@@ -875,7 +883,7 @@ export class HardcoverSyncService {
     if (!state?.lastSyncedAt) return true;
     if (book.attemptsUpdatedAt && book.attemptsUpdatedAt > state.lastSyncedAt) return true;
     if (book.hardcoverMetadataId && state.syncError === 'no_match') return true;
-    const metadataHardcoverId = this.parseNumericHardcoverMetadataId(book.hardcoverMetadataId);
+    const metadataHardcoverId = parseHardcoverBookId(book.hardcoverMetadataId);
     if (metadataHardcoverId !== null && metadataHardcoverId !== state.hardcoverBookId) return true;
     if (book.status !== state.lastSyncedStatus) return true;
     if (book.progress !== state.lastSyncedProgress) return true;
@@ -885,12 +893,6 @@ export class HardcoverSyncService {
     if (startDate !== state.lastSyncedStartedAt) return true;
     if (endDate !== state.lastSyncedFinishedAt) return true;
     return false;
-  }
-
-  private parseNumericHardcoverMetadataId(value: string | null | undefined): number | null {
-    if (!value) return null;
-    const id = parseInt(value, 10);
-    return isNaN(id) ? null : id;
   }
 
   private buildAttemptSnapshot(book: BookSyncData) {

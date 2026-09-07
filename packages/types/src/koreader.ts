@@ -1,4 +1,5 @@
 import type { HighlightOfTheDayWidgetData, ReadingGoalWidgetData, ReadingStreakWidgetData } from "./dashboard";
+import type { SeriesIndex } from "./series-index";
 
 export interface KoreaderCredentials {
   username: string;
@@ -213,7 +214,7 @@ export interface KoreaderCatalogBookListItem {
   authors: string[];
   seriesId: number | null;
   seriesName: string | null;
-  seriesIndex: number | null;
+  seriesIndex: SeriesIndex | null;
   progressPercentage: number | null;
   /** When reading progress was last recorded, so the plugin can show recency. */
   lastReadAt: string | null;
@@ -232,7 +233,7 @@ export interface KoreaderCatalogRelatedBook {
   id: number;
   title: string | null;
   authors: string[];
-  seriesIndex: number | null;
+  seriesIndex: SeriesIndex | null;
   hasCover: boolean;
   thumbnailUrl: string | null;
   detailUrl: string;
@@ -378,7 +379,7 @@ export interface KoreaderCatalogManifestBook {
   title: string;
   authors: string[];
   seriesName: string | null;
-  seriesIndex: number | null;
+  seriesIndex: SeriesIndex | null;
   formats: string[];
   files: KoreaderCatalogManifestFile[];
 }

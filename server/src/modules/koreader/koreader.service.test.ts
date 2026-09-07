@@ -24,6 +24,10 @@ import { KoreaderPluginRepository } from './koreader-plugin.repository';
 import { KoreaderRepository } from './koreader.repository';
 import { isAudiobookKosyncWrite, KoreaderService } from './koreader.service';
 
+function syncUser(id: number, timezone?: string) {
+  return { id, settings: timezone ? { timezone } : {} } as never;
+}
+
 function md5Hex(value: string): string {
   return `md5:${value}:hex:0123456789abcdef0123456789abcdef`;
 }
@@ -114,7 +118,6 @@ describe('KoreaderService', () => {
   let mockAudiobookSessions: {
     recordProgress: ReturnType<typeof vi.fn>;
   };
-
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -392,7 +395,7 @@ describe('KoreaderService', () => {
       mockChapterService.parseChapterIndexFromProgress.mockReturnValue(6);
       mockChapterExtractor.extractAndStoreChapters.mockRejectedValueOnce(new Error('extract failed'));
 
-      const result = await service.saveProgress(12, {
+      const result = await service.saveProgress(syncUser(12), {
         document: 'abcdef1234567890fedcba',
         percentage: 0.5,
         progress: '/body/DocFragment[7]',
@@ -450,7 +453,7 @@ describe('KoreaderService', () => {
       mockRepo.resolveBookFileByHash.mockResolvedValue(null);
 
       await expect(
-        service.saveProgress(12, {
+        service.saveProgress(syncUser(12), {
           document: 'missing-document',
           percentage: 0.2,
         }),
@@ -467,7 +470,7 @@ describe('KoreaderService', () => {
       mockRepo.resolveBookFileByHash.mockResolvedValue(null);
 
       await expect(
-        service.saveProgress(12, {
+        service.saveProgress(syncUser(12), {
           document: 'no-access-document',
           percentage: 0.2,
         }),
@@ -479,7 +482,7 @@ describe('KoreaderService', () => {
     it('uses the default device and generated device id when the payload leaves them empty', async () => {
       mockRepo.resolveBookFileByHash.mockResolvedValue({ id: 88, bookId: 99, libraryId: 4, format: 'epub' });
 
-      await service.saveProgress(12, {
+      await service.saveProgress(syncUser(12), {
         document: 'default-device-document',
         percentage: 0.25,
         device: '',
@@ -499,7 +502,7 @@ describe('KoreaderService', () => {
     it('records audiobook listening sessions for ABS-Kosync marked progress writes', async () => {
       mockRepo.resolveBookFileByHash.mockResolvedValue({ id: 44, bookId: 55, libraryId: 3 });
 
-      await service.saveProgress(12, {
+      await service.saveProgress(syncUser(12), {
         document: 'abcdef1234567890fedcba',
         percentage: 0.375,
         device: 'ABS-Kosync',
@@ -536,10 +539,33 @@ describe('KoreaderService', () => {
     });
   });
 
+  describe('reading sessions from sync progress', () => {
+    it('updates progress without consulting per-device history or creating a reading session', async () => {
+      mockRepo.resolveBookFileByHash.mockResolvedValue({ id: 44, bookId: 55, libraryId: 3, format: 'epub' });
+      mockRepo.getLatestDeviceProgress.mockResolvedValue({
+        percentage: 0.42,
+        deviceId: 'device-12',
+        updatedAt: new Date('2026-07-01T01:48:00.000Z'),
+      });
+
+      await service.saveProgress(syncUser(12), {
+        document: 'abcdef1234567890fedcba',
+        percentage: 0.5,
+        progress: '/body/DocFragment[7]',
+        device: 'Kobo Sage',
+        device_id: 'device-12',
+      });
+
+      expect(mockRepo.upsertDeviceProgress).toHaveBeenCalled();
+      expect(mockRepo.upsertReadingProgress).toHaveBeenCalled();
+      expect(mockRepo.getDeviceProgressForDevice).not.toHaveBeenCalled();
+    });
+  });
+
   describe('shared progress position routing', () => {
     async function syncFormat(format: string | null, progress?: string) {
       mockRepo.resolveBookFileByHash.mockResolvedValue({ id: 44, bookId: 55, libraryId: 3, format });
-      await service.saveProgress(12, { document: 'abcdef1234567890fedcba', percentage: 0.5, progress });
+      await service.saveProgress(syncUser(12), { document: 'abcdef1234567890fedcba', percentage: 0.5, progress });
       return mockRepo.upsertReadingProgress.mock.calls[0]![0] as { cfi: string | null; pageNumber: number | null; xpointer: string | null };
     }
 
@@ -788,7 +814,12 @@ describe('KoreaderService', () => {
       mockRepo.resolveBookFileByHash.mockResolvedValue({ id: 10, bookId: 20, libraryId: 1, format: 'epub' });
       mockRepo.getProgressReset.mockResolvedValue(resetAt);
 
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0.42, progress: '/body/DocFragment[6]/body', device_id: 'device-1' });
+      await service.saveProgress(syncUser(7), {
+        document: 'doc-hash',
+        percentage: 0.42,
+        progress: '/body/DocFragment[6]/body',
+        device_id: 'device-1',
+      });
 
       expect(mockRepo.upsertDeviceProgress).toHaveBeenCalledTimes(1);
       expect(mockRepo.upsertReadingProgress).not.toHaveBeenCalled();
@@ -799,7 +830,12 @@ describe('KoreaderService', () => {
       mockRepo.resolveBookFileByHash.mockResolvedValue({ id: 10, bookId: 20, libraryId: 1, format: 'epub' });
       mockRepo.getProgressReset.mockResolvedValue(resetAt);
 
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0.004, progress: '/body/DocFragment[1]/body', device_id: 'device-1' });
+      await service.saveProgress(syncUser(7), {
+        document: 'doc-hash',
+        percentage: 0.004,
+        progress: '/body/DocFragment[1]/body',
+        device_id: 'device-1',
+      });
 
       expect(mockRepo.recordResetConvergence).toHaveBeenCalledWith(10, 7, 'device-1');
       expect(mockRepo.upsertReadingProgress).toHaveBeenCalledTimes(1);
@@ -811,7 +847,7 @@ describe('KoreaderService', () => {
 
       // Page 1 of a hundred-page comic reports 1%, which no threshold meaning "the start of a
       // long book" could accept, and that device would be held forever.
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0.01, progress: '1', device_id: 'device-1' });
+      await service.saveProgress(syncUser(7), { document: 'doc-hash', percentage: 0.01, progress: '1', device_id: 'device-1' });
 
       expect(mockRepo.recordResetConvergence).toHaveBeenCalledWith(10, 7, 'device-1');
     });
@@ -820,7 +856,7 @@ describe('KoreaderService', () => {
       mockRepo.resolveBookFileByHash.mockResolvedValue({ id: 10, bookId: 20, libraryId: 1, format: 'cbz' });
       mockRepo.getProgressReset.mockResolvedValue(resetAt);
 
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0.008, progress: '9', device_id: 'device-1' });
+      await service.saveProgress(syncUser(7), { document: 'doc-hash', percentage: 0.008, progress: '9', device_id: 'device-1' });
 
       expect(mockRepo.recordResetConvergence).not.toHaveBeenCalled();
       expect(mockRepo.upsertReadingProgress).not.toHaveBeenCalled();
@@ -831,7 +867,12 @@ describe('KoreaderService', () => {
       mockRepo.getProgressReset.mockResolvedValue(resetAt);
       mockRepo.getConvergedResetDeviceIds.mockResolvedValue(new Set(['device-1']));
 
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0.5, progress: '/body/DocFragment[9]/body', device_id: 'device-1' });
+      await service.saveProgress(syncUser(7), {
+        document: 'doc-hash',
+        percentage: 0.5,
+        progress: '/body/DocFragment[9]/body',
+        device_id: 'device-1',
+      });
 
       // The pull is anonymous, so a marker left alive past its purpose is answered to this
       // device too, and it would be sent back to the start on every sync.
@@ -843,7 +884,7 @@ describe('KoreaderService', () => {
       mockRepo.getProgressReset.mockResolvedValue(resetAt);
       mockRepo.getConvergedResetDeviceIds.mockResolvedValue(new Set(['device-1']));
 
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0, progress: '/body/DocFragment[1]/body', device_id: 'device-1' });
+      await service.saveProgress(syncUser(7), { document: 'doc-hash', percentage: 0, progress: '/body/DocFragment[1]/body', device_id: 'device-1' });
 
       expect(mockRepo.clearProgressReset).not.toHaveBeenCalled();
     });
@@ -854,7 +895,12 @@ describe('KoreaderService', () => {
 
       // Every position in a one-spine EPUB is inside DocFragment[1], so the fragment alone
       // would call this device converged wherever it happens to be sitting.
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0.5, progress: '/body/DocFragment[1]/body/p[80]', device_id: 'device-1' });
+      await service.saveProgress(syncUser(7), {
+        document: 'doc-hash',
+        percentage: 0.5,
+        progress: '/body/DocFragment[1]/body/p[80]',
+        device_id: 'device-1',
+      });
 
       expect(mockRepo.recordResetConvergence).not.toHaveBeenCalled();
       expect(mockRepo.upsertReadingProgress).not.toHaveBeenCalled();
@@ -865,7 +911,12 @@ describe('KoreaderService', () => {
       mockRepo.getProgressReset.mockResolvedValue(resetAt);
       mockRepo.getConvergedResetDeviceIds.mockResolvedValue(new Set(['device-1']));
 
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0.42, progress: '/body/DocFragment[6]/body', device_id: 'device-2' });
+      await service.saveProgress(syncUser(7), {
+        document: 'doc-hash',
+        percentage: 0.42,
+        progress: '/body/DocFragment[6]/body',
+        device_id: 'device-2',
+      });
 
       expect(mockRepo.upsertReadingProgress).not.toHaveBeenCalled();
     });
@@ -875,7 +926,12 @@ describe('KoreaderService', () => {
       mockRepo.getProgressReset.mockResolvedValue(resetAt);
       mockRepo.getConvergedResetDeviceIds.mockResolvedValue(new Set(['device-1']));
 
-      await service.saveProgress(7, { document: 'doc-hash', percentage: 0.55, progress: '/body/DocFragment[9]/body', device_id: 'device-1' });
+      await service.saveProgress(syncUser(7), {
+        document: 'doc-hash',
+        percentage: 0.55,
+        progress: '/body/DocFragment[9]/body',
+        device_id: 'device-1',
+      });
 
       expect(mockRepo.upsertReadingProgress).toHaveBeenCalledTimes(1);
     });

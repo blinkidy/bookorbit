@@ -1,15 +1,21 @@
 import { ConflictException, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
+import { naturalCompare } from '../../common/utils/natural-sort.utils';
 import { pathsReferToSameEntry } from '../../common/utils/path-identity.utils';
+import { SelfWriteRegistry } from '../../common/services/self-write-registry.service';
 
 import type {
   BookMissingEvent,
   BookTransferredEvent,
   CoverRefreshedEvent,
   CoverRefreshProgressEvent,
+  LibraryLastScan,
+  LibraryScanHistoryEntry,
   ScanBooksAddedEvent,
+  ScanJobStatus,
   ScanProgressEvent,
+  ScanTriggeredBy,
 } from '@bookorbit/types';
 import { NotificationType } from '@bookorbit/types';
 import { AchievementEventsService, ACHIEVEMENT_EVENT_LIBRARY_CATALOG_CHANGED } from '../achievement/achievement-events.service';
@@ -39,6 +45,7 @@ interface BookEntry {
 interface FileByPathEntry {
   id: number;
   bookId: number;
+  relPath: string | null;
   ino: bigint;
   sizeBytes: number | null;
   mtime: Date | null;
@@ -185,6 +192,8 @@ function formatBooksRestoredMessage(count: number): string {
   return count === 1 ? '1 book was restored on disk.' : `${count} books were restored on disk.`;
 }
 
+const SCAN_HISTORY_LIMIT = 10;
+
 @Injectable()
 export class ScannerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ScannerService.name);
@@ -195,9 +204,51 @@ export class ScannerService implements OnApplicationBootstrap {
     private readonly scanJobStore: ScanJobStore,
     private readonly scanGateway: ScanGateway,
     private readonly notificationService: NotificationService,
+    private readonly selfWriteRegistry: SelfWriteRegistry,
     @Optional() private readonly autoFetchOrchestrator?: BookMetadataFetchOrchestratorService,
     @Optional() private readonly achievementEvents?: AchievementEventsService,
   ) {}
+
+  /**
+   * Most recent scan per library, keyed by library id. Exposed here rather than on the repository
+   * so the library module keeps talking to the scanner through its service.
+   */
+  async getLatestScans(libraryIds: number[]): Promise<Map<number, LibraryLastScan>> {
+    const rows = await this.scannerRepo.findLatestScanJobs(libraryIds);
+    return new Map(
+      rows.map((row) => [
+        row.libraryId,
+        {
+          status: row.status as ScanJobStatus,
+          triggeredBy: row.triggeredBy as ScanTriggeredBy,
+          startedAt: row.startedAt.toISOString(),
+          completedAt: row.completedAt?.toISOString() ?? null,
+          addedCount: row.addedCount,
+          updatedCount: row.updatedCount,
+          missingCount: row.missingCount,
+          errorMessage: row.errorMessage,
+        },
+      ]),
+    );
+  }
+
+  /** Newest-first scan history for one library, capped so the detail panel stays bounded. */
+  async getScanHistory(libraryId: number, limit = SCAN_HISTORY_LIMIT): Promise<LibraryScanHistoryEntry[]> {
+    // Clamped at both ends: a negative limit would reach SQL as a negative LIMIT.
+    const safeLimit = Math.min(Math.max(Math.trunc(limit) || 1, 1), SCAN_HISTORY_LIMIT);
+    const rows = await this.scannerRepo.findRecentScanJobs(libraryId, safeLimit);
+    return rows.map((row) => ({
+      id: row.id,
+      status: row.status as ScanJobStatus,
+      triggeredBy: row.triggeredBy as ScanTriggeredBy,
+      startedAt: row.startedAt.toISOString(),
+      completedAt: row.completedAt?.toISOString() ?? null,
+      addedCount: row.addedCount,
+      updatedCount: row.updatedCount,
+      missingCount: row.missingCount,
+      errorMessage: row.errorMessage,
+    }));
+  }
 
   // ── Live book emission buffer ──────────────────────────────────────────────
   private readonly bookEmitBuffer = new Map<number, number[]>();
@@ -241,6 +292,7 @@ export class ScannerService implements OnApplicationBootstrap {
       id: number;
       bookId: number;
       absolutePath: string;
+      relPath: string | null;
       ino: bigint;
       sizeBytes: number | null;
       mtime: Date | null;
@@ -266,7 +318,16 @@ export class ScannerService implements OnApplicationBootstrap {
     const fileByPath = new Map<string, FileByPathEntry>(
       knownFiles.map((f) => [
         f.absolutePath,
-        { id: f.id, bookId: f.bookId, ino: f.ino, sizeBytes: f.sizeBytes, mtime: f.mtime, fileHash: f.fileHash, sortOrder: f.sortOrder ?? null },
+        {
+          id: f.id,
+          bookId: f.bookId,
+          relPath: f.relPath,
+          ino: f.ino,
+          sizeBytes: f.sizeBytes,
+          mtime: f.mtime,
+          fileHash: f.fileHash,
+          sortOrder: f.sortOrder ?? null,
+        },
       ]),
     );
 
@@ -541,7 +602,7 @@ export class ScannerService implements OnApplicationBootstrap {
     await this.scannerRepo.failAllRunningJobs('Server restarted during scan');
   }
 
-  async startScan(libraryId: number, triggeredBy: 'manual' | 'watcher' | 'schedule', forceFullScan = false): Promise<{ jobId: number }> {
+  async startScan(libraryId: number, triggeredBy: ScanTriggeredBy, forceFullScan = false): Promise<{ jobId: number }> {
     const event = 'scanner.start_scan';
     const startedAt = Date.now();
     this.logger.log(`[${event}] [start] libraryId=${libraryId} triggeredBy=${triggeredBy} forceFullScan=${forceFullScan} - scan start requested`);
@@ -580,7 +641,7 @@ export class ScannerService implements OnApplicationBootstrap {
 
       const job = await this.scannerRepo.createScanJob(libraryId, triggeredBy);
 
-      this.scanJobStore.create(job.id, libraryId, 0);
+      this.scanJobStore.create(job.id, libraryId, 0, triggeredBy);
       this.emitFromStore(libraryId, job.id, 'running');
 
       this.runScan(
@@ -906,10 +967,12 @@ export class ScannerService implements OnApplicationBootstrap {
         id: f.id,
         bookId: f.bookId,
         absolutePath: f.absolutePath,
+        relPath: f.relPath,
         ino: f.ino,
         sizeBytes: f.sizeBytes,
         mtime: f.mtime,
         fileHash: f.fileHash,
+        sortOrder: f.sortOrder,
       })),
     );
   }
@@ -1186,14 +1249,19 @@ export class ScannerService implements OnApplicationBootstrap {
 
         // Load stored dir mtimes for incremental scanning (unless forced full)
         let knownDirMtimes: Map<string, number> | undefined;
+        let scanStateVersion: number | undefined;
         if (!forceFullScan) {
           try {
-            knownDirMtimes = await this.scannerRepo.findDirScanState(folder.id);
+            const snapshot = await this.scannerRepo.findDirScanStateSnapshot(folder.id);
+            if (snapshot) {
+              knownDirMtimes = snapshot.mtimes;
+              scanStateVersion = snapshot.version;
+            }
           } catch {
             // If loading fails, fall back to full scan for this folder
           }
         } else {
-          await this.scannerRepo.clearDirScanState(folder.id).catch(() => {});
+          scanStateVersion = (await this.scannerRepo.clearDirScanState(folder.id).catch(() => null)) ?? undefined;
         }
 
         try {
@@ -1246,11 +1314,10 @@ export class ScannerService implements OnApplicationBootstrap {
         totals.missingCount += counts.missingCount;
 
         // Persist dir scan state after successful folder processing
-        if (dirMtimes.size > 0) {
+        if (dirMtimes.size > 0 && scanStateVersion !== undefined) {
           try {
             const entries = [...dirMtimes].map(([dirPath, mtimeMs]) => ({ dirPath, mtimeMs }));
-            await this.scannerRepo.upsertDirScanState(folder.id, entries);
-            await this.scannerRepo.deleteStaleDirScanState(folder.id, new Set(dirMtimes.keys()));
+            await this.scannerRepo.persistDirScanState(folder.id, scanStateVersion, entries);
           } catch (err) {
             this.logger.warn(
               `[${event}] [fail] libraryId=${libraryId} jobId=${jobId} libraryFolderId=${folder.id} errorClass=${err instanceof Error ? err.name : 'Error'} error="${sanitizeLogValue(err instanceof Error ? err.message : String(err))}" - dir scan state persistence failed`,
@@ -1266,17 +1333,24 @@ export class ScannerService implements OnApplicationBootstrap {
       this.scanJobStore.increment(libraryId, { added: totals.addedCount, updated: totals.updatedCount });
       this.emitFromStore(libraryId, jobId, 'completed');
 
-      this.notificationService
-        .notify({
-          type: NotificationType.ScanCompleted,
-          title: 'Library scan completed',
-          message: `Added ${totals.addedCount} books, updated ${totals.updatedCount}, ${totals.missingCount} missing`,
-          scope: { kind: 'library', libraryId },
-          meta: { libraryId, jobId, ...totals },
-        })
-        .catch(() => {});
+      const scanChangedSomething = totals.addedCount > 0 || totals.updatedCount > 0 || totals.missingCount > 0;
+      // A scheduled scan that found nothing has nothing to report; announcing it every cron tick is
+      // what buried real failures under ~96 notifications a day. A manual scan still confirms, because
+      // the user asked a question and the live progress toast only fires when books were added.
+      const triggeredBy = this.scanJobStore.get(libraryId)?.triggeredBy ?? 'manual';
+      if (scanChangedSomething || triggeredBy === 'manual') {
+        this.notificationService
+          .notify({
+            type: NotificationType.ScanCompleted,
+            title: 'Library scan completed',
+            message: `Added ${totals.addedCount} books, updated ${totals.updatedCount}, ${totals.missingCount} missing`,
+            scope: { kind: 'library', libraryId },
+            meta: { libraryId, jobId, ...totals, triggeredBy },
+          })
+          .catch(() => {});
+      }
 
-      if (totals.addedCount > 0 || totals.updatedCount > 0 || totals.missingCount > 0) {
+      if (scanChangedSomething) {
         this.emitLibraryCatalogChangedForLibrary(libraryId);
       }
     } catch (err) {
@@ -1520,8 +1594,14 @@ export class ScannerService implements OnApplicationBootstrap {
     //
     // Design rules:
     //   - Text metadata (title, authors, cover, etc.) comes from the first available configured source.
-    //   - Audio-specific fields (chapters, narrators, duration) always come from audio if present.
+    //   - Audio-specific fields (chapters, narrators, duration) come from audio if present, but a
+    //     configured source that names narrators itself outranks the audio tags.
     //   - Extraction only fires when at least one configured metadata source is new, reassigned, or changed.
+
+    // A file this instance is writing right now holds whatever its tags said before the write
+    // reached it. The database is the source those tags are being written from, so reading any of
+    // them back mid-write can only overwrite the saved metadata with a pre-write view of it.
+    const selfWriteInProgress = registeredFiles.some((file) => this.selfWriteRegistry.isSuppressed(file.absolutePath));
 
     const metadataSources = this.buildMetadataExtractionSources(registeredFiles, winner, metadataPrecedence);
     const shouldExtractMetadata =
@@ -1530,15 +1610,20 @@ export class ScannerService implements OnApplicationBootstrap {
     const changedAudioFiles = audioContentFiles.filter(hasMetadataSourceChanged);
     const winnerIsAudio = winner !== null && winner.format !== null && isAudioFormat(winner.format);
 
-    // 3a: Extract shared metadata from the first available configured source.
-    if (shouldExtractMetadata) {
-      await this.extractFirstAvailableMetadataSource(book.id, metadataSources);
+    // 3a: Extract audio-specific fields (chapters, narrators) from the first audio file if any audio
+    //     file is new, reassigned, or changed. Skipped when the audio winner is itself the leading
+    //     metadata source, because shared extraction already reads the same tags from it.
+    //     Cover is intentionally skipped here - shared metadata owns it from step 3b.
+    //     Runs before shared extraction so a source that declares narrators (an OPF carrying
+    //     role="nrt") overwrites the composer tag rather than being overwritten by it.
+    const audioWinnerLeadsMetadata = winnerIsAudio && metadataSources[0]?.key === 'embedded';
+    if (selfWriteInProgress && (shouldExtractMetadata || changedAudioFiles.length > 0)) {
+      this.logger.log(
+        `[scanner.extract_metadata] [end] bookId=${book.id} action=skip_self_write_in_progress - metadata extraction skipped while this instance writes the book's own files`,
+      );
     }
 
-    // 3b: When winner is not audio, extract audio-specific fields (chapters, narrators)
-    //     from the first audio file if any audio file is new, reassigned, or changed.
-    //     Cover is intentionally skipped here - shared metadata already owns it from step 3a.
-    if (!winnerIsAudio && changedAudioFiles.length > 0) {
+    if (!audioWinnerLeadsMetadata && changedAudioFiles.length > 0 && !selfWriteInProgress) {
       const sortedAudio = [...audioContentFiles].sort((a, b) =>
         basename(a.absolutePath).localeCompare(basename(b.absolutePath), undefined, { numeric: true }),
       );
@@ -1550,6 +1635,11 @@ export class ScannerService implements OnApplicationBootstrap {
           `[scanner.extract_audio_chapters] [fail] bookId=${book.id} path="${sanitizeLogValue(firstAudio.absolutePath)}" format=${firstAudio.format} errorClass=${err instanceof Error ? err.name : 'Error'} error="${sanitizeLogValue(err instanceof Error ? err.message : String(err))}" - audio chapters/narrators extraction failed`,
         );
       }
+    }
+
+    // 3b: Extract shared metadata from the first available configured source.
+    if (shouldExtractMetadata && !selfWriteInProgress) {
+      await this.extractFirstAvailableMetadataSource(book.id, metadataSources);
     }
 
     // 3c: Write per-file duration to bookFiles for every new/reassigned/changed audio file.
@@ -1576,6 +1666,25 @@ export class ScannerService implements OnApplicationBootstrap {
       } catch (err) {
         this.logger.warn(
           `[scanner.aggregate_audio_duration] [fail] bookId=${book.id} errorClass=${err instanceof Error ? err.name : 'Error'} error="${sanitizeLogValue(err instanceof Error ? err.message : String(err))}" - audio duration aggregation failed`,
+        );
+      }
+    }
+
+    // 3e: Rebuild chapters across every audio file. Steps 3a and 3b read chapters from one file, and
+    //     each file of a multi-file audiobook embeds only its own chapters starting at zero, so on
+    //     its own that leaves the later files with no chapters at all and the last chapter of the
+    //     first file stretched over the rest of the book. Runs for unchanged books too, which is
+    //     what repairs the ones scanned before chapters were merged; it settles after one pass.
+    if (audioContentFiles.length > 1) {
+      const orderedAudioPaths = [...audioContentFiles]
+        .sort((a, b) => naturalCompare(basename(a.absolutePath), basename(b.absolutePath)))
+        .map((file) => file.absolutePath);
+      const filesChanged = shouldExtractMetadata || changedAudioFiles.length > 0;
+      try {
+        await this.metadataService.extractMergedAudioChapters(book.id, orderedAudioPaths, { filesChanged });
+      } catch (err) {
+        this.logger.warn(
+          `[scanner.merge_audio_chapters] [fail] bookId=${book.id} files=${orderedAudioPaths.length} errorClass=${err instanceof Error ? err.name : 'Error'} error="${sanitizeLogValue(err instanceof Error ? err.message : String(err))}" - audio chapter merge failed`,
         );
       }
     }
@@ -2058,19 +2167,21 @@ export class ScannerService implements OnApplicationBootstrap {
     const sizeUnchanged = fileStat.sizeBytes === byPath.sizeBytes;
     const mtimeUnchanged = fileStat.mtime.getTime() === byPath.mtime?.getTime();
     const inoUnchanged = fileStat.ino === byPath.ino;
+    const relPathUnchanged = fileStat.relPath === byPath.relPath;
     const reassigned = byPath.bookId !== bookId;
     const sortOrderUnchanged = sortOrder === byPath.sortOrder;
 
-    if (sizeUnchanged && mtimeUnchanged && inoUnchanged && !reassigned && sortOrderUnchanged) {
+    if (sizeUnchanged && mtimeUnchanged && inoUnchanged && relPathUnchanged && !reassigned && sortOrderUnchanged) {
       return { isNew: false, reassigned: false, changed: false, fileId: byPath.id };
     }
 
     await waitForStability(fileStat.absolutePath, fileStat.mtime.getTime());
 
-    if (!sizeUnchanged || !mtimeUnchanged || !inoUnchanged || reassigned) {
+    if (!sizeUnchanged || !mtimeUnchanged || !inoUnchanged || !relPathUnchanged || reassigned) {
       await this.scannerRepo.updateBookFile(byPath.id, {
         ...(reassigned && { bookId }),
         libraryFolderId,
+        relPath: fileStat.relPath,
         ino: fileStat.ino,
         sizeBytes: fileStat.sizeBytes,
         mtime: fileStat.mtime,
@@ -2091,6 +2202,7 @@ export class ScannerService implements OnApplicationBootstrap {
     fileByPath.set(fileStat.absolutePath, {
       id: byPath.id,
       bookId,
+      relPath: fileStat.relPath,
       ino: fileStat.ino,
       sizeBytes: fileStat.sizeBytes,
       mtime: fileStat.mtime,
@@ -2146,6 +2258,7 @@ export class ScannerService implements OnApplicationBootstrap {
     fileByPath.set(fileStat.absolutePath, {
       id: byIno.id,
       bookId,
+      relPath: fileStat.relPath,
       ino: fileStat.ino,
       sizeBytes: fileStat.sizeBytes,
       mtime: fileStat.mtime,
@@ -2212,6 +2325,7 @@ export class ScannerService implements OnApplicationBootstrap {
     fileByPath.set(fileStat.absolutePath, {
       id: globalByIno.file.id,
       bookId,
+      relPath: fileStat.relPath,
       ino: fileStat.ino,
       sizeBytes: fileStat.sizeBytes,
       mtime: fileStat.mtime,
@@ -2287,6 +2401,7 @@ export class ScannerService implements OnApplicationBootstrap {
         fileByPath.set(fileStat.absolutePath, {
           id: byHash.id,
           bookId,
+          relPath: fileStat.relPath,
           ino: fileStat.ino,
           sizeBytes: fileStat.sizeBytes,
           mtime: fileStat.mtime,
@@ -2347,6 +2462,7 @@ export class ScannerService implements OnApplicationBootstrap {
         fileByPath.set(fileStat.absolutePath, {
           id: globalByHash.file.id,
           bookId,
+          relPath: fileStat.relPath,
           ino: fileStat.ino,
           sizeBytes: fileStat.sizeBytes,
           mtime: fileStat.mtime,
@@ -2389,6 +2505,7 @@ export class ScannerService implements OnApplicationBootstrap {
         {
           id: concurrent.file.id,
           bookId: concurrent.file.bookId,
+          relPath: concurrent.file.relPath,
           ino: concurrent.file.ino,
           sizeBytes: concurrent.file.sizeBytes,
           mtime: concurrent.file.mtime,
@@ -2410,6 +2527,7 @@ export class ScannerService implements OnApplicationBootstrap {
     fileByPath.set(fileStat.absolutePath, {
       id: created.id,
       bookId,
+      relPath: fileStat.relPath,
       ino: fileStat.ino,
       sizeBytes: fileStat.sizeBytes,
       mtime: fileStat.mtime,

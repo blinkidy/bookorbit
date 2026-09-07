@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 
 import { DEFAULT_KOREADER_DEVICE_PATTERN, type KoreaderBookSyncInfo, type KoreaderDeviceInfo, type KoreaderSyncStatus } from '@bookorbit/types';
 import { StatsCache } from '../../common/cache/stats-cache';
+import type { RequestUser } from '../../common/types/request-user';
 import { mapWithConcurrency } from '../../common/utils/batch.utils';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { isSemverNewer } from '../../common/utils/semver.utils';
@@ -50,6 +51,14 @@ export interface KoreaderProgressBookFile {
   bookId: number;
   libraryId: number;
   format: string | null;
+}
+
+/** What one applied sync push changed, for callers that have to reason about the move it made. */
+export interface KoreaderProgressApplyResult {
+  /** Whether shared reading progress moved; false when the push was held behind a reset. */
+  shared: boolean;
+  /** BookOrbit-scale position held before this push, across every device of this user. */
+  previousPercentage: number | null;
 }
 
 export interface BulkProgressEntry {
@@ -149,9 +158,10 @@ export class KoreaderService {
   }
 
   async saveProgress(
-    userId: number,
+    user: RequestUser,
     data: { document: string; percentage: number; progress?: string; device?: string; device_id?: string; timestamp?: number; source?: string },
   ) {
+    const userId = user.id;
     const startedAt = Date.now();
     const device = data.device || DEFAULT_DEVICE;
     const deviceId = data.device_id || createHash('md5').update(`${device}:${userId}`).digest('hex').slice(0, 16); // codeql[js/weak-cryptographic-algorithm] - non-security device identifier
@@ -193,10 +203,14 @@ export class KoreaderService {
     bookFile: KoreaderProgressBookFile,
     data: { percentage: number; progress?: string; device: string; deviceId: string; timestamp?: number },
     options?: { skipSharedProgress?: boolean; trackAudiobookSession?: boolean },
-  ) {
+  ): Promise<KoreaderProgressApplyResult> {
     const chapterIndex = this.chapterService.parseChapterIndexFromProgress(data.progress ?? null);
 
     const previousDeviceProgress = await this.repo.getLatestDeviceProgress(bookFile.id, userId);
+    const result: KoreaderProgressApplyResult = {
+      shared: false,
+      previousPercentage: previousDeviceProgress?.percentage != null ? toBookorbitPercentage(previousDeviceProgress.percentage) : null,
+    };
 
     this.chapterExtractor.extractAndStoreChapters(bookFile.id).catch(() => {});
 
@@ -213,18 +227,19 @@ export class KoreaderService {
 
     await this.repo.restoreDevice(userId, data.deviceId);
 
-    if (options?.skipSharedProgress) return;
+    if (options?.skipSharedProgress) return result;
 
-    if (!(await this.resolveResetHold(userId, bookFile, data))) return;
+    if (!(await this.resolveResetHold(userId, bookFile, data))) return result;
 
-    const previousPercentage = previousDeviceProgress?.percentage != null ? toBookorbitPercentage(previousDeviceProgress.percentage) : null;
     await this.applySharedProgress(
       userId,
       bookFile,
       data,
-      previousPercentage,
+      result.previousPercentage,
       options?.trackAudiobookSession ? { device: data.device, deviceId: data.deviceId } : undefined,
     );
+    result.shared = true;
+    return result;
   }
 
   /**

@@ -95,6 +95,7 @@ const ADMIN_ROUTES: Record<AdminTab, string> = {
 const SYSTEM_ROUTES: Record<SystemTab, string> = {
   'file-naming': 'settings-file-naming',
   'book-dock': 'settings-admin-book-dock',
+  requests: 'settings-admin-requests',
   maintenance: 'settings-maintenance',
   'audit-log': 'settings-admin-audit-log',
 }
@@ -283,7 +284,7 @@ export const routes: RouteRecordRaw[] = [
             meta: {
               requiredPermission: Permission.ManageLibraries,
               permissionFallback: 'settings-account-profile',
-              maxWidth: 'max-w-[52rem]',
+              maxWidth: 'max-w-[82rem]',
               title: () => t('titles.libraries'),
             },
           },
@@ -299,7 +300,7 @@ export const routes: RouteRecordRaw[] = [
             meta: {
               requiredPermission: Permission.ManageMetadataConfig,
               permissionFallback: 'settings-account-profile',
-              maxWidth: 'max-w-4xl',
+              maxWidth: 'max-w-5xl',
               title: () => t('titles.metadata.providers'),
             },
           },
@@ -307,10 +308,12 @@ export const routes: RouteRecordRaw[] = [
             path: 'metadata/field-rules',
             name: 'settings-metadata-field-rules',
             component: () => import('@/features/settings/metadata-preferences/MetadataFieldRulesSettings.vue'),
+            // The rule table needs room for a 14-chip priority order beside a merge control;
+            // 6xl wrapped the chip lane while a third of a 1080p desk sat empty.
             meta: {
               requiredPermission: Permission.ManageMetadataConfig,
               permissionFallback: 'settings-account-profile',
-              maxWidth: 'max-w-6xl',
+              maxWidth: 'max-w-[100rem]',
               title: () => t('titles.metadata.field-rules'),
             },
           },
@@ -328,11 +331,13 @@ export const routes: RouteRecordRaw[] = [
           {
             path: 'metadata/score',
             name: 'settings-metadata-score',
-            component: () => import('@/features/settings/MetadataScoreWeightsSettings.vue'),
+            component: () => import('@/features/settings/metadata-score/MetadataScoreWeightsSettings.vue'),
+            // The ledger splits into two ranked columns so all 24 fields land above the fold;
+            // max-w-3xl fitted 720px of a 1920 pane and pushed half the list under it.
             meta: {
               requiredPermission: Permission.ManageMetadataConfig,
               permissionFallback: 'settings-account-profile',
-              maxWidth: 'max-w-3xl',
+              maxWidth: 'max-w-[100rem]',
               title: () => t('titles.metadata.score'),
             },
           },
@@ -377,7 +382,7 @@ export const routes: RouteRecordRaw[] = [
             meta: {
               requiredPermission: Permission.ManageAppSettings,
               permissionFallback: 'settings-account-profile',
-              maxWidth: 'max-w-5xl',
+              maxWidth: 'max-w-[100rem]',
               title: () => t('titles.system.file-naming'),
             },
           },
@@ -559,6 +564,18 @@ export const routes: RouteRecordRaw[] = [
             },
           },
           {
+            path: 'admin/requests',
+            name: 'settings-admin-requests',
+            component: () => import('@/features/settings/RequestsSettings.vue'),
+            props: { embedded: true },
+            meta: {
+              requiredPermission: Permission.ManageBookRequests,
+              permissionFallback: 'settings-account-profile',
+              maxWidth: 'max-w-5xl',
+              title: () => t('titles.system.requests'),
+            },
+          },
+          {
             path: 'admin/audit-log',
             name: 'settings-admin-audit-log',
             component: () => import('@/features/audit/AuditLogPage.vue'),
@@ -604,6 +621,28 @@ export const routes: RouteRecordRaw[] = [
         name: 'book-dock',
         component: () => import('@/views/BookDockView.vue'),
         meta: { title: () => t('titles.bookDock') },
+      },
+      // A request opens as a drawer over the list rather than as its own page, but it keeps its
+      // own URL: these are children so a hard load of /requests/:id renders the list underneath.
+      {
+        path: '/requests',
+        name: 'book-requests',
+        component: () => import('@/features/book-requests/BookRequestsPage.vue'),
+        meta: { title: () => t('titles.bookRequests') },
+        children: [
+          {
+            path: ':id',
+            name: 'book-request-detail',
+            component: () => import('@/features/book-requests/components/RequestDetailPanel.vue'),
+            meta: { title: () => t('titles.bookRequestDetail') },
+          },
+          {
+            path: ':id/releases',
+            name: 'book-request-releases',
+            component: () => import('@/features/book-requests/components/ReleasePickerPanel.vue'),
+            meta: { title: () => t('titles.bookRequestReleases') },
+          },
+        ],
       },
       {
         path: '/whats-new',
@@ -728,6 +767,12 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: () => t('titles.duplicateBooks') },
           },
           {
+            path: 'missing-resources',
+            name: 'tools-missing-resources',
+            component: () => import('@/features/tools/missing-resources/views/MissingResourcesView.vue'),
+            meta: { title: () => t('titles.missingResources') },
+          },
+          {
             path: ':pathMatch(.*)*',
             redirect: { name: 'tools-entity-manager' },
           },
@@ -774,6 +819,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'reader',
     component: () => import('@/features/reader/ReaderView.vue'),
     meta: {
+      remountOnParamChange: true,
       title: (to) => `${t('titles.readPrefix')} · ${fallbackById('titles.book', numericParam(to, 'bookId'))}`,
     },
   },

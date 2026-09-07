@@ -3,6 +3,7 @@ import type { HardcoverEdition as HardcoverEditionSummary, HardcoverEditionsResu
 
 import { parsePublishedDateKey } from '../../common/utils/published-date.utils';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
+import { parseHardcoverBookId } from './hardcover-id.utils';
 import type { BookSyncData } from './hardcover.repository';
 import { HardcoverClientService } from './hardcover-client.service';
 import { HardcoverRepository } from './hardcover.repository';
@@ -23,6 +24,7 @@ query FindBookByISBN13($isbn: String!) {
     editions(where: { isbn_13: { _eq: $isbn } }, limit: 1) {
       id
       pages
+      audio_seconds
     }
   }
 }`;
@@ -34,6 +36,7 @@ query FindBookByISBN10($isbn: String!) {
     editions(where: { isbn_10: { _eq: $isbn } }, limit: 1) {
       id
       pages
+      audio_seconds
     }
   }
 }`;
@@ -45,9 +48,8 @@ query SearchBooks($query: String!) {
     query_type: "Book"
     per_page: 5
     page: 1
-    fields: "title,author_names,alternative_titles"
-    weights: "5,2,1"
   ) {
+    error
     ids
   }
 }`;
@@ -224,7 +226,8 @@ function mapEditionForDisplay(edition: HardcoverEditionDisplayRow): HardcoverEdi
 
 interface SearchBooksResult {
   search?: {
-    ids?: number[];
+    error?: string | null;
+    ids?: number[] | null;
   } | null;
 }
 
@@ -266,8 +269,8 @@ export class HardcoverBookMatchService {
     let match: HardcoverBookMatch | null = null;
 
     if (book.hardcoverMetadataId) {
-      const id = parseInt(book.hardcoverMetadataId, 10);
-      if (!isNaN(id)) {
+      const id = parseHardcoverBookId(book.hardcoverMetadataId);
+      if (id !== null) {
         match = await this.matchByHardcoverId(userId, token, id, book);
       } else {
         match = await this.matchByHardcoverSlug(userId, token, book.hardcoverMetadataId, book);
@@ -382,10 +385,18 @@ export class HardcoverBookMatchService {
     author: string,
     book: BookSyncData,
   ): Promise<HardcoverBookMatch | null> {
+    const startedAt = Date.now();
     try {
       const searchData = await this.client.query<SearchBooksResult>(userId, token, SEARCH_BOOKS_QUERY, {
         query: `${title} ${author}`,
       });
+      if (searchData.search?.error) {
+        const error = sanitizeLogValue(searchData.search.error);
+        this.logger.warn(
+          `[hardcover.book_match] [fail] userId=${userId} bookId=${book.bookId} method=title_author durationMs=${Date.now() - startedAt} errorClass=SearchError error="${error}" - title lookup failed`,
+        );
+        return null;
+      }
       const ids = searchData.search?.ids?.filter((id) => Number.isInteger(id)).slice(0, 5) ?? [];
       if (ids.length === 0) return null;
 
@@ -403,9 +414,10 @@ export class HardcoverBookMatchService {
         matchMethod: 'title',
       };
     } catch (err) {
+      const errorClass = err instanceof Error ? err.constructor.name : 'Error';
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
       this.logger.warn(
-        `[hardcover.book_match] [fail] userId=${userId} bookId=${book.bookId} method=title_author error="${error}" - title lookup failed`,
+        `[hardcover.book_match] [fail] userId=${userId} bookId=${book.bookId} method=title_author durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${error}" - title lookup failed`,
       );
       return null;
     }
@@ -435,6 +447,65 @@ export class HardcoverBookMatchService {
 
     const edition = data.books?.[0]?.editions?.[0];
     return edition ? mapEditionForDisplay(edition) : null;
+  }
+
+  async resolveManualInput(
+    userId: number,
+    token: string,
+    input: string,
+    book: BookSyncData,
+  ): Promise<{ hardcoverBookId: number; hardcoverEditionId: number | null; title: string } | null> {
+    const identifier = this.extractBookIdentifierFromInput(input);
+    if (!identifier) return null;
+
+    try {
+      const query =
+        identifier.kind === 'id'
+          ? FIND_BOOK_BY_HARDCOVER_ID_QUERY
+          : identifier.kind === 'edition'
+            ? FIND_BOOK_EDITION_BY_SLUG_QUERY
+            : FIND_BOOK_BY_HARDCOVER_SLUG_QUERY;
+      const variables =
+        identifier.kind === 'id'
+          ? { id: identifier.value }
+          : identifier.kind === 'edition'
+            ? { slug: identifier.slug, editionId: identifier.editionId }
+            : { slug: identifier.value };
+      const data = await this.client.query<BooksQueryResult>(userId, token, query, variables);
+      const hardcoverBook = data.books?.[0];
+      if (!hardcoverBook) return null;
+
+      const edition = identifier.kind === 'edition' ? hardcoverBook.editions?.[0] : this.pickBestEdition(hardcoverBook.editions ?? [], book);
+      if (identifier.kind === 'edition' && !edition) return null;
+      return { hardcoverBookId: hardcoverBook.id, hardcoverEditionId: edition?.id ?? null, title: hardcoverBook.title ?? '' };
+    } catch (err) {
+      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
+      this.logger.warn(`[hardcover.manual_link] [fail] userId=${userId} input="${sanitizeLogValue(input)}" error="${error}" - resolve failed`);
+      return null;
+    }
+  }
+
+  private extractBookIdentifierFromInput(
+    input: string,
+  ): { kind: 'id'; value: number } | { kind: 'slug'; value: string } | { kind: 'edition'; slug: string; editionId: number } | null {
+    const value = input.trim();
+    if (!value) return null;
+
+    let candidate = value;
+    try {
+      const parsed = new URL(value);
+      const segments = parsed.pathname.split('/').filter(Boolean);
+      const booksIndex = segments.indexOf('books');
+      if (booksIndex >= 0 && segments[booksIndex + 1] && segments[booksIndex + 2] === 'editions' && /^\d+$/.test(segments[booksIndex + 3] ?? '')) {
+        return { kind: 'edition', slug: segments[booksIndex + 1]!, editionId: parseInt(segments[booksIndex + 3]!, 10) };
+      }
+      if (segments.length > 0) candidate = segments[segments.length - 1]!;
+    } catch {
+      // Not a URL - treat the raw input as an id or slug.
+    }
+
+    if (/^\d+$/.test(candidate)) return { kind: 'id', value: parseInt(candidate, 10) };
+    return candidate ? { kind: 'slug', value: candidate } : null;
   }
 
   // A failed upstream lookup must not be reported as "no editions" - the caller (and the user)
@@ -498,6 +569,19 @@ export class HardcoverBookMatchService {
 
       const editions = hardcoverBook.editions ?? [];
 
+      // A missing progress metric is not a reason to silently re-point the user's edition.
+      if (cachedEditionId != null) {
+        const cachedEdition = editions.find((edition) => edition.id === cachedEditionId);
+        if (cachedEdition) {
+          return {
+            hardcoverEditionId: cachedEditionId,
+            editionPages: this.normalizeEditionPages(cachedEdition.pages),
+            editionAudioSeconds: this.normalizeEditionAudioSeconds(cachedEdition.audio_seconds),
+            editionIsAudio: this.editionIsAudio(cachedEdition),
+          };
+        }
+      }
+
       const edition = this.pickBestEdition(editions, book);
       if (!edition) {
         return { hardcoverEditionId: cachedEditionId, editionPages: null, editionAudioSeconds: null, editionIsAudio: false };
@@ -511,7 +595,7 @@ export class HardcoverBookMatchService {
     } catch (err) {
       const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
       this.logger.warn(
-        `[hardcover.book_match] [fail] userId=${userId} bookId=${book.bookId} method=cached_pages error="${error}" - cached edition pages lookup failed`,
+        `[hardcover.book_match] [fail] userId=${userId} bookId=${book.bookId} method=cached_edition error="${error}" - cached edition metrics lookup failed`,
       );
       return { hardcoverEditionId: cachedEditionId, editionPages: null, editionAudioSeconds: null, editionIsAudio: false };
     }
@@ -581,75 +665,8 @@ export class HardcoverBookMatchService {
     return Math.round(pages);
   }
 
-  private normalizeEditionAudioSeconds(audioSeconds: number | null | undefined): number | null {
-    if (typeof audioSeconds !== 'number' || !Number.isFinite(audioSeconds) || audioSeconds <= 0) return null;
-    return Math.round(audioSeconds);
-  }
-
-  /**
-   * Resolves a manually-provided Hardcover URL, numeric book id, or slug directly. The user is
-   * telling us exactly which book is correct, so we just look it up and pick its best edition.
-   */
-  async resolveManualInput(
-    userId: number,
-    token: string,
-    input: string,
-    book: BookSyncData,
-  ): Promise<{ hardcoverBookId: number; hardcoverEditionId: number | null; title: string } | null> {
-    const identifier = this.extractBookIdentifierFromInput(input);
-    if (!identifier) return null;
-
-    try {
-      const query =
-        identifier.kind === 'id'
-          ? FIND_BOOK_BY_HARDCOVER_ID_QUERY
-          : identifier.kind === 'edition'
-            ? FIND_BOOK_EDITION_BY_SLUG_QUERY
-            : FIND_BOOK_BY_HARDCOVER_SLUG_QUERY;
-      const variables =
-        identifier.kind === 'id'
-          ? { id: identifier.value }
-          : identifier.kind === 'edition'
-            ? { slug: identifier.slug, editionId: identifier.editionId }
-            : { slug: identifier.value };
-      const data = await this.client.query<BooksQueryResult>(userId, token, query, variables);
-      const hardcoverBook = data.books?.[0];
-      if (!hardcoverBook) return null;
-
-      const edition = identifier.kind === 'edition' ? hardcoverBook.editions?.[0] : this.pickBestEdition(hardcoverBook.editions ?? [], book);
-      if (identifier.kind === 'edition' && !edition) return null;
-      return { hardcoverBookId: hardcoverBook.id, hardcoverEditionId: edition?.id ?? null, title: hardcoverBook.title ?? '' };
-    } catch (err) {
-      const error = sanitizeLogValue(err instanceof Error ? err.message : String(err));
-      this.logger.warn(`[hardcover.manual_link] [fail] userId=${userId} input="${sanitizeLogValue(input)}" error="${error}" - resolve failed`);
-      return null;
-    }
-  }
-
-  private extractBookIdentifierFromInput(
-    input: string,
-  ): { kind: 'id'; value: number } | { kind: 'slug'; value: string } | { kind: 'edition'; slug: string; editionId: number } | null {
-    const value = input.trim();
-    if (!value) return null;
-
-    let candidate = value;
-    try {
-      const parsed = new URL(value);
-      const segments = parsed.pathname.split('/').filter(Boolean);
-      const booksIndex = segments.indexOf('books');
-      if (booksIndex >= 0 && segments[booksIndex + 1] && segments[booksIndex + 2] === 'editions' && /^\d+$/.test(segments[booksIndex + 3] ?? '')) {
-        return {
-          kind: 'edition',
-          slug: segments[booksIndex + 1]!,
-          editionId: parseInt(segments[booksIndex + 3]!, 10),
-        };
-      }
-      if (segments.length > 0) candidate = segments[segments.length - 1]!;
-    } catch {
-      // Not a URL - treat the raw input as an id or slug.
-    }
-
-    if (/^\d+$/.test(candidate)) return { kind: 'id', value: parseInt(candidate, 10) };
-    return candidate ? { kind: 'slug', value: candidate } : null;
+  private normalizeEditionAudioSeconds(seconds: number | null | undefined): number | null {
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return null;
+    return Math.round(seconds);
   }
 }
