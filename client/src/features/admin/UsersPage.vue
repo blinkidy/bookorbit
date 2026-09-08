@@ -26,7 +26,7 @@ const { t } = useI18n()
 const { isSuperuser, hasPermission } = usePermissions()
 const { user: currentUser } = useAuth()
 const { loginOptions, fetchLoginOptions } = useLoginOptions()
-const passwordLoginEnabled = computed(() => loginOptions.value?.passwordLoginEnabled === true)
+const passwordLoginEnabled = computed(() => loginOptions.value?.passwordLoginEnabled !== false)
 
 const {
   users,
@@ -78,6 +78,7 @@ const defaultLibraryAccessError = ref<string | null>(null)
 
 const canManageUserDefaults = computed(() => hasPermission(Permission.ManageUsers))
 const canManageAppSettings = computed(() => hasPermission(Permission.ManageAppSettings))
+const canCreateAccount = computed(() => passwordLoginEnabled.value || isSuperuser.value)
 const showDefaults = computed(() => !initialLoad.value && !error.value && (canManageAppSettings.value || canManageUserDefaults.value))
 
 const {
@@ -364,7 +365,7 @@ async function saveDefaultLibraryAccess() {
   <div class="space-y-4">
     <Teleport :to="HEADER_ACTIONS_TARGET" defer :disabled="!headerSlotAvailable">
       <p class="hidden text-sm text-muted-foreground lg:block">{{ pageSubtitle }}</p>
-      <Button size="sm" type="button" @click="openCreate">
+      <Button v-if="canCreateAccount" size="sm" type="button" @click="openCreate">
         <UserPlus :size="14" aria-hidden="true" />
         {{ passwordLoginEnabled ? t('adminFeature.usersPage.createUser') : t('adminFeature.userForm.createSharedAccount') }}
       </Button>

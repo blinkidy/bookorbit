@@ -205,9 +205,9 @@ watch(
 )
 
 watch(
-  [() => props.user, () => props.passwordLoginEnabled],
-  ([user, passwordLoginEnabled]) => {
-    if (!user && passwordLoginEnabled !== true) isSharedAccount.value = true
+  [() => props.user, () => props.passwordLoginEnabled, () => props.canManageSuperuser],
+  ([user, passwordLoginEnabled, canManageSuperuser]) => {
+    if (!user && passwordLoginEnabled === false && canManageSuperuser === true) isSharedAccount.value = true
   },
   { immediate: true },
 )

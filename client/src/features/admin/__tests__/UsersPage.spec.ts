@@ -8,7 +8,7 @@ const { apiMock, authState, permState, policyState } = vi.hoisted(() => ({
   apiMock: vi.fn<(input: string, init?: RequestInit) => Promise<unknown>>(),
   authState: { userId: 1 },
   permState: { isSuperuser: true, denied: [] as string[] },
-  policyState: { passwordLoginEnabled: true },
+  policyState: { passwordLoginEnabled: true as boolean | null },
 }))
 
 vi.mock('@/lib/api', () => ({ api: apiMock }))
@@ -35,16 +35,23 @@ vi.mock('@/features/auth/composables/useAuth', () => ({
 
 vi.mock('@/features/auth/composables/useLoginOptions', () => ({
   useLoginOptions: () => ({
-    loginOptions: computed(() => ({
-      passwordLoginEnabled: policyState.passwordLoginEnabled,
-      allowRegistration: false,
-      oidcProviders: [],
-    })),
-    fetchLoginOptions: vi.fn<() => Promise<{ passwordLoginEnabled: boolean; allowRegistration: boolean; oidcProviders: never[] }>>(async () => ({
-      passwordLoginEnabled: policyState.passwordLoginEnabled,
-      allowRegistration: false,
-      oidcProviders: [],
-    })),
+    loginOptions: computed(() =>
+      policyState.passwordLoginEnabled === null
+        ? null
+        : {
+            passwordLoginEnabled: policyState.passwordLoginEnabled,
+            allowRegistration: false,
+            oidcProviders: [],
+          },
+    ),
+    fetchLoginOptions: vi.fn(async () => {
+      if (policyState.passwordLoginEnabled === null) throw new Error('login options unavailable')
+      return {
+        passwordLoginEnabled: policyState.passwordLoginEnabled,
+        allowRegistration: false,
+        oidcProviders: [],
+      }
+    }),
   }),
 }))
 
@@ -274,6 +281,39 @@ describe('UsersPage roster', () => {
     await createButton?.trigger('click')
 
     expect(wrapper.find('user-form-drawer-stub').exists()).toBe(true)
+  })
+
+  it('keeps password account creation available when login options cannot be loaded', async () => {
+    policyState.passwordLoginEnabled = null
+    permState.isSuperuser = false
+    const wrapper = shallowMount(UsersPage, {
+      global: { stubs: { Button: { template: '<button><slot /></button>' }, teleport: false } },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('button').some((button) => button.text().includes('Create user'))).toBe(true)
+    expect(wrapper.text()).not.toContain('Create shared account')
+  })
+
+  it('hides SSO-only account creation from delegated user administrators', async () => {
+    policyState.passwordLoginEnabled = false
+    permState.isSuperuser = false
+    const wrapper = shallowMount(UsersPage, {
+      global: { stubs: { Button: { template: '<button><slot /></button>' }, teleport: false } },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('button').some((button) => button.text().includes('Create'))).toBe(false)
+  })
+
+  it('offers SSO-only shared account creation to superusers', async () => {
+    policyState.passwordLoginEnabled = false
+    const wrapper = shallowMount(UsersPage, {
+      global: { stubs: { Button: { template: '<button><slot /></button>' }, teleport: false } },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('button').some((button) => button.text().includes('Create Shared Account'))).toBe(true)
   })
 
   it('requests a bounded, sorted first page on mount', async () => {
