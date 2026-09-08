@@ -44,7 +44,7 @@ vi.mock('@/features/auth/composables/useLoginOptions', () => ({
             oidcProviders: [],
           },
     ),
-    fetchLoginOptions: vi.fn(async () => {
+    fetchLoginOptions: vi.fn<() => Promise<{ passwordLoginEnabled: boolean; allowRegistration: boolean; oidcProviders: never[] }>>(async () => {
       if (policyState.passwordLoginEnabled === null) throw new Error('login options unavailable')
       return {
         passwordLoginEnabled: policyState.passwordLoginEnabled,
