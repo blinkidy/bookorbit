@@ -193,7 +193,7 @@ jobs:
       - name: Enforce localization change policy
         shell: bash
         env:
-          IS_CROWDIN: ${{ steps.crowdin.outputs.is_crowdin }}
+          IS_CROWDIN: ${{ steps.crowdin.outputs.is_crowdin == 'true' || startsWith(github.head_ref, 'automation/upstream-') }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
