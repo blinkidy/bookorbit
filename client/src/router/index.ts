@@ -569,7 +569,7 @@ export const routes: RouteRecordRaw[] = [
             component: () => import('@/features/settings/RequestsSettings.vue'),
             props: { embedded: true },
             meta: {
-              requiredPermission: Permission.ManageBookRequests,
+              requiredPermission: Permission.ManageAppSettings,
               permissionFallback: 'settings-account-profile',
               maxWidth: 'max-w-5xl',
               title: () => t('titles.system.requests'),

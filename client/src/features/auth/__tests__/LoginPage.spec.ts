@@ -5,7 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import LoginPage from '../LoginPage.vue'
 
 const { statusState, routeState } = vi.hoisted(() => ({
-  statusState: { allowRegistration: false, passwordLoginEnabled: true },
+  statusState: { allowRegistration: false, passwordLoginEnabled: true, loginOptionsUnavailable: false },
   routeState: { query: {} as Record<string, unknown> },
 }))
 
@@ -25,10 +25,15 @@ vi.mock('../composables/useLoginOptions', () => ({
       allowRegistration: statusState.passwordLoginEnabled && statusState.allowRegistration,
       oidcProviders: [],
     }
+    const fetchLoginOptions = vi.fn<() => Promise<typeof options>>(async () => {
+      if (statusState.loginOptionsUnavailable) throw new Error('Failed to load sign-in options')
+      return options
+    })
+
     return {
-      loginOptions: ref(options),
-      loginOptionsError: ref(null),
-      fetchLoginOptions: vi.fn<() => Promise<typeof options>>(async () => options),
+      loginOptions: ref(statusState.loginOptionsUnavailable ? null : options),
+      loginOptionsError: ref(statusState.loginOptionsUnavailable ? 'Failed to load sign-in options' : null),
+      fetchLoginOptions,
     }
   },
 }))
@@ -75,6 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   statusState.allowRegistration = false
   statusState.passwordLoginEnabled = true
+  statusState.loginOptionsUnavailable = false
   routeState.query = {}
 })
 
@@ -112,6 +118,17 @@ describe('LoginPage sign-up affordance', () => {
 
     expect(wrapper.find('form').exists()).toBe(false)
     expect(wrapper.findAll('a').some((a) => ['/register', '/forgot-password'].includes(a.attributes('href') ?? ''))).toBe(false)
+  })
+
+  it('keeps password login available when sign-in options cannot be loaded', async () => {
+    statusState.loginOptionsUnavailable = true
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('form').exists()).toBe(true)
+    const alerts = wrapper.findAll('[role="alert"]')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]?.text()).toContain('Sign-in options could not be loaded')
   })
 })
 

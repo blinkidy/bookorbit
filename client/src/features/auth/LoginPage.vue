@@ -56,7 +56,7 @@ const { login } = useAuth()
 const { initiateLogin } = useOidc()
 const { setupStatusError } = useSetupStatus()
 const { loginOptions, loginOptionsError, fetchLoginOptions } = useLoginOptions()
-const passwordLoginEnabled = computed(() => loginOptions.value?.passwordLoginEnabled === true)
+const passwordLoginEnabled = computed(() => loginOptions.value?.passwordLoginEnabled !== false)
 const allowRegistration = computed(() => loginOptions.value?.allowRegistration === true)
 
 const route = useRoute()
@@ -263,6 +263,11 @@ async function handleOidcLogin(provider: OidcProviderPublic) {
         {{ t('auth.login.registeredNotice') }}
       </div>
 
+      <div v-if="error" role="alert" class="mb-4 text-sm text-destructive animate-shake">{{ error }}</div>
+      <div v-if="(setupStatusError || loginOptionsError) && !error" role="alert" class="mb-4 text-sm text-destructive animate-shake">
+        {{ t('auth.login.errors.optionsUnavailable') }}
+      </div>
+
       <form v-if="passwordLoginEnabled" @submit.prevent="handleSubmit" class="space-y-4">
         <div class="space-y-1.5 animate-fade-up" style="animation-delay: 80ms">
           <label for="username" class="text-sm font-medium text-foreground">{{ t('auth.fields.username') }}</label>
@@ -286,11 +291,6 @@ async function handleOidcLogin(provider: OidcProviderPublic) {
             required
             class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 backdrop-blur-sm"
           />
-        </div>
-
-        <div v-if="error" role="alert" class="text-sm text-destructive animate-shake">{{ error }}</div>
-        <div v-if="setupStatusError || loginOptionsError" class="text-sm text-destructive animate-shake">
-          {{ t('auth.login.errors.optionsUnavailable') }}
         </div>
 
         <button

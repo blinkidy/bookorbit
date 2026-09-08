@@ -15,7 +15,7 @@ describe('system-tabs', () => {
       expect(SYSTEM_TAB_INFO).toMatchObject({
         'file-naming': { permission: 'manage_app_settings' },
         'book-dock': { permission: 'book_dock_access' },
-        requests: { permission: 'manage_book_requests' },
+        requests: { permission: 'manage_app_settings' },
         maintenance: { permission: 'manage_app_settings' },
         'audit-log': { permission: null },
       })
