@@ -17,7 +17,13 @@ import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeSettingsDto } from './dto/update-me-settings.dto';
 import { UpdateSeriesCollapsePreferencesDto } from './dto/update-series-collapse-preferences.dto';
-import { USER_DELETING, UserEventsService, type UserDeletingEvent } from './user-events.service';
+import {
+  USER_AUTHORIZATION_CHANGED,
+  USER_DELETING,
+  UserEventsService,
+  type UserAuthorizationChangedEvent,
+  type UserDeletingEvent,
+} from './user-events.service';
 import { UserRepository, type UserListQuery } from './user.repository';
 import { AppSettingsService } from '../app-settings/app-settings.service';
 import { UserStatisticsService } from '../user-statistics/user-statistics.service';
@@ -79,8 +85,9 @@ export class UserService {
     return this.userRepo.generateResetToken(userId);
   }
 
-  incrementTokenVersion(userId: number) {
-    return this.userRepo.incrementTokenVersion(userId);
+  async incrementTokenVersion(userId: number): Promise<void> {
+    await this.userRepo.incrementTokenVersion(userId);
+    this.announceAuthorizationChange(userId);
   }
 
   findByIdWithPermissions(id: number): Promise<RequestUser | null> {
@@ -218,6 +225,7 @@ export class UserService {
     if (result.status === 'requester_not_superuser') throw new ForbiddenException('Only administrators can edit administrator accounts');
     if (result.status === 'last_superuser') throw new ConflictException('Cannot deactivate the last administrator');
     if (!result.user) throw new NotFoundException('User not found');
+    if (dto.active !== undefined) this.announceAuthorizationChange(id);
     return result.user;
   }
 
@@ -371,8 +379,9 @@ export class UserService {
     }
   }
 
-  setPermissionsDirectly(userId: number, permissionNames: Permission[]) {
-    return this.userRepo.setPermissions(userId, permissionNames);
+  async setPermissionsDirectly(userId: number, permissionNames: Permission[]): Promise<void> {
+    await this.userRepo.setPermissions(userId, permissionNames);
+    this.announceAuthorizationChange(userId);
   }
 
   async setPermissions(targetUserId: number, dto: SetPermissionsDto, requestingUser: RequestUser) {
@@ -388,6 +397,7 @@ export class UserService {
 
     const permissionNames = this.uniquePermissions(dto.permissionNames);
     await this.userRepo.setPermissions(targetUserId, permissionNames);
+    this.announceAuthorizationChange(targetUserId);
   }
 
   async setSuperuser(targetUserId: number, isSuperuser: boolean, requestingUser: RequestUser) {
@@ -406,6 +416,11 @@ export class UserService {
       throw new ConflictException('An administrator must link an enabled OIDC provider while password authentication is disabled');
     }
     if (result === 'last_superuser') throw new ConflictException('Cannot remove the last administrator');
+    if (result === 'updated') this.announceAuthorizationChange(targetUserId);
+  }
+
+  private announceAuthorizationChange(userId: number): void {
+    this.events.emit(USER_AUTHORIZATION_CHANGED, { userId } satisfies UserAuthorizationChangedEvent);
   }
 
   async getLibraryIds(userId: number): Promise<number[]> {

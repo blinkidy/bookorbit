@@ -1,4 +1,4 @@
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { Logger, OnModuleDestroy, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { OnGatewayConnection, OnGatewayDisconnect, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
@@ -8,6 +8,7 @@ import type { BookRequestProgressEvent } from '@bookorbit/types';
 import { AuthService } from '../auth/auth.service';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { rejectSocketConnection } from '../../common/utils/ws-auth.utils';
+import { USER_AUTHORIZATION_CHANGED, UserEventsService, type UserAuthorizationChangedEvent } from '../user/user-events.service';
 import { wsCorsOrigin } from '../../common/utils/ws-cors.utils';
 
 /** Everybody who reaches every request over HTTP, and therefore every request's progress. */
@@ -25,19 +26,34 @@ function userRoom(userId: number): string {
  * socket holding `book_request_access` is not automatically one of those, so a broadcast would
  * put operational detail about somebody else's request on a page that cannot open it.
  *
+ * Authorization changes disconnect that user's sockets immediately. The normal client reconnect
+ * then re-runs the same current-user checks used during the initial handshake.
+ *
  * `changed` stays a broadcast. It carries nothing, and every page answers it with a fetch that is
  * scoped by the same rules the HTTP surface applies.
  */
 @WebSocketGateway({ namespace: '/book-requests', cors: { origin: wsCorsOrigin() } })
-export class BookRequestGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class BookRequestGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(BookRequestGateway.name);
   private changes = 0;
+  private readonly handleAuthorizationChanged = ({ userId }: UserAuthorizationChangedEvent): void => {
+    this.server?.in(userRoom(userId)).disconnectSockets(true);
+  };
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly authService: AuthService,
+    private readonly userEvents: UserEventsService,
   ) {}
+
+  onModuleInit(): void {
+    this.userEvents.on(USER_AUTHORIZATION_CHANGED, this.handleAuthorizationChanged);
+  }
+
+  onModuleDestroy(): void {
+    this.userEvents.off(USER_AUTHORIZATION_CHANGED, this.handleAuthorizationChanged);
+  }
 
   async handleConnection(client: Socket): Promise<void> {
     try {
@@ -51,8 +67,6 @@ export class BookRequestGateway implements OnGatewayConnection, OnGatewayDisconn
       }
       (client.data as Record<string, unknown>).user = user;
       await client.join(userRoom(user.id));
-      // Read once at connect, like the permission check above it: a permission taken away mid
-      // session is caught by the token version, which drops the socket rather than re-roles it.
       if (user.isSuperuser || user.permissions.includes(Permission.ManageBookRequests)) await client.join(MANAGERS_ROOM);
       this.logger.debug(`WS connected: user=${user.id} socket=${client.id}`);
     } catch (err) {

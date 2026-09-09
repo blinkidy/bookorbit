@@ -21,5 +21,12 @@ export interface UserDeletingEvent {
   waitFor(work: Promise<void>): void;
 }
 
+/** Emitted after a change that can invalidate an authenticated user's current access. */
+export const USER_AUTHORIZATION_CHANGED = 'user.authorization_changed';
+
+export interface UserAuthorizationChangedEvent {
+  userId: number;
+}
+
 @Injectable()
 export class UserEventsService extends EventEmitter {}

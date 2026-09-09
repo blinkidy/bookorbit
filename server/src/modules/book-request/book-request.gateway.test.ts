@@ -1,12 +1,15 @@
 import { Permission } from '@bookorbit/types';
 
 import { BookRequestGateway } from './book-request.gateway';
+import { USER_AUTHORIZATION_CHANGED, UserEventsService } from '../user/user-events.service';
 
 function makeGateway() {
   const jwtService = { verify: vi.fn() };
   const authService = { validateUser: vi.fn() };
-  const gateway = new BookRequestGateway(jwtService as any, authService as any);
-  return { gateway, jwtService, authService };
+  const userEvents = new UserEventsService();
+  const gateway = new BookRequestGateway(jwtService as any, authService as any, userEvents);
+  gateway.onModuleInit();
+  return { gateway, jwtService, authService, userEvents };
 }
 
 function makeClient(id = 'socket-1') {
@@ -48,6 +51,20 @@ describe('BookRequestGateway', () => {
     const { client } = await connect({ id: 6, isSuperuser: false, permissions: [Permission.BookRequestAccess, Permission.ManageBookRequests] });
 
     expect(client.join.mock.calls.flat()).toEqual(['book-requests:user:6', 'book-requests:managers']);
+  });
+
+  it('disconnects a user socket as soon as authorization changes', () => {
+    const { gateway, userEvents } = makeGateway();
+    const disconnectSockets = vi.fn();
+    const inRoom = vi.fn().mockReturnValue({ disconnectSockets });
+    gateway.server = { in: inRoom } as any;
+
+    userEvents.emit(USER_AUTHORIZATION_CHANGED, { userId: 6 });
+
+    expect(inRoom).toHaveBeenCalledWith('book-requests:user:6');
+    expect(disconnectSockets).toHaveBeenCalledWith(true);
+    gateway.onModuleDestroy();
+    expect(userEvents.listenerCount(USER_AUTHORIZATION_CHANGED)).toBe(0);
   });
 
   /** A progress tick names request ids and byte totals, which HTTP hands to these people only. */

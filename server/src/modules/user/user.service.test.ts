@@ -6,7 +6,7 @@ import { hash } from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { Permission } from '@bookorbit/types';
 
-import { USER_DELETING, UserEventsService, type UserDeletingEvent } from './user-events.service';
+import { USER_AUTHORIZATION_CHANGED, USER_DELETING, UserEventsService, type UserDeletingEvent } from './user-events.service';
 import { UserService } from './user.service';
 
 const mockHash = hash as MockedFunction<typeof hash>;
@@ -96,6 +96,8 @@ describe('UserService', () => {
   });
 
   it('delegates basic repository passthrough methods', async () => {
+    const authorizationChanged = vi.fn();
+    events.on(USER_AUTHORIZATION_CHANGED, authorizationChanged);
     await service.findByUsername('alice');
     await service.findByEmail('alice@example.com');
     await service.findByOidcSubject('subject', 'issuer');
@@ -121,6 +123,8 @@ describe('UserService', () => {
     expect(userRepo.findAll).toHaveBeenCalledWith({ page: 1, pageSize: 20, sortBy: 'username', sortDir: 'asc' });
     expect(userRepo.findAssignable).toHaveBeenCalled();
     expect(userRepo.setPermissions).toHaveBeenCalledWith(7, [Permission.LibraryDownload]);
+    expect(authorizationChanged).toHaveBeenNthCalledWith(1, { userId: 7 });
+    expect(authorizationChanged).toHaveBeenNthCalledWith(2, { userId: 7 });
   });
 
   it('createUser rejects duplicate emails', async () => {
@@ -253,6 +257,18 @@ describe('UserService', () => {
     userRepo.updateManagedUser.mockResolvedValue({ status: 'updated' });
 
     await expect(service.updateUser(2, { name: 'x' }, reqUser({ isSuperuser: true }))).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('updateUser announces account status changes after persistence', async () => {
+    userRepo.findByIdWithPermissions.mockResolvedValue({ id: 2, isSuperuser: false });
+    userRepo.updateManagedUser.mockResolvedValue({ status: 'updated', user: { id: 2, active: false } });
+    const authorizationChanged = vi.fn();
+    events.on(USER_AUTHORIZATION_CHANGED, authorizationChanged);
+
+    await service.updateUser(2, { active: false }, reqUser({ isSuperuser: true }));
+
+    expect(userRepo.updateManagedUser).toHaveBeenCalledWith(1, 2, { active: false });
+    expect(authorizationChanged).toHaveBeenCalledWith({ userId: 2 });
   });
 
   it('SEC-030: updateMe ignores email field (email changes not permitted via self-service)', async () => {
@@ -539,6 +555,8 @@ describe('UserService', () => {
 
   it('setPermissions deduplicates permission names', async () => {
     userRepo.findByIdWithPermissions.mockResolvedValue({ id: 2, isSuperuser: false });
+    const authorizationChanged = vi.fn();
+    events.on(USER_AUTHORIZATION_CHANGED, authorizationChanged);
 
     await service.setPermissions(
       2,
@@ -547,6 +565,7 @@ describe('UserService', () => {
     );
 
     expect(userRepo.setPermissions).toHaveBeenCalledWith(2, [Permission.LibraryDownload, Permission.KoboSync]);
+    expect(authorizationChanged).toHaveBeenCalledWith({ userId: 2 });
   });
 
   it('setSuperuser blocks non-superuser from changing superuser status', async () => {
@@ -578,8 +597,11 @@ describe('UserService', () => {
   });
 
   it('setSuperuser writes the target superuser flag when allowed', async () => {
+    const authorizationChanged = vi.fn();
+    events.on(USER_AUTHORIZATION_CHANGED, authorizationChanged);
     await expect(service.setSuperuser(2, true, reqUser({ isSuperuser: true }))).resolves.toBeUndefined();
     expect(userRepo.setSuperuser).toHaveBeenCalledWith(1, 2, true);
+    expect(authorizationChanged).toHaveBeenCalledWith({ userId: 2 });
   });
 
   it('setSuperuser accepts an idempotent transition', async () => {
