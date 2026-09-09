@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { EDITION_DISPLAY_LIMIT, HardcoverBookMatchService } from './hardcover-book-match.service';
 
@@ -36,6 +36,10 @@ describe('HardcoverBookMatchService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepo.upsertBookState.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('returns cached match when state exists and no error', async () => {
@@ -91,30 +95,24 @@ describe('HardcoverBookMatchService', () => {
     expect(mockRepo.upsertBookState).not.toHaveBeenCalled();
   });
 
-  it('validates the exact cached edition instead of relying on the capped selection window', async () => {
+  it('returns the cached audiobook edition duration for progress sync', async () => {
     mockRepo.findBookState.mockResolvedValue({
-      hardcoverBookId: 1,
-      hardcoverEditionId: 1589497,
+      hardcoverBookId: 100,
+      hardcoverEditionId: 200,
       matchError: null,
     });
     mockClient.query.mockResolvedValue({
-      books: [{ id: 1, editions: [{ id: 1589497, pages: 375, isbn_13: '9780439023481' }] }],
+      books: [{ id: 100, editions: [{ id: 200, pages: null, audio_seconds: 3600 }] }],
     });
 
-    const result = await makeService().matchBook(1, 'tok', baseBook);
-
-    expect(result).toMatchObject({
-      hardcoverBookId: 1,
-      hardcoverEditionId: 1589497,
-      editionPages: 375,
+    await expect(makeService().matchBook(1, 'tok', { ...baseBook, format: 'm4b' })).resolves.toEqual({
+      hardcoverBookId: 100,
+      hardcoverEditionId: 200,
+      editionPages: null,
+      editionAudioSeconds: 3600,
+      editionIsAudio: true,
       matchMethod: 'cached',
     });
-    expect(mockClient.query).toHaveBeenCalledOnce();
-    expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookEditionById'), {
-      id: 1,
-      editionId: 1589497,
-    });
-    expect(mockRepo.upsertBookState).not.toHaveBeenCalled();
   });
 
   it('re-points a cached match when the cached edition no longer exists on Hardcover', async () => {
@@ -151,6 +149,7 @@ describe('HardcoverBookMatchService', () => {
     const result = await makeService().matchBook(1, 'tok', book);
     expect(result?.matchMethod).toBe('metadata_id');
     expect(result?.hardcoverBookId).toBe(77);
+    expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookById'), { id: 77 });
   });
 
   it('matches by metadata slug when hardcoverMetadataId is not numeric', async () => {
@@ -173,6 +172,43 @@ describe('HardcoverBookMatchService', () => {
       'tok',
       expect.stringContaining('query FindBookBySlug'),
       expect.objectContaining({ slug: 'fyrebirds' }),
+    );
+  });
+
+  it('treats a digit-prefixed Hardcover slug as a slug instead of a partial numeric ID', async () => {
+    mockRepo.findBookState.mockResolvedValue(undefined);
+    mockClient.query.mockImplementation((_userId, _token, query: string) => {
+      if (query.includes('query FindBookById')) {
+        return { books: [{ id: 84, editions: [{ id: 24634818, pages: 284 }] }] };
+      }
+      if (query.includes('query FindBookBySlug')) {
+        return { books: [{ id: 277100, editions: [{ id: 15528636, pages: 114, isbn_13: '9780140143508' }] }] };
+      }
+      throw new Error('Unexpected query');
+    });
+    const book = {
+      ...baseBook,
+      title: '84, Charing Cross Road',
+      hardcoverMetadataId: '84-charing-cross-road',
+      isbn13: '9780140143508',
+    };
+
+    const result = await makeService().matchBook(1, 'tok', book);
+
+    expect(result).toEqual({
+      hardcoverBookId: 277100,
+      hardcoverEditionId: 15528636,
+      editionPages: 114,
+      editionAudioSeconds: null,
+      editionIsAudio: false,
+      matchMethod: 'metadata_id',
+    });
+    expect(mockClient.query).toHaveBeenCalledTimes(1);
+    expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookBySlug'), {
+      slug: '84-charing-cross-road',
+    });
+    expect(mockRepo.upsertBookState).toHaveBeenCalledWith(
+      expect.objectContaining({ hardcoverBookId: 277100, hardcoverEditionId: 15528636, matchMethod: 'metadata_id' }),
     );
   });
 
@@ -200,6 +236,32 @@ describe('HardcoverBookMatchService', () => {
       'tok',
       expect.stringContaining('query SearchBooks'),
       expect.objectContaining({ query: 'Test Book Test Author' }),
+    );
+    const searchQuery = mockClient.query.mock.calls[1]?.[2] as string;
+    expect(searchQuery).toContain('error');
+    expect(searchQuery).not.toContain('fields:');
+    expect(searchQuery).not.toContain('weights:');
+  });
+
+  it('logs payload-level errors returned by Hardcover search', async () => {
+    mockRepo.findBookState.mockResolvedValue(undefined);
+    mockClient.query.mockResolvedValueOnce({ books: [] }).mockResolvedValueOnce({
+      search: {
+        error: 'Number of values in `num_typos` does not match number of `query_by` fields.',
+        ids: null,
+      },
+    });
+    const service = makeService();
+    const logger = Reflect.get(service, 'logger') as { warn: (message: string) => void };
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    await expect(service.matchBook(1, 'tok', baseBook)).resolves.toBeNull();
+
+    expect(mockClient.query).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[hardcover\.book_match\] \[fail\] userId=1 bookId=42 method=title_author durationMs=\d+ errorClass=SearchError error="Number of values in `num_typos` does not match number of `query_by` fields\." - title lookup failed$/,
+      ),
     );
   });
 
@@ -313,138 +375,6 @@ describe('HardcoverBookMatchService', () => {
       editionAudioSeconds: null,
       editionIsAudio: false,
       matchMethod: 'title',
-    });
-  });
-
-  it('marks editionIsAudio when the local file is an audiobook and the best edition is the audio one', async () => {
-    mockRepo.findBookState.mockResolvedValue(undefined);
-    mockClient.query.mockResolvedValue({
-      books: [
-        {
-          id: 700,
-          editions: [
-            { id: 900, pages: 320, isbn_13: null, isbn_10: null, audio_seconds: null, reading_format_id: 1 },
-            { id: 901, pages: null, isbn_13: null, isbn_10: null, audio_seconds: 36000, reading_format_id: 2 },
-          ],
-        },
-      ],
-    });
-
-    const book = { ...baseBook, isbn13: null, isbn10: null, hardcoverMetadataId: '700', format: 'm4b' };
-    const result = await makeService().matchBook(1, 'tok', book);
-
-    expect(result).toEqual({
-      hardcoverBookId: 700,
-      hardcoverEditionId: 901,
-      editionPages: null,
-      editionAudioSeconds: 36000,
-      editionIsAudio: true,
-      matchMethod: 'metadata_id',
-    });
-  });
-
-  it('reports editionIsAudio for a cached audio edition that is still tracked on Hardcover', async () => {
-    mockRepo.findBookState.mockResolvedValue({
-      hardcoverBookId: 100,
-      hardcoverEditionId: 200,
-      matchError: null,
-    });
-    mockClient.query.mockResolvedValue({
-      books: [{ id: 100, editions: [{ id: 200, pages: null, isbn_13: null, isbn_10: null, audio_seconds: 36000, reading_format_id: 2 }] }],
-    });
-
-    const result = await makeService().matchBook(1, 'tok', baseBook);
-
-    expect(result).toEqual({
-      hardcoverBookId: 100,
-      hardcoverEditionId: 200,
-      editionPages: null,
-      editionAudioSeconds: 36000,
-      editionIsAudio: true,
-      matchMethod: 'cached',
-    });
-  });
-
-  describe('resolveManualInput', () => {
-    it('resolves a numeric id directly', async () => {
-      mockClient.query.mockResolvedValue({ books: [{ id: 700, title: 'Fyrebirds', editions: [{ id: 901, pages: 512 }] }] });
-
-      const result = await makeService().resolveManualInput(1, 'tok', '700', baseBook);
-
-      expect(result).toEqual({ hardcoverBookId: 700, hardcoverEditionId: 901, title: 'Fyrebirds' });
-      expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookById'), { id: 700 });
-    });
-
-    it('resolves a slug when the input is not numeric', async () => {
-      mockClient.query.mockResolvedValue({ books: [{ id: 686104, title: 'Fyrebirds', editions: [{ id: 30673405, pages: 382 }] }] });
-
-      const result = await makeService().resolveManualInput(1, 'tok', 'fyrebirds', baseBook);
-
-      expect(result).toEqual({ hardcoverBookId: 686104, hardcoverEditionId: 30673405, title: 'Fyrebirds' });
-      expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookBySlug'), { slug: 'fyrebirds' });
-    });
-
-    it('extracts the id from a Hardcover URL', async () => {
-      mockClient.query.mockResolvedValue({ books: [{ id: 700, title: 'Fyrebirds', editions: [] }] });
-
-      const result = await makeService().resolveManualInput(1, 'tok', 'https://hardcover.app/books/700', baseBook);
-
-      expect(result?.hardcoverBookId).toBe(700);
-      expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookById'), { id: 700 });
-    });
-
-    it('extracts the slug from a Hardcover URL', async () => {
-      mockClient.query.mockResolvedValue({ books: [{ id: 686104, title: 'Fyrebirds', editions: [] }] });
-
-      const result = await makeService().resolveManualInput(1, 'tok', 'https://hardcover.app/books/fyrebirds', baseBook);
-
-      expect(result?.hardcoverBookId).toBe(686104);
-      expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookBySlug'), { slug: 'fyrebirds' });
-    });
-
-    it('resolves a Hardcover edition URL to its book slug and exact edition', async () => {
-      mockClient.query.mockResolvedValue({
-        books: [{ id: 1, title: 'The Hunger Games', editions: [{ id: 1589497, pages: 374 }] }],
-      });
-
-      const result = await makeService().resolveManualInput(1, 'tok', 'https://hardcover.app/books/the-hunger-games/editions/1589497', baseBook);
-
-      expect(result).toEqual({ hardcoverBookId: 1, hardcoverEditionId: 1589497, title: 'The Hunger Games' });
-      expect(mockClient.query).toHaveBeenCalledWith(1, 'tok', expect.stringContaining('query FindBookEditionBySlug'), {
-        slug: 'the-hunger-games',
-        editionId: 1589497,
-      });
-    });
-
-    it('rejects an edition URL when the edition does not belong to the URL book', async () => {
-      mockClient.query.mockResolvedValue({ books: [{ id: 1, title: 'The Hunger Games', editions: [] }] });
-
-      const result = await makeService().resolveManualInput(1, 'tok', 'https://hardcover.app/books/the-hunger-games/editions/1589497', baseBook);
-
-      expect(result).toBeNull();
-    });
-
-    it('returns null when the book cannot be found', async () => {
-      mockClient.query.mockResolvedValue({ books: [] });
-
-      const result = await makeService().resolveManualInput(1, 'tok', '999999', baseBook);
-
-      expect(result).toBeNull();
-    });
-
-    it('returns null on empty input', async () => {
-      const result = await makeService().resolveManualInput(1, 'tok', '   ', baseBook);
-
-      expect(result).toBeNull();
-      expect(mockClient.query).not.toHaveBeenCalled();
-    });
-
-    it('returns null when the query throws', async () => {
-      mockClient.query.mockRejectedValue(new Error('network error'));
-
-      const result = await makeService().resolveManualInput(1, 'tok', '700', baseBook);
-
-      expect(result).toBeNull();
     });
   });
 

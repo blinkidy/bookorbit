@@ -79,6 +79,7 @@ describe('router redirects', () => {
       ['settings-admin-shared-insights', Permission.ViewUserActivity],
       ['settings-admin-oidc', Permission.ManageAppSettings],
       ['settings-admin-server-fonts', Permission.ManageAppSettings],
+      ['settings-admin-requests', Permission.ManageAppSettings],
       ['settings-admin-book-dock', Permission.ManageBookDock],
     ])
 

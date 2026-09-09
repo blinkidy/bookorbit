@@ -5,7 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import LoginPage from '../LoginPage.vue'
 
 const { statusState, routeState } = vi.hoisted(() => ({
-  statusState: { allowRegistration: false },
+  statusState: { allowRegistration: false, passwordLoginEnabled: true, loginOptionsUnavailable: false },
   routeState: { query: {} as Record<string, unknown> },
 }))
 
@@ -15,7 +15,27 @@ vi.mock('../composables/useAuth', () => ({
 }))
 
 vi.mock('../composables/useOidc', () => ({
-  useOidc: () => ({ getPublicProviders: vi.fn<() => Promise<unknown[]>>(async () => []), initiateLogin: vi.fn<() => void>() }),
+  useOidc: () => ({ initiateLogin: vi.fn<() => void>() }),
+}))
+
+vi.mock('../composables/useLoginOptions', () => ({
+  useLoginOptions: () => {
+    const options = {
+      passwordLoginEnabled: statusState.passwordLoginEnabled,
+      allowRegistration: statusState.passwordLoginEnabled && statusState.allowRegistration,
+      oidcProviders: [],
+    }
+    const fetchLoginOptions = vi.fn<() => Promise<typeof options>>(async () => {
+      if (statusState.loginOptionsUnavailable) throw new Error('Failed to load sign-in options')
+      return options
+    })
+
+    return {
+      loginOptions: ref(statusState.loginOptionsUnavailable ? null : options),
+      loginOptionsError: ref(statusState.loginOptionsUnavailable ? 'Failed to load sign-in options' : null),
+      fetchLoginOptions,
+    }
+  },
 }))
 
 vi.mock('../composables/useSetupStatus', () => ({
@@ -59,6 +79,8 @@ function mountPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   statusState.allowRegistration = false
+  statusState.passwordLoginEnabled = true
+  statusState.loginOptionsUnavailable = false
   routeState.query = {}
 })
 
@@ -86,6 +108,27 @@ describe('LoginPage sign-up affordance', () => {
     await flushPromises()
 
     expect(wrapper.findAll('a').some((a) => a.attributes('href') === '/forgot-password')).toBe(true)
+  })
+
+  it('omits every password affordance when password authentication is disabled', async () => {
+    statusState.passwordLoginEnabled = false
+    statusState.allowRegistration = true
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(wrapper.findAll('a').some((a) => ['/register', '/forgot-password'].includes(a.attributes('href') ?? ''))).toBe(false)
+  })
+
+  it('keeps password login available when sign-in options cannot be loaded', async () => {
+    statusState.loginOptionsUnavailable = true
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('form').exists()).toBe(true)
+    const alerts = wrapper.findAll('[role="alert"]')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]?.text()).toContain('Sign-in options could not be loaded')
   })
 })
 

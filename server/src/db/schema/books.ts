@@ -1,6 +1,21 @@
 import { sql } from 'drizzle-orm';
-import { bigint, check, foreignKey, index, integer, numeric, pgTable, serial, timestamp, unique, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  boolean,
+  check,
+  foreignKey,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  serial,
+  timestamp,
+  unique,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
+import { timestamptz } from './columns';
 import { libraryFolders, libraries } from './libraries';
 
 export const books = pgTable(
@@ -17,7 +32,9 @@ export const books = pgTable(
     primaryAuthorSortName: varchar('primary_author_sort_name', { length: 500 }),
     folderPath: varchar('folder_path', { length: 4096 }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('present'),
-    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+    addedAt: timestamptz('added_at')
+      .default(sql`now()`)
+      .notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull()
@@ -68,6 +85,8 @@ export const bookFiles = pgTable(
     role: varchar('role', { length: 20 }).notNull().default('content'),
     sortOrder: integer('sort_order'),
     durationSeconds: integer('duration_seconds'),
+    // null means "not determined yet"; rows predating this column are backfilled lazily on Kobo sync.
+    isFixedLayout: boolean('is_fixed_layout'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()

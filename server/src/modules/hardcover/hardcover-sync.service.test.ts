@@ -152,6 +152,64 @@ describe('HardcoverSyncService', () => {
       expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ hardcoverUserBookId: 55, hardcoverReadId: 77 }));
     });
 
+    it('syncs audiobook progress in seconds using the matched edition duration', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findBookSyncData.mockResolvedValue({ ...readingBook, format: 'm4b' });
+      mockMatchService.matchBook.mockResolvedValue({
+        hardcoverBookId: 10,
+        hardcoverEditionId: 20,
+        editionPages: null,
+        editionAudioSeconds: 3600,
+        editionIsAudio: true,
+        matchMethod: 'cached',
+      });
+      mockClient.query
+        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ user_book_reads: [] })
+        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('synced');
+
+      expect(mockClient.query).toHaveBeenNthCalledWith(
+        4,
+        1,
+        'tok',
+        expect.stringContaining('mutation InsertUserBookRead'),
+        expect.objectContaining({
+          object: expect.objectContaining({
+            progress_seconds: 1512,
+            edition_id: 20,
+          }),
+        }),
+      );
+      expect(mockClient.query.mock.calls[3]?.[3]?.object).not.toHaveProperty('progress_pages');
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: 42, syncError: null }));
+    });
+
+    it('keeps audiobook progress pending when the matched edition has no duration', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findBookSyncData.mockResolvedValue({ ...readingBook, format: 'm4b' });
+      mockMatchService.matchBook.mockResolvedValue({
+        hardcoverBookId: 10,
+        hardcoverEditionId: 20,
+        editionPages: null,
+        editionAudioSeconds: null,
+        editionIsAudio: true,
+        matchMethod: 'cached',
+      });
+      mockClient.query
+        .mockResolvedValueOnce({ insert_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ update_user_book: { user_book: { id: 55 }, error: null } })
+        .mockResolvedValueOnce({ user_book_reads: [] })
+        .mockResolvedValueOnce({ insert_user_book_read: { user_book_read: { id: 77 }, error: null } });
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('synced');
+
+      expect(mockRepo.upsertBookState).toHaveBeenCalledWith(expect.objectContaining({ lastSyncedProgress: null, syncError: null }));
+      expect(mockClient.query.mock.calls.flatMap((call) => Object.keys(call[3]?.object ?? {}))).not.toContain('progress_seconds');
+    });
+
     it('fails when progress is present but the matched edition has no page count', async () => {
       const errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       mockSettingsService.getTokenForUser.mockResolvedValue('tok');
@@ -250,6 +308,47 @@ describe('HardcoverSyncService', () => {
 
       expect(mockMatchService.matchBook).not.toHaveBeenCalled();
       expect(mockClient.query).not.toHaveBeenCalled();
+    });
+
+    it('does not treat a digit-prefixed Hardcover slug as a changed numeric book id', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      mockRepo.findBookSyncData.mockResolvedValue({ ...readingBook, hardcoverMetadataId: '84-charing-cross-road' });
+      mockRepo.findBookState.mockResolvedValue({
+        hardcoverBookId: 277100,
+        lastSyncedAt: new Date('2024-02-01T00:00:00Z'),
+        lastSyncedStatus: 'reading',
+        lastSyncedProgress: 42,
+        lastSyncedRating: null,
+        lastSyncedStartedAt: '2024-01-01',
+        lastSyncedFinishedAt: null,
+      });
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('skipped');
+
+      expect(mockMatchService.matchBook).not.toHaveBeenCalled();
+      expect(mockClient.query).not.toHaveBeenCalled();
+    });
+
+    it('re-syncs when a complete numeric Hardcover metadata id changes', async () => {
+      mockSettingsService.getTokenForUser.mockResolvedValue('tok');
+      const changedBook = { ...readingBook, hardcoverMetadataId: '84' };
+      mockRepo.findBookSyncData.mockResolvedValue(changedBook);
+      mockRepo.findBookState.mockResolvedValue({
+        hardcoverBookId: 277100,
+        lastSyncedAt: new Date('2024-02-01T00:00:00Z'),
+        lastSyncedStatus: 'reading',
+        lastSyncedProgress: 42,
+        lastSyncedRating: null,
+        lastSyncedStartedAt: '2024-01-01',
+        lastSyncedFinishedAt: null,
+      });
+      mockMatchService.matchBook.mockResolvedValue(null);
+      const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      await expect(makeService().syncBook(1, 1)).resolves.toBe('skipped');
+
+      expect(mockMatchService.matchBook).toHaveBeenCalledWith(1, 'tok', changedBook);
+      warnSpy.mockRestore();
     });
 
     it('stores no_match error when match fails', async () => {

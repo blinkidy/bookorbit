@@ -4,6 +4,7 @@ import { BookDockService } from './book-dock.service';
 
 vi.mock('fs/promises', () => ({
   unlink: vi.fn(),
+  rmdir: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { unlink } from 'fs/promises';
@@ -46,9 +47,12 @@ function makeService() {
     setTargetsByIds: vi.fn(),
     countsByStatus: vi.fn(),
     getStatistics: vi.fn(),
+    findUnitFiles: vi.fn().mockResolvedValue([]),
+    findUnitFilesByDockFileIds: vi.fn().mockResolvedValue(new Map()),
   };
   const ingestService = {
     retryFetch: vi.fn(),
+    refetchMetadata: vi.fn(),
     pauseProcessing: vi.fn(),
     resumeProcessing: vi.fn().mockResolvedValue(undefined),
     requeueProcessableFiles: vi.fn().mockResolvedValue(0),
@@ -260,6 +264,27 @@ describe('BookDockService', () => {
     expect(ingestService.retryFetch).toHaveBeenCalledWith(3);
   });
 
+  it('refetchMetadata enforces ownership and queues an eligible file', async () => {
+    const { service, repo, ingestService } = makeService();
+    repo.findById.mockResolvedValue(row({ id: 7, uploadedBy: 4 }));
+    ingestService.refetchMetadata.mockResolvedValue(true);
+
+    await expect(service.refetchMetadata(7, 4, false)).resolves.toBeUndefined();
+
+    expect(ingestService.refetchMetadata).toHaveBeenCalledWith(7);
+
+    await expect(service.refetchMetadata(7, 5, false)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(ingestService.refetchMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetchMetadata rejects a file that cannot be queued', async () => {
+    const { service, repo, ingestService } = makeService();
+    repo.findById.mockResolvedValue(row({ id: 7, uploadedBy: 4 }));
+    ingestService.refetchMetadata.mockResolvedValue(false);
+
+    await expect(service.refetchMetadata(7, 4, false)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('bulkSetTarget enforces complete destination tuple and returns update counts', async () => {
     const { service, repo } = makeService();
     await expect(service.bulkSetTarget([1], false, [], 10, undefined)).rejects.toBeInstanceOf(BadRequestException);
@@ -307,13 +332,14 @@ describe('BookDockService', () => {
       .mockResolvedValueOnce([]);
 
     await service.discardFile(1, 1, false);
-    await service.bulkDiscard([], true);
+    await service.bulkDiscard([], true, [], undefined, undefined, 1, true, undefined, true);
 
     expect(vi.mocked(unlink)).toHaveBeenCalledWith('/bucket/book.epub');
     expect(vi.mocked(unlink)).toHaveBeenCalledWith('/covers/1.png');
     expect(vi.mocked(unlink)).toHaveBeenCalledWith('/covers/1_thumb.jpg');
     expect(repo.deleteById).toHaveBeenCalledWith(1);
     expect(repo.deleteByIds).toHaveBeenCalledWith([2]);
+    expect(repo.findSelectionBatch).toHaveBeenCalledWith(expect.objectContaining({ readyToFile: true }));
   });
 
   it('proxies summary and statistics repository queries', async () => {

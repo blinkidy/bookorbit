@@ -16,6 +16,8 @@ function validDisplayPreferences(overrides: Partial<DisplayPreferences> = {}): D
     smartScopeFilterExpanded: true,
     authorCoverSize: 140,
     authorCoverShape: 'circle',
+    authorRowDensity: 'comfortable',
+    authorCoverFallback: false,
     tableZebraStriping: false,
     tableDensity: 'comfortable',
     bookSpineOverlay: 'subtle',
@@ -209,6 +211,42 @@ describe('useDisplaySettingsSync', () => {
       expect.objectContaining({
         method: 'PUT',
         body: expect.stringContaining('"showJumpRails":false'),
+      }),
+    )
+  })
+
+  it('syncs authorRowDensity changes to the server', async () => {
+    vi.useFakeTimers()
+    const { apiMock, displaySettings, sync } = await loadModules()
+    apiMock.mockResolvedValue({ ok: true })
+
+    sync.initDisplaySettingsSync()
+    displaySettings.useDisplaySettings().authorRowDensity.value = 'compact'
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(apiMock).toHaveBeenCalledWith(
+      '/api/v1/user-preferences/display',
+      expect.objectContaining({
+        method: 'PUT',
+        body: expect.stringContaining('"authorRowDensity":"compact"'),
+      }),
+    )
+  })
+
+  it('syncs authorCoverFallback changes to the server', async () => {
+    vi.useFakeTimers()
+    const { apiMock, displaySettings, sync } = await loadModules()
+    apiMock.mockResolvedValue({ ok: true })
+
+    sync.initDisplaySettingsSync()
+    displaySettings.useDisplaySettings().authorCoverFallback.value = true
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(apiMock).toHaveBeenCalledWith(
+      '/api/v1/user-preferences/display',
+      expect.objectContaining({
+        method: 'PUT',
+        body: expect.stringContaining('"authorCoverFallback":true'),
       }),
     )
   })

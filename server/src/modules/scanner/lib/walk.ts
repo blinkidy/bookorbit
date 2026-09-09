@@ -1,6 +1,7 @@
 import { readdir, stat } from 'fs/promises';
 import { basename, dirname, join, relative } from 'path';
 
+import { naturalCompare } from '../../../common/utils/natural-sort.utils';
 import { classifyFile, isPrimaryFormat, isAudioFormat, type FileRole } from './classify';
 
 export interface FileStat {
@@ -32,33 +33,14 @@ const DIR_CONCURRENCY_LIMIT = 50;
 // but avoids broad matches like "Discography".
 const DISC_DIR_PATTERN = /^(?:cd|disc|disk|part|pt|side)(?:[\s_-]*(?:\d+|[A-Za-z]|[IVXLCM]+))$/i;
 
-function isDiscDirectory(name: string): boolean {
+export function isDiscDirectory(name: string): boolean {
   return DISC_DIR_PATTERN.test(name);
 }
 
 // Returns the filename stem (basename without the last extension).
-function stemOf(name: string): string {
+export function stemOf(name: string): string {
   const i = name.lastIndexOf('.');
   return i > 0 ? name.slice(0, i) : name;
-}
-
-// Natural sort: splits on numeric runs so "Chapter 10" sorts after "Chapter 9"
-function naturalCompare(a: string, b: string): number {
-  const re = /(\d+)/;
-  const aParts = a.split(re);
-  const bParts = b.split(re);
-  for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-    const ap = aParts[i] ?? '';
-    const bp = bParts[i] ?? '';
-    if (/^\d+$/.test(ap) && /^\d+$/.test(bp)) {
-      const diff = parseInt(ap, 10) - parseInt(bp, 10);
-      if (diff !== 0) return diff;
-    } else {
-      const diff = ap.localeCompare(bp);
-      if (diff !== 0) return diff;
-    }
-  }
-  return 0;
 }
 
 function buildExcludeMatcher(patterns: string[]): (name: string) => boolean {

@@ -88,7 +88,6 @@ describe('KoreaderPluginService', () => {
       },
     };
     achievementEvents = { emit: vi.fn() };
-
     service = new KoreaderPluginService(
       koreaderRepo as unknown as KoreaderRepository,
       pluginRepo as unknown as KoreaderPluginRepository,
