@@ -370,11 +370,22 @@ describe('extractReleaseArchive with a 7z', () => {
 
   /** `x` writes the payload wherever the caller asked for it, which is what the real one does. */
   function mountSevenZip(payload: Record<string, string>): void {
-    const callMain = vi.fn((args: string[]) => {
-      const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
-      for (const [name, contents] of Object.entries(payload)) vfs.writeAt(`${outDir}/${name}`, contents);
-    });
-    vi.mocked(getSevenZip).mockResolvedValue({ FS: vfs, callMain } as never);
+    const module = {
+      FS: vfs,
+      print: vi.fn(),
+      callMain: vi.fn((args: string[]) => {
+        if (args[0] === 'l') {
+          for (const [name, contents] of Object.entries(payload)) {
+            const size = Buffer.byteLength(contents);
+            module.print(`Path = ${name}\nSize = ${size}\nPacked Size = ${size}\nEncrypted = -\n`);
+          }
+          return;
+        }
+        const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
+        for (const [name, contents] of Object.entries(payload)) vfs.writeAt(`${outDir}/${name}`, contents);
+      }),
+    };
+    vi.mocked(getSevenZip).mockResolvedValue(module as never);
   }
 
   async function archiveAt(name: string): Promise<string> {
@@ -398,12 +409,21 @@ describe('extractReleaseArchive with a 7z', () => {
    * tree the survivor was still reading.
    */
   it('gives two concurrent extractions separate trees', async () => {
-    mountSevenZip({});
-    const callMain = vi.fn((args: string[]) => {
-      const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
-      vfs.writeAt(`${outDir}/book.epub`, outDir);
-    });
-    vi.mocked(getSevenZip).mockResolvedValue({ FS: vfs, callMain } as never);
+    const module = {
+      FS: vfs,
+      print: vi.fn(),
+      callMain: vi.fn((args: string[]) => {
+        const root = args[1]!.replace(/\/archive\.7z$/, '');
+        const contents = `${root}/out`;
+        if (args[0] === 'l') {
+          module.print(`Path = book.epub\nSize = ${Buffer.byteLength(contents)}\nPacked Size = ${Buffer.byteLength(contents)}\nEncrypted = -\n`);
+          return;
+        }
+        const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
+        vfs.writeAt(`${outDir}/book.epub`, contents);
+      }),
+    };
+    vi.mocked(getSevenZip).mockResolvedValue(module as never);
 
     const [first, second] = [join(workspace, 'a'), join(workspace, 'b')];
     await Promise.all([

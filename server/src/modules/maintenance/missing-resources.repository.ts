@@ -118,6 +118,37 @@ export class MissingResourcesRepository {
       .orderBy(asc(books.id));
   }
 
+  async findBrokenCoverPage(bookIds: number[], libraryIds: number[], offset: number, limit: number) {
+    if (bookIds.length === 0 || libraryIds.length === 0) return { rows: [], total: 0 };
+
+    const scope = and(
+      isNotNull(bookMetadata.coverSource),
+      inArray(books.libraryId, libraryIds),
+      sql`${books.id} = ANY(${bookIds}::integer[])`,
+    );
+    const [countRows, rows] = await Promise.all([
+      this.db.select({ value: count() }).from(books).innerJoin(bookMetadata, eq(bookMetadata.bookId, books.id)).where(scope),
+      this.db
+        .select({
+          id: books.id,
+          title: bookMetadata.title,
+          authors: authorsSubquery,
+          libraryId: books.libraryId,
+          libraryName: libraries.name,
+          coverSource: bookMetadata.coverSource,
+        })
+        .from(books)
+        .innerJoin(libraries, eq(libraries.id, books.libraryId))
+        .innerJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
+        .where(scope)
+        .orderBy(sql`array_position(${bookIds}::integer[], ${books.id})`)
+        .offset(offset)
+        .limit(limit),
+    ]);
+
+    return { rows, total: countRows[0]?.value ?? 0 };
+  }
+
   async filterBookIdsWithCoverSource(bookIds: number[], libraryIds: number[]): Promise<number[]> {
     if (bookIds.length === 0 || libraryIds.length === 0) return [];
     const rows = await this.db

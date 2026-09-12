@@ -42,6 +42,7 @@ describe('MissingResourcesService', () => {
       countBooksWithCoverSource: vi.fn().mockResolvedValue(0),
       findBookIdsWithCoverSource: vi.fn().mockResolvedValue([]),
       findBrokenCoverEntries: vi.fn().mockResolvedValue([]),
+      findBrokenCoverPage: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
       filterBookIdsWithCoverSource: vi.fn().mockImplementation((ids: number[]) => Promise.resolve(ids)),
       clearCoverSource: vi.fn().mockImplementation((ids: number[]) => Promise.resolve(ids.length)),
       findExistingBookIds: vi.fn().mockResolvedValue([]),
@@ -120,6 +121,27 @@ describe('MissingResourcesService', () => {
   });
 
   describe('listing', () => {
+    it('queries one access-scoped page without re-filtering the full sweep', async () => {
+      const row = {
+        id: 2,
+        title: 'Visible',
+        authors: ['Author'],
+        libraryId: 1,
+        libraryName: 'Main',
+        coverSource: 'custom',
+      };
+      const { service, repo } = setup({ findBrokenCoverPage: vi.fn().mockResolvedValue({ rows: [row], total: 1 }) });
+      const record = store.start(user.id, [1, 2]);
+      record.brokenCoverBookIds = [3, 2, 1];
+      store.complete(user.id);
+
+      const result = await service.listBrokenCovers(user, 1, 1);
+
+      expect(repo.findBrokenCoverPage).toHaveBeenCalledWith([3, 2, 1], [1, 2], 0, 1);
+      expect(repo.filterBookIdsWithCoverSource).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ total: 1, items: [{ id: 2 }] });
+    });
+
     it('requires a completed sweep before listing broken covers', async () => {
       const { service } = setup();
       await expect(service.listBrokenCovers(user, 1, 50)).rejects.toBeInstanceOf(ConflictException);

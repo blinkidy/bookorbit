@@ -24,7 +24,6 @@ import type { MissingResourceCleanupDto } from './dto/missing-resources.dto';
 const SWEEP_BATCH_SIZE = 1000;
 const DELETE_BATCH_SIZE = 500;
 const MAX_CLEANUP_IDS = 5000;
-const ACCESS_REVALIDATION_BATCH_SIZE = 1000;
 
 @Injectable()
 export class MissingResourcesService {
@@ -83,17 +82,13 @@ export class MissingResourcesService {
   async listBrokenCovers(user: RequestUser, page: number, pageSize: number): Promise<MissingResourcePage<BrokenCoverEntry>> {
     const record = this.requireCompletedSweep(user);
     const libraryIds = await this.libraryService.findAccessibleLibraryIds(user);
-    const accessibleIds: number[] = [];
-    for (let index = 0; index < record.brokenCoverBookIds.length; index += ACCESS_REVALIDATION_BATCH_SIZE) {
-      accessibleIds.push(
-        ...(await this.repo.filterBookIdsWithCoverSource(
-          record.brokenCoverBookIds.slice(index, index + ACCESS_REVALIDATION_BATCH_SIZE),
-          libraryIds,
-        )),
-      );
-    }
-    const pageIds = accessibleIds.slice((page - 1) * pageSize, page * pageSize);
-    const rows = await this.repo.findBrokenCoverEntries(pageIds);
+    const { rows, total } = await this.repo.findBrokenCoverPage(
+      record.brokenCoverBookIds,
+      libraryIds,
+      (page - 1) * pageSize,
+      pageSize,
+    );
+    const pageIds = rows.map((row) => row.id);
     const byId = new Map(rows.map((row) => [row.id, row]));
     return {
       items: pageIds.flatMap((bookId) => {
@@ -110,7 +105,7 @@ export class MissingResourcesService {
           },
         ];
       }),
-      total: accessibleIds.length,
+      total,
       page,
       pageSize,
     };
