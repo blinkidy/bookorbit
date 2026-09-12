@@ -92,3 +92,31 @@ describe('getSevenZip', () => {
     expect(factory).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('captureSevenZipOutput', () => {
+  it('restores the previous printer after capturing output', async () => {
+    const { captureSevenZipOutput } = await import('./sevenzip');
+    const previous = vi.fn();
+    const module = { print: previous } as never;
+    const output = captureSevenZipOutput(module, () => {
+      (module as { print: (message: string) => void }).print('Path = Dune.epub');
+      (module as { print: (message: string) => void }).print('Size = 4');
+    });
+
+    expect(output).toBe('Path = Dune.epub\nSize = 4');
+    expect((module as { print?: unknown }).print).toBe(previous);
+  });
+
+  it('bounds metadata output and restores the printer after failure', async () => {
+    const { captureSevenZipOutput } = await import('./sevenzip');
+    const previous = vi.fn();
+    const module = { print: previous } as never;
+
+    expect(() =>
+      captureSevenZipOutput(module, () => {
+        (module as { print: (message: string) => void }).print('x'.repeat(2 * 1024 * 1024));
+      }),
+    ).toThrow(/capture limit/);
+    expect((module as { print?: unknown }).print).toBe(previous);
+  });
+});

@@ -81,4 +81,11 @@ describe('CoverSweepStore', () => {
     expect(store.get(1)?.status).toBe('running');
     expect(store.get(2)).toBeUndefined();
   });
+  it('refuses a ninth sweep when every tracked sweep is still running', () => {
+    for (let userId = 1; userId <= 8; userId += 1) store.start(userId, []);
+
+    expect(() => store.start(9, [])).toThrow('Too many cover sweeps are already running');
+    for (let userId = 1; userId <= 8; userId += 1) expect(store.isRunning(userId)).toBe(true);
+    expect(store.get(9)).toBeUndefined();
+  });
 });

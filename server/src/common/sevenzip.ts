@@ -20,6 +20,36 @@ export interface SevenZipFS {
 export interface SevenZipModule {
   FS: SevenZipFS;
   callMain(args: string[]): void;
+  print?: (message: string) => void;
+}
+
+const MAX_CAPTURED_OUTPUT_BYTES = 2 * 1024 * 1024;
+let capturedOutputPrinter: ((message: string) => void) | null = null;
+
+export function captureSevenZipOutput(module: SevenZipModule, action: () => void): string {
+  const previousPrint = module.print;
+  const lines: string[] = [];
+  let outputBytes = 0;
+
+  if (capturedOutputPrinter) throw new Error('7z command output is already being captured');
+
+  const capture = (message: string) => {
+    outputBytes += Buffer.byteLength(message, 'utf8') + 1;
+    if (outputBytes > MAX_CAPTURED_OUTPUT_BYTES) {
+      throw new Error('7z command output exceeded the capture limit');
+    }
+    lines.push(message);
+  };
+  capturedOutputPrinter = capture;
+  module.print = capture;
+
+  try {
+    action();
+    return lines.join('\n');
+  } finally {
+    module.print = previousPrint;
+    capturedOutputPrinter = null;
+  }
 }
 
 let _instance: SevenZipModule | null = null;
@@ -32,7 +62,9 @@ export async function getSevenZip(): Promise<SevenZipModule> {
     _instancePromise = import('7z-wasm')
       .then((mod) => {
         const factory = (mod.default ?? mod) as unknown as (opts?: object) => Promise<SevenZipModule>;
-        return factory();
+        return factory({
+          print: (message: string) => capturedOutputPrinter?.(message),
+        });
       })
       .then((module) => {
         _instance = module;

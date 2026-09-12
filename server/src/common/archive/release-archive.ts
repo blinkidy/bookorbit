@@ -1,10 +1,10 @@
 import { createWriteStream } from 'fs';
 import { mkdir, rm, stat } from 'fs/promises';
-import { dirname, isAbsolute, join, normalize, resolve, sep } from 'path';
+import { dirname, isAbsolute, join, normalize, posix, resolve, sep } from 'path';
 import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 
-import { createSevenZipTempId, getSevenZip } from '../sevenzip';
+import { captureSevenZipOutput, createSevenZipTempId, getSevenZip } from '../sevenzip';
 
 /**
  * Expanding a release that arrived as RAR, ZIP or 7z, into a staging directory and never into the
@@ -264,24 +264,37 @@ async function extractSevenZip(archivePath: string, targetDirectory: string, bud
     sevenZip.FS.write(fd, bytes, 0, bytes.length);
     sevenZip.FS.close(fd);
 
+    let listed: PlannedEntry[];
+    try {
+      const listing = captureSevenZipOutput(sevenZip, () => sevenZip.callMain(['l', archiveName, '-slt', '-ba', '-bsp0', '-p']));
+      listed = parseSevenZipListing(listing);
+    } catch {
+      throw new ReleaseArchiveError('That 7z file could not be read, and may be password protected');
+    }
+
+    const expandedBytes = listed.reduce((total, entry) => total + entry.sizeBytes, 0);
+    if (size > 0 && expandedBytes > 1024 * 1024 && expandedBytes / size > ARCHIVE_BOUNDS.maxCompressionRatio) {
+      throw new ReleaseArchiveError('The archive is compressed far beyond what a book release is, and was not extracted');
+    }
+    const planned = planEntries(listed, targetDirectory, budget);
+
     try {
       sevenZip.callMain(['x', archiveName, `-o${workingDirectory}/out`, '-y', '-p']);
     } catch {
       throw new ReleaseArchiveError('That 7z file could not be extracted, and may be password protected');
     }
 
-    // Sizes first, contents afterwards. `stat` reads the entry's length without materializing it,
-    // so a release past a bound is refused while its bytes are still only in the WASM heap rather
-    // than also copied into ours. The heap itself is what the archive-size cap above bounds.
     const entries = collectSevenZipEntries(sevenZip, `${workingDirectory}/out`, '');
-    const planned = planEntries(
-      entries.map((entry) => ({ path: entry.relativePath, sizeBytes: entry.sizeBytes, packedBytes: entry.sizeBytes })),
-      targetDirectory,
-      budget,
-    );
-
-    for (const [index, entry] of planned.entries()) {
-      const source = entries[index]!;
+    if (entries.length !== planned.length) {
+      throw new ReleaseArchiveError('That 7z file changed while it was being extracted');
+    }
+    const extractedByPath = new Map(entries.map((entry) => [entry.relativePath, entry]));
+    for (const entry of planned) {
+      const source = extractedByPath.get(entry.path);
+      const metadata = listed.find((candidate) => candidate.path === entry.path);
+      if (!source || !metadata || source.sizeBytes !== metadata.sizeBytes) {
+        throw new ReleaseArchiveError('That 7z file changed while it was being extracted');
+      }
       const contents = sevenZip.FS.readFile(source.path);
       // Metered against what was read rather than what was claimed, and before it lands, so a
       // directory that understated an entry does not get to write it anyway.
@@ -301,6 +314,30 @@ async function extractSevenZip(archivePath: string, targetDirectory: string, bud
   } finally {
     removeSevenZipDirectory(sevenZip, workingDirectory);
   }
+}
+
+function parseSevenZipListing(output: string): PlannedEntry[] {
+  const entries: PlannedEntry[] = [];
+  for (const block of output.split(/\r?\n\s*\r?\n/)) {
+    const fields = new Map<string, string>();
+    for (const line of block.split(/\r?\n/)) {
+      const separator = line.indexOf(' = ');
+      if (separator > 0) fields.set(line.slice(0, separator), line.slice(separator + 3));
+    }
+
+    const listedPath = fields.get('Path');
+    if (!listedPath || fields.get('Folder') === '+' || fields.get('Attributes')?.startsWith('D')) continue;
+    if (fields.get('Encrypted') === '+') throw new ReleaseArchiveError('That 7z file is password protected');
+    const path = posix.normalize(listedPath.replace(/\\/g, '/'));
+
+    const sizeBytes = Number(fields.get('Size'));
+    const packedBytes = Number(fields.get('Packed Size') ?? 0);
+    if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0 || !Number.isSafeInteger(packedBytes) || packedBytes < 0) {
+      throw new ReleaseArchiveError('That 7z file contains invalid size metadata');
+    }
+    entries.push({ path, sizeBytes, packedBytes });
+  }
+  return entries;
 }
 
 /** Walks the expanded tree for paths and sizes only; nothing is read into our heap here. */

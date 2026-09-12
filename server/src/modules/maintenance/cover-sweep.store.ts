@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import type { CoverSweepStatus } from '@bookorbit/types';
 
 /**
@@ -66,7 +66,7 @@ export class CoverSweepStore {
       truncated: false,
       errorCode: null,
     };
-    this.evictOldest();
+    if (!this.evictOldest()) throw new ConflictException('Too many cover sweeps are already running');
     this.byUser.set(userId, record);
     return record;
   }
@@ -109,12 +109,14 @@ export class CoverSweepStore {
     record.orphanedCoverDirs.push(...dirs.slice(0, room));
   }
 
-  private evictOldest(): void {
+  private evictOldest(): boolean {
     while (this.byUser.size >= MAX_TRACKED_USERS) {
-      const entries = [...this.byUser.entries()].sort((a, b) => a[1].startedAt - b[1].startedAt);
-      const victim = entries.find(([, record]) => record.status !== 'running') ?? entries[0];
-      if (!victim) return;
+      const victim = [...this.byUser.entries()]
+        .filter(([, record]) => record.status !== 'running')
+        .sort((a, b) => a[1].startedAt - b[1].startedAt)[0];
+      if (!victim) return false;
       this.byUser.delete(victim[0]);
     }
+    return true;
   }
 }

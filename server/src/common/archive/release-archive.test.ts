@@ -1,5 +1,5 @@
 import { mkdtemp, readdir, readFile, lstat, rm, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { join, posix } from 'path';
 import { tmpdir } from 'os';
 import { deflateRawSync } from 'zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -370,11 +370,23 @@ describe('extractReleaseArchive with a 7z', () => {
 
   /** `x` writes the payload wherever the caller asked for it, which is what the real one does. */
   function mountSevenZip(payload: Record<string, string>): void {
-    const callMain = vi.fn((args: string[]) => {
-      const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
-      for (const [name, contents] of Object.entries(payload)) vfs.writeAt(`${outDir}/${name}`, contents);
-    });
-    vi.mocked(getSevenZip).mockResolvedValue({ FS: vfs, callMain } as never);
+    const module = {
+      FS: vfs,
+      print: vi.fn(),
+      callMain: vi.fn((args: string[]) => {
+        if (args[0] === 'l') {
+          for (const [name, contents] of Object.entries(payload)) {
+            const size = Buffer.byteLength(contents);
+            module.print(`Path = ${name}\nSize = ${size}\nPacked Size = ${size}\nEncrypted = -\n`);
+          }
+          return;
+        }
+        const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
+        for (const [name, contents] of Object.entries(payload)) vfs.writeAt(`${outDir}/${posix.normalize(name)}`, contents);
+      }),
+    };
+    vi.mocked(getSevenZip).mockResolvedValue(module as never);
+    return module;
   }
 
   async function archiveAt(name: string): Promise<string> {
@@ -392,18 +404,44 @@ describe('extractReleaseArchive with a 7z', () => {
     expect(await readFile(join(workspace, 'out', 'art', 'cover.jpg'), 'utf8')).toBe('image bytes');
   });
 
+  it('disables progress output while listing archive entries', async () => {
+    const module = mountSevenZip({ 'Dune.epub': 'book bytes' });
+
+    await extractReleaseArchive(await archiveAt('release.7z'), '7z', join(workspace, 'out'));
+
+    expect(module.callMain).toHaveBeenCalledWith(expect.arrayContaining(['-bsp0']));
+    expect(await readFile(join(workspace, 'out', 'Dune.epub'), 'utf8')).toBe('book bytes');
+  });
+
+  it('matches a listed dot-relative path to the normalized extracted path', async () => {
+    mountSevenZip({ './Dune.epub': 'book bytes' });
+
+    await extractReleaseArchive(await archiveAt('release.7z'), '7z', join(workspace, 'out'));
+
+    expect(await readFile(join(workspace, 'out', 'Dune.epub'), 'utf8')).toBe('book bytes');
+  });
+
   /**
    * The working directory used to be named from the clock, so two extractions starting in the same
    * millisecond took the same path: one failed to create it and the other's `finally` deleted the
    * tree the survivor was still reading.
    */
   it('gives two concurrent extractions separate trees', async () => {
-    mountSevenZip({});
-    const callMain = vi.fn((args: string[]) => {
-      const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
-      vfs.writeAt(`${outDir}/book.epub`, outDir);
-    });
-    vi.mocked(getSevenZip).mockResolvedValue({ FS: vfs, callMain } as never);
+    const module = {
+      FS: vfs,
+      print: vi.fn(),
+      callMain: vi.fn((args: string[]) => {
+        const root = args[1]!.replace(/\/archive\.7z$/, '');
+        const contents = `${root}/out`;
+        if (args[0] === 'l') {
+          module.print(`Path = book.epub\nSize = ${Buffer.byteLength(contents)}\nPacked Size = ${Buffer.byteLength(contents)}\nEncrypted = -\n`);
+          return;
+        }
+        const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
+        vfs.writeAt(`${outDir}/book.epub`, contents);
+      }),
+    };
+    vi.mocked(getSevenZip).mockResolvedValue(module as never);
 
     const [first, second] = [join(workspace, 'a'), join(workspace, 'b')];
     await Promise.all([

@@ -81,8 +81,9 @@ export class MissingResourcesService {
 
   async listBrokenCovers(user: RequestUser, page: number, pageSize: number): Promise<MissingResourcePage<BrokenCoverEntry>> {
     const record = this.requireCompletedSweep(user);
-    const pageIds = record.brokenCoverBookIds.slice((page - 1) * pageSize, page * pageSize);
-    const rows = await this.repo.findBrokenCoverEntries(pageIds);
+    const libraryIds = await this.libraryService.findAccessibleLibraryIds(user);
+    const { rows, total } = await this.repo.findBrokenCoverPage(record.brokenCoverBookIds, libraryIds, (page - 1) * pageSize, pageSize);
+    const pageIds = rows.map((row) => row.id);
     const byId = new Map(rows.map((row) => [row.id, row]));
     return {
       items: pageIds.flatMap((bookId) => {
@@ -99,7 +100,7 @@ export class MissingResourcesService {
           },
         ];
       }),
-      total: record.brokenCoverBookIds.length,
+      total,
       page,
       pageSize,
     };

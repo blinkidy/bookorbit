@@ -118,6 +118,38 @@ export class MissingResourcesRepository {
       .orderBy(asc(books.id));
   }
 
+  async findBrokenCoverPage(bookIds: number[], libraryIds: number[], offset: number, limit: number) {
+    if (bookIds.length === 0 || libraryIds.length === 0) return { rows: [], total: 0 };
+
+    const idsParam = sql.param(bookIds);
+    const librariesParam = sql.param(libraryIds);
+    const [countResult, pageResult] = await Promise.all([
+      this.db.execute(sql`
+        SELECT count(*)::integer AS total
+        FROM unnest(${idsParam}::integer[]) WITH ORDINALITY AS sweep(book_id, ordinal)
+        INNER JOIN ${books} ON ${books.id} = sweep.book_id
+        INNER JOIN ${bookMetadata} ON ${bookMetadata.bookId} = ${books.id}
+        WHERE ${books.libraryId} = ANY(${librariesParam}::integer[])
+          AND ${bookMetadata.coverSource} IS NOT NULL
+      `),
+      this.db.execute(sql`
+        SELECT sweep.book_id
+        FROM unnest(${idsParam}::integer[]) WITH ORDINALITY AS sweep(book_id, ordinal)
+        INNER JOIN ${books} ON ${books.id} = sweep.book_id
+        INNER JOIN ${bookMetadata} ON ${bookMetadata.bookId} = ${books.id}
+        WHERE ${books.libraryId} = ANY(${librariesParam}::integer[])
+          AND ${bookMetadata.coverSource} IS NOT NULL
+        ORDER BY sweep.ordinal
+        OFFSET ${offset}
+        LIMIT ${limit}
+      `),
+    ]);
+
+    const pageIds = pageResult.rows.map((row) => Number(row.book_id));
+    const rows = await this.findBrokenCoverEntries(pageIds);
+    return { rows, total: Number(countResult.rows[0]?.total ?? 0) };
+  }
+
   async filterBookIdsWithCoverSource(bookIds: number[], libraryIds: number[]): Promise<number[]> {
     if (bookIds.length === 0 || libraryIds.length === 0) return [];
     const rows = await this.db
