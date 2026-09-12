@@ -121,11 +121,7 @@ export class MissingResourcesRepository {
   async findBrokenCoverPage(bookIds: number[], libraryIds: number[], offset: number, limit: number) {
     if (bookIds.length === 0 || libraryIds.length === 0) return { rows: [], total: 0 };
 
-    const scope = and(
-      isNotNull(bookMetadata.coverSource),
-      inArray(books.libraryId, libraryIds),
-      sql`${books.id} = ANY(${bookIds}::integer[])`,
-    );
+    const scope = and(isNotNull(bookMetadata.coverSource), inArray(books.libraryId, libraryIds), sql`${books.id} = ANY(${bookIds}::integer[])`);
     const [countRows, rows] = await Promise.all([
       this.db.select({ value: count() }).from(books).innerJoin(bookMetadata, eq(bookMetadata.bookId, books.id)).where(scope),
       this.db
