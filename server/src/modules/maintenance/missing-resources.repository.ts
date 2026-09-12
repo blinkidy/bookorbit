@@ -121,28 +121,33 @@ export class MissingResourcesRepository {
   async findBrokenCoverPage(bookIds: number[], libraryIds: number[], offset: number, limit: number) {
     if (bookIds.length === 0 || libraryIds.length === 0) return { rows: [], total: 0 };
 
-    const scope = and(isNotNull(bookMetadata.coverSource), inArray(books.libraryId, libraryIds), sql`${books.id} = ANY(${bookIds}::integer[])`);
-    const [countRows, rows] = await Promise.all([
-      this.db.select({ value: count() }).from(books).innerJoin(bookMetadata, eq(bookMetadata.bookId, books.id)).where(scope),
-      this.db
-        .select({
-          id: books.id,
-          title: bookMetadata.title,
-          authors: authorsSubquery,
-          libraryId: books.libraryId,
-          libraryName: libraries.name,
-          coverSource: bookMetadata.coverSource,
-        })
-        .from(books)
-        .innerJoin(libraries, eq(libraries.id, books.libraryId))
-        .innerJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
-        .where(scope)
-        .orderBy(sql`array_position(${bookIds}::integer[], ${books.id})`)
-        .offset(offset)
-        .limit(limit),
+    const idsParam = sql.param(bookIds);
+    const librariesParam = sql.param(libraryIds);
+    const [countResult, pageResult] = await Promise.all([
+      this.db.execute(sql`
+        SELECT count(*)::integer AS total
+        FROM unnest(${idsParam}::integer[]) WITH ORDINALITY AS sweep(book_id, ordinal)
+        INNER JOIN ${books} ON ${books.id} = sweep.book_id
+        INNER JOIN ${bookMetadata} ON ${bookMetadata.bookId} = ${books.id}
+        WHERE ${books.libraryId} = ANY(${librariesParam}::integer[])
+          AND ${bookMetadata.coverSource} IS NOT NULL
+      `),
+      this.db.execute(sql`
+        SELECT sweep.book_id
+        FROM unnest(${idsParam}::integer[]) WITH ORDINALITY AS sweep(book_id, ordinal)
+        INNER JOIN ${books} ON ${books.id} = sweep.book_id
+        INNER JOIN ${bookMetadata} ON ${bookMetadata.bookId} = ${books.id}
+        WHERE ${books.libraryId} = ANY(${librariesParam}::integer[])
+          AND ${bookMetadata.coverSource} IS NOT NULL
+        ORDER BY sweep.ordinal
+        OFFSET ${offset}
+        LIMIT ${limit}
+      `),
     ]);
 
-    return { rows, total: countRows[0]?.value ?? 0 };
+    const pageIds = pageResult.rows.map((row) => Number(row.book_id));
+    const rows = await this.findBrokenCoverEntries(pageIds);
+    return { rows, total: Number(countResult.rows[0]?.total ?? 0) };
   }
 
   async filterBookIdsWithCoverSource(bookIds: number[], libraryIds: number[]): Promise<number[]> {
