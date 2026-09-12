@@ -93,7 +93,6 @@ describe('getSevenZip', () => {
   });
 });
 
-
 describe('captureSevenZipOutput', () => {
   it('restores the previous printer after capturing output', async () => {
     const { captureSevenZipOutput } = await import('./sevenzip');

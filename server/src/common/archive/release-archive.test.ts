@@ -386,6 +386,7 @@ describe('extractReleaseArchive with a 7z', () => {
       }),
     };
     vi.mocked(getSevenZip).mockResolvedValue(module as never);
+    return module;
   }
 
   async function archiveAt(name: string): Promise<string> {
@@ -401,6 +402,15 @@ describe('extractReleaseArchive with a 7z', () => {
 
     expect(await readFile(join(workspace, 'out', 'Dune.epub'), 'utf8')).toBe('book bytes');
     expect(await readFile(join(workspace, 'out', 'art', 'cover.jpg'), 'utf8')).toBe('image bytes');
+  });
+
+  it('disables progress output while listing archive entries', async () => {
+    const module = mountSevenZip({ 'Dune.epub': 'book bytes' });
+
+    await extractReleaseArchive(await archiveAt('release.7z'), '7z', join(workspace, 'out'));
+
+    expect(module.callMain).toHaveBeenCalledWith(expect.arrayContaining(['-bsp0']));
+    expect(await readFile(join(workspace, 'out', 'Dune.epub'), 'utf8')).toBe('book bytes');
   });
 
   /**

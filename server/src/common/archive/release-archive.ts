@@ -266,7 +266,7 @@ async function extractSevenZip(archivePath: string, targetDirectory: string, bud
 
     let listed: PlannedEntry[];
     try {
-      const listing = captureSevenZipOutput(sevenZip, () => sevenZip.callMain(['l', archiveName, '-slt', '-ba', '-p']));
+      const listing = captureSevenZipOutput(sevenZip, () => sevenZip.callMain(['l', archiveName, '-slt', '-ba', '-bsp0', '-p']));
       listed = parseSevenZipListing(listing);
     } catch {
       throw new ReleaseArchiveError('That 7z file could not be read, and may be password protected');
