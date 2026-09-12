@@ -20,6 +20,30 @@ export interface SevenZipFS {
 export interface SevenZipModule {
   FS: SevenZipFS;
   callMain(args: string[]): void;
+  print?: (message: string) => void;
+}
+
+const MAX_CAPTURED_OUTPUT_BYTES = 2 * 1024 * 1024;
+
+export function captureSevenZipOutput(module: SevenZipModule, action: () => void): string {
+  const previousPrint = module.print;
+  const lines: string[] = [];
+  let outputBytes = 0;
+
+  module.print = (message: string) => {
+    outputBytes += Buffer.byteLength(message, 'utf8') + 1;
+    if (outputBytes > MAX_CAPTURED_OUTPUT_BYTES) {
+      throw new Error('7z command output exceeded the capture limit');
+    }
+    lines.push(message);
+  };
+
+  try {
+    action();
+    return lines.join('\n');
+  } finally {
+    module.print = previousPrint;
+  }
 }
 
 let _instance: SevenZipModule | null = null;
