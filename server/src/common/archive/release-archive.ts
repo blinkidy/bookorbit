@@ -1,6 +1,6 @@
 import { createWriteStream } from 'fs';
 import { mkdir, rm, stat } from 'fs/promises';
-import { dirname, isAbsolute, join, normalize, resolve, sep } from 'path';
+import { dirname, isAbsolute, join, normalize, posix, resolve, sep } from 'path';
 import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 
@@ -325,9 +325,10 @@ function parseSevenZipListing(output: string): PlannedEntry[] {
       if (separator > 0) fields.set(line.slice(0, separator), line.slice(separator + 3));
     }
 
-    const path = fields.get('Path');
-    if (!path || fields.get('Folder') === '+' || fields.get('Attributes')?.startsWith('D')) continue;
+    const listedPath = fields.get('Path');
+    if (!listedPath || fields.get('Folder') === '+' || fields.get('Attributes')?.startsWith('D')) continue;
     if (fields.get('Encrypted') === '+') throw new ReleaseArchiveError('That 7z file is password protected');
+    const path = posix.normalize(listedPath.replace(/\\/g, '/'));
 
     const sizeBytes = Number(fields.get('Size'));
     const packedBytes = Number(fields.get('Packed Size') ?? 0);

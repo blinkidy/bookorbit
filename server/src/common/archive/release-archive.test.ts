@@ -1,5 +1,5 @@
 import { mkdtemp, readdir, readFile, lstat, rm, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { join, posix } from 'path';
 import { tmpdir } from 'os';
 import { deflateRawSync } from 'zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -382,7 +382,7 @@ describe('extractReleaseArchive with a 7z', () => {
           return;
         }
         const outDir = args.find((arg) => arg.startsWith('-o'))!.slice(2);
-        for (const [name, contents] of Object.entries(payload)) vfs.writeAt(`${outDir}/${name}`, contents);
+        for (const [name, contents] of Object.entries(payload)) vfs.writeAt(`${outDir}/${posix.normalize(name)}`, contents);
       }),
     };
     vi.mocked(getSevenZip).mockResolvedValue(module as never);
@@ -410,6 +410,14 @@ describe('extractReleaseArchive with a 7z', () => {
     await extractReleaseArchive(await archiveAt('release.7z'), '7z', join(workspace, 'out'));
 
     expect(module.callMain).toHaveBeenCalledWith(expect.arrayContaining(['-bsp0']));
+    expect(await readFile(join(workspace, 'out', 'Dune.epub'), 'utf8')).toBe('book bytes');
+  });
+
+  it('matches a listed dot-relative path to the normalized extracted path', async () => {
+    mountSevenZip({ './Dune.epub': 'book bytes' });
+
+    await extractReleaseArchive(await archiveAt('release.7z'), '7z', join(workspace, 'out'));
+
     expect(await readFile(join(workspace, 'out', 'Dune.epub'), 'utf8')).toBe('book bytes');
   });
 
