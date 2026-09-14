@@ -674,7 +674,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.pr-meta.outputs.scan_tag }}
           platforms: linux/amd64
           cache-from: type=gha,scope=ci-yml-pr-image
-          cache-to: type=gha,mode=max,scope=ci-yml-pr-image
+          cache-to: type=gha,mode=max,scope=ci-yml-pr-image,ignore-error=true
 
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -736,7 +736,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.pr-meta.outputs.publish_tag }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha,scope=ci-yml-pr-image
-          cache-to: type=gha,mode=max,scope=ci-yml-pr-image
+          cache-to: type=gha,mode=max,scope=ci-yml-pr-image,ignore-error=true
 
   ci-performance:
     name: CI Performance
