@@ -9839,7 +9839,7 @@
       "checkConstraints": {
         "reading_sessions_source_chk": {
           "name": "reading_sessions_source_chk",
-          "value": "\"reading_sessions\".\"source\" in ('web', 'ios', 'watchos', 'koreader', 'manual', 'kobo')"
+          "value": "\"reading_sessions\".\"source\" in ('web', 'ios', 'watchos', 'koreader', 'manual', 'kobo', 'audiobook')"
         },
         "reading_sessions_duration_seconds_nonnegative_chk": {
           "name": "reading_sessions_duration_seconds_nonnegative_chk",
