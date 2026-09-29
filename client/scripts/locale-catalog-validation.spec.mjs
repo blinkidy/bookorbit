@@ -8,6 +8,7 @@ function catalogs(target = {}) {
       flattenCatalog({
         common: { save: 'Save' },
         books: { count: '{count, plural, one {# book} other {# books}}' },
+        settings: { nav: { shortcutHint: 'Press {shortcut} to jump to any setting' } },
       }),
     ],
     ['cs', flattenCatalog(target)],
@@ -37,5 +38,15 @@ describe('locale catalog validation', () => {
     }
 
     expect(validateCatalogs({ catalogs: catalogs(target) })).toEqual(['cs: ICU plural category few missing for books.count'])
+  })
+
+  it('accepts the legacy shortcut hint while rejecting other placeholder mismatches', () => {
+    expect(
+      validateCatalogs({
+        catalogs: catalogs({ settings: { nav: { shortcutHint: 'Stisknutím Cmd K přejdete na libovolné nastavení' } } }),
+      }),
+    ).toEqual([])
+
+    expect(validateCatalogs({ catalogs: catalogs({ common: { save: 'Uložit {shortcut}' } }) })).toEqual(['cs: placeholders differ for common.save'])
   })
 })

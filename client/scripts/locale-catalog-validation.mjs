@@ -1,5 +1,9 @@
 import { validateLocaleMessage, validateSlotCountMessage } from './locale-message-validation.mjs'
 
+// Crowdin catalogs still contain platform-specific text for this key. Keep accepting those translations
+// until Crowdin refreshes them from the placeholder-based English source.
+const PLACEHOLDER_COMPATIBILITY_KEYS = new Set(['settings.nav.shortcutHint'])
+
 export function flattenCatalog(value, prefix = '', output = new Map()) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${prefix || 'catalog root'} must be a message object`)
@@ -22,7 +26,15 @@ function messageErrors({ key, locale, message, referenceMessage, slotCountKeys }
   if (message.length === 0) errors.push(`${locale}: empty message ${key}`)
   if (message.includes('\u2014')) errors.push(`${locale}: Unicode em dash is not allowed in ${key}`)
   if (/<[^>]+>/.test(message)) errors.push(`${locale}: HTML is not allowed in ${key}`)
-  errors.push(...validateLocaleMessage({ key, locale, message, referenceMessage }))
+  errors.push(
+    ...validateLocaleMessage({
+      key,
+      locale,
+      message,
+      referenceMessage,
+      allowPlaceholderMismatch: PLACEHOLDER_COMPATIBILITY_KEYS.has(key),
+    }),
+  )
   if (slotCountKeys.has(key)) errors.push(...validateSlotCountMessage({ key, locale, message }))
   return errors
 }
