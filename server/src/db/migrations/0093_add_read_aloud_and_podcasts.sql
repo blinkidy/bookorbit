@@ -409,4 +409,4 @@ ALTER TABLE "smart_scopes" ADD CONSTRAINT "smart_scopes_media_type_chk" CHECK ("
 ALTER TABLE "smart_scopes" ADD CONSTRAINT "smart_scopes_library_scope_chk" CHECK (("smart_scopes"."media_type" = 'podcasts') = ("smart_scopes"."library_id" is not null));--> statement-breakpoint
 ALTER TABLE "smart_scopes" ADD CONSTRAINT "smart_scopes_kobo_books_only_chk" CHECK ("smart_scopes"."sync_to_kobo" = false or "smart_scopes"."media_type" = 'books');--> statement-breakpoint
 ALTER TABLE "reading_progress" ADD CONSTRAINT "reading_progress_media_overlay_section_index_nonnegative_chk" CHECK ("reading_progress"."media_overlay_section_index" is null or "reading_progress"."media_overlay_section_index" >= 0);--> statement-breakpoint
-ALTER TABLE "reading_sessions" ADD CONSTRAINT "reading_sessions_source_chk" CHECK ("reading_sessions"."source" in ('web', 'ios', 'watchos', 'koreader', 'manual', 'kobo'));
+ALTER TABLE "reading_sessions" ADD CONSTRAINT "reading_sessions_source_chk" CHECK ("reading_sessions"."source" in ('web', 'ios', 'watchos', 'koreader', 'manual', 'kobo', 'audiobook'));
