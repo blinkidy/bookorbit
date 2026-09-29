@@ -793,6 +793,17 @@ describe('buildQuickSearch', () => {
     expect(result.clauses[4]).toMatchObject({ type: 'sql' });
   });
 
+  it('uses phrase containment without trigram expansion for multi-word searches', () => {
+    const { builder } = makeBuilder();
+    vi.mocked(accentInsensitiveIlike).mockClear();
+
+    const result = builder.buildQuickSearch('The Wax Child');
+
+    expect(accentInsensitiveIlike).toHaveBeenCalledTimes(5);
+    expect(accentInsensitiveIlike).toHaveBeenCalledWith(expect.anything(), '%The Wax Child%');
+    expect(collectSqlText(result).join(' ')).not.toContain(' % ');
+  });
+
   it('escapes LIKE special characters in q', () => {
     const { builder } = makeBuilder();
 
@@ -808,6 +819,15 @@ describe('buildQuickSearch', () => {
     const result = builder.buildQuickSearch('book_one') as any;
 
     expect(result.clauses[0]).toMatchObject({ type: 'accentInsensitiveIlike', pattern: '%book\\_one%' });
+  });
+
+  it('uses the same containment predicate for two-character queries', () => {
+    const { builder } = makeBuilder();
+
+    const result = builder.buildQuickSearch('du') as any;
+
+    expect(result.clauses[0]).toMatchObject({ type: 'accentInsensitiveIlike', pattern: '%du%' });
+    expect(result.clauses[2]).toMatchObject({ type: 'accentInsensitiveIlike', pattern: '%du%' });
   });
 
   it('calls db.select three times for author, series membership, and narrator exists subqueries', () => {

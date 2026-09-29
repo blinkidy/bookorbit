@@ -9,6 +9,7 @@ vi.mock('child_process', () => ({
 
 import { execFile } from 'child_process';
 import { mkdir, stat } from 'fs/promises';
+import { join } from 'path';
 
 import { KepubConversionService } from './kepub-conversion.service';
 
@@ -32,7 +33,7 @@ describe('KepubConversionService', () => {
     statMock.mockResolvedValueOnce({} as never);
 
     await expect(service.getKepubPath({ sourcePath: '/books/source.epub', fileHash: 'abc', bookId: 44, hyphenate: false })).resolves.toBe(
-      '/app-data/.kepub-cache/44/abc.kepub.epub',
+      join('/app-data', '.kepub-cache', '44', 'abc.kepub.epub'),
     );
 
     expect(kepubifyBinaryService.getBinaryPath).not.toHaveBeenCalled();
@@ -48,16 +49,32 @@ describe('KepubConversionService', () => {
     });
 
     await expect(service.getKepubPath({ sourcePath: '/books/source.epub', fileHash: 'hash', bookId: 44, hyphenate: true })).resolves.toBe(
-      '/app-data/.kepub-cache/44/hash-hyph.kepub.epub',
+      join('/app-data', '.kepub-cache', '44', 'hash-hyph.kepub.epub'),
     );
 
-    expect(mkdirMock).toHaveBeenCalledWith('/app-data/.kepub-cache/44', { recursive: true });
+    const cacheDirectory = join('/app-data', '.kepub-cache', '44');
+    const cachePath = join(cacheDirectory, 'hash-hyph.kepub.epub');
+    expect(mkdirMock).toHaveBeenCalledWith(cacheDirectory, { recursive: true });
     expect(execFileMock).toHaveBeenCalledWith(
       '/tools/kepubify',
-      ['--hyphenate', '--output', '/app-data/.kepub-cache/44/hash-hyph.kepub.epub', '/books/source.epub'],
+      ['--hyphenate', '--output', cachePath, '/books/source.epub'],
       { timeout: 60_000 },
       expect.any(Function),
     );
+  });
+
+  it('gives a stripped source its own cache entry so it cannot be served as the full archive', async () => {
+    const { service } = makeService();
+    statMock.mockRejectedValueOnce(new Error('cache miss'));
+    execFileMock.mockImplementation((_path, _args, _options, cb) => {
+      cb?.(null, '', '');
+      return {} as never;
+    });
+
+    // Same book and same file hash as the full archive; only the audioless flag separates them.
+    await expect(
+      service.getKepubPath({ sourcePath: '/tmp/kobo-epub/book.epub', fileHash: 'abc', bookId: 44, hyphenate: true, audioless: true }),
+    ).resolves.toBe(join('/app-data', '.kepub-cache', '44', 'abc-noaudio-v1-hyph.kepub.epub'));
   });
 
   it('uses a stable nohash cache key when file hash is unavailable', async () => {
@@ -69,12 +86,12 @@ describe('KepubConversionService', () => {
     });
 
     await expect(service.getKepubPath({ sourcePath: '/books/source.epub', fileHash: null, bookId: 44, hyphenate: false })).resolves.toBe(
-      '/app-data/.kepub-cache/44/nohash.kepub.epub',
+      join('/app-data', '.kepub-cache', '44', 'nohash.kepub.epub'),
     );
 
     expect(execFileMock).toHaveBeenCalledWith(
       '/tools/kepubify',
-      ['--output', '/app-data/.kepub-cache/44/nohash.kepub.epub', '/books/source.epub'],
+      ['--output', join('/app-data', '.kepub-cache', '44', 'nohash.kepub.epub'), '/books/source.epub'],
       { timeout: 60_000 },
       expect.any(Function),
     );

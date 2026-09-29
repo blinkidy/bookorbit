@@ -5,7 +5,7 @@ import { USER_AUTHORIZATION_CHANGED, UserEventsService } from '../user/user-even
 
 function makeGateway() {
   const jwtService = { verify: vi.fn() };
-  const authService = { validateUser: vi.fn() };
+  const authService = { validateSessionUser: vi.fn() };
   const userEvents = new UserEventsService();
   const gateway = new BookRequestGateway(jwtService as any, authService as any, userEvents);
   gateway.onModuleInit();
@@ -26,7 +26,7 @@ function makeClient(id = 'socket-1') {
 async function connect(user: { id: number; isSuperuser: boolean; permissions: Permission[] }) {
   const { gateway, jwtService, authService } = makeGateway();
   jwtService.verify.mockReturnValue({ sub: user.id, ver: 1 });
-  authService.validateUser.mockResolvedValue(user);
+  authService.validateSessionUser.mockResolvedValue(user);
   const client = makeClient();
   await gateway.handleConnection(client);
   return { gateway, client };

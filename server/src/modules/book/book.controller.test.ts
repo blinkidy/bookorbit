@@ -147,10 +147,8 @@ function makeController() {
     resolveDownloadFilename: vi.fn(),
     getProgress: vi.fn(),
     getBookProgress: vi.fn(),
-    getAudioProgress: vi.fn(),
     saveProgress: vi.fn(),
     clearFileProgress: vi.fn(),
-    saveAudioProgress: vi.fn(),
     updatePersonalNote: vi.fn(),
     updateAddedAt: vi.fn(),
     updateMetadata: vi.fn(),
@@ -773,11 +771,17 @@ describe('BookController', () => {
       cfi: null,
       pageNumber: null,
       percentage: 0,
+      positionSeconds: null,
+      mediaOverlayFragment: null,
+      mediaOverlaySectionIndex: null,
       koboLocationSource: null,
       koboLocationType: null,
       koboLocationValue: null,
       koboContentSourceProgressPercent: null,
       koreaderProgress: null,
+      narrationPercentage: null,
+      narrationUpdatedAt: null,
+      textUpdatedAt: null,
     });
     expect(bookService.getProgress).toHaveBeenCalledWith(user.id, 9, user);
   });
@@ -788,11 +792,9 @@ describe('BookController', () => {
 
     await controller.saveFileProgress(9, { percentage: 25 } as never, user);
     await controller.clearFileProgress(9, user);
-    await controller.saveAudioProgress(11, { currentFileId: 2, positionSeconds: 90, percentage: 20 } as never, user);
 
     expect(bookService.saveProgress).toHaveBeenCalledWith(user.id, 9, { percentage: 25 }, user);
     expect(bookService.clearFileProgress).toHaveBeenCalledWith(user.id, 9, user);
-    expect(bookService.saveAudioProgress).toHaveBeenCalledWith(user.id, 11, { currentFileId: 2, positionSeconds: 90, percentage: 20 }, user);
   });
 
   it('delegates remaining book endpoints to service methods', async () => {
@@ -808,7 +810,6 @@ describe('BookController', () => {
     bookService.refreshMetadata.mockResolvedValue({ id: 7 });
     bookService.getMetadataFromFile.mockResolvedValue({ title: 'File Title' });
     bookService.getKoboState.mockResolvedValue({ eligibleForKoboSync: false, syncCollections: [], readingState: null, snapshots: [] });
-    bookService.getAudioProgress.mockResolvedValue({ positionSeconds: 15 });
     bookService.getDetail.mockResolvedValue({ id: 7, title: 'Detail' });
 
     await controller.updateMetadata(7, { title: 'New' } as never, user);
@@ -820,7 +821,6 @@ describe('BookController', () => {
     await controller.getMetadataFromFile(7, user);
     await controller.getKoboState(7, user);
     await controller.setReadStatus(7, { status: 'reading' } as never, user);
-    await controller.getAudioProgress(7, user);
     await controller.getDetail(7, user);
 
     expect(bookService.updateMetadata).toHaveBeenCalledWith(7, { title: 'New' }, user, { postSaveMode: 'schedule' });
@@ -834,7 +834,6 @@ describe('BookController', () => {
     expect(bookService.getMetadataFromFile).toHaveBeenCalledWith(7, user);
     expect(bookService.getKoboState).toHaveBeenCalledWith(7, user);
     expect(bookService.setReadStatus).toHaveBeenCalledWith(7, { status: 'reading' }, user);
-    expect(bookService.getAudioProgress).toHaveBeenCalledWith(user.id, 7, user);
     expect(bookService.getDetail).toHaveBeenCalledWith(7, user);
   });
 
@@ -980,6 +979,18 @@ describe('BookController', () => {
     expect(Reflect.getMetadata(FORBIDDEN_PERMISSION_KEY, BookController.prototype.refreshMetadata)).toBeUndefined();
   });
 
+  // Both routes previously verified library access only, so a library editor without delete
+  // rights could remove a file from disk, and the web client already assumed otherwise.
+  it('gates per-file mutations on the same permissions as the book-level routes', () => {
+    expect(Reflect.getMetadata(PERMISSION_KEY, BookController.prototype.deleteFile)).toBe(Permission.LibraryDeleteBooks);
+    expect(Reflect.getMetadata(PERMISSION_KEY, BookController.prototype.renameFile)).toBe(Permission.LibraryEditMetadata);
+  });
+
+  // Progress is the caller's own, so clearing it stays available to every account with access.
+  it('leaves per-file progress clearing ungated', () => {
+    expect(Reflect.getMetadata(PERMISSION_KEY, BookController.prototype.clearFileProgress)).toBeUndefined();
+  });
+
   it('marks bulk-download endpoints as demo-restricted', () => {
     const message = 'Demo-restricted account cannot perform bulk downloads';
     const bulkDownloadMethods = [BookController.prototype.exportBooks, BookController.prototype.exportBooksDownload];
@@ -990,6 +1001,11 @@ describe('BookController', () => {
         message,
       });
     }
+  });
+
+  it('requires mutation permissions for per-file rename and delete', () => {
+    expect(Reflect.getMetadata(PERMISSION_KEY, BookController.prototype.renameFile)).toBe(Permission.LibraryEditMetadata);
+    expect(Reflect.getMetadata(PERMISSION_KEY, BookController.prototype.deleteFile)).toBe(Permission.LibraryDeleteBooks);
   });
 
   it('preserves valid surrogate pairs while stripping lone surrogates in download filenames', async () => {

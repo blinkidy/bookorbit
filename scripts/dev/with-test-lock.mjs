@@ -6,6 +6,7 @@
 
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from "node:fs";
+import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
@@ -140,7 +141,12 @@ async function acquire(command, waitTimeoutMs) {
 
 function runChild(command, runTimeoutMs) {
   return new Promise((resolve) => {
-    const child = spawn(command[0], command.slice(1), {
+    const isWindowsVitest = process.platform === "win32" && command[0] === "vitest";
+    const executable = isWindowsVitest ? process.execPath : command[0];
+    const args = isWindowsVitest
+      ? [join(dirname(createRequire(join(process.cwd(), "package.json")).resolve("vitest")), "vitest.mjs"), ...command.slice(1)]
+      : command.slice(1);
+    const child = spawn(executable, args, {
       cwd: process.cwd(),
       stdio: "inherit",
       detached: true,
