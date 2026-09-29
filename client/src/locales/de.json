@@ -14,9 +14,7 @@
     "previous": "Vorherige",
     "retry": "Erneut versuchen",
     "yes": "Ja",
-    "no": "Nein",
-    "show": "Anzeigen",
-    "hide": "Ausblenden"
+    "no": "Nein"
   },
   "settings": {
     "privacySharing": {
@@ -1084,7 +1082,7 @@
         "folderMode": "Ordnermodus",
         "emptyTitle": "Noch keine Bibliotheken",
         "emptyHint": "Fügen Sie eine Bibliothek hinzu, um Ihre Bücher zu organisieren.",
-        "addFirstLibrary": "Füge die erste Bibliothek hinzu",
+        "addFirstLibrary": "Fügen Sie Ihre erste Bibliothek hinzu",
         "deleteConfirmTitle": "\"{name}\" löschen?",
         "deleteConfirmBody": "Dadurch werden alle Bücher, Metadaten, Lesefortschritte, Lesezeichen und Anmerkungen in dieser Bibliothek dauerhaft entfernt. Dies kann nicht rückgängig gemacht werden.",
         "deleteConfirmTypeName": "Geben Sie den Bibliotheksnamen zur Bestätigung ein:",
@@ -1259,7 +1257,7 @@
       "scoreWeights": {
         "groupLabel": "Bewertungsgewichte",
         "assignHintPrefix": "Weisen Sie jedem Feld ein Gewicht zu. Gesamtgewicht:",
-        "areYouSure": "Bist Du sicher?",
+        "areYouSure": "Sind Sie sicher?",
         "resetToDefaultsButton": "Auf Standard zurücksetzen",
         "recalculateAll": "Alle neu berechnen",
         "confirmReset": "Zurücksetzen bestätigen",
@@ -1371,7 +1369,6 @@
         "display": "Anzeige",
         "reader": "Reader",
         "metadata": "Metadaten",
-        "usersAccess": "Benutzer & Zugriff",
         "email": "E-Mail",
         "opds": "OPDS",
         "kobo": "Kobo",
@@ -1380,8 +1377,7 @@
         "hardcover": "Hardcover",
         "admin": "Admin",
         "system": "System",
-        "account": "Konto",
-        "podcasts": "Podcasts"
+        "account": "Konto"
       }
     },
     "integrations": {
@@ -1414,7 +1410,7 @@
         "pageCount": "Seitenzahl",
         "communityRating": "Community-Bewertung",
         "seriesName": "Reihenname",
-        "seriesIndex": "Nr. in der Reihe",
+        "seriesIndex": "Position in der Reihe",
         "genres": "Genres",
         "narrators": "Sprecher",
         "duration": "Dauer",
@@ -1635,10 +1631,6 @@
           "storeProviderIds": {
             "label": "Anbieter-IDs bei Büchern speichern",
             "hint": "Beim Abrufen von Metadaten die zurückgegebenen Anbieter-IDs (ISBN, ASIN, Goodreads-ID usw.) im Buchdatensatz speichern, für genauere zukünftige Suchen."
-          },
-          "existingProviderIdsOnly": {
-            "label": "Nur vorhandene Provider-IDs verwenden",
-            "hint": "Für Bücher, die bereits in der Bibliothek sind, werden nur Anbieter mit einer gespeicherten ID abgefragt und nie auf eine Suche zurückgefallen, wenn eine ID-Suche fehlschlägt. Manuelle Suche und Neubucherkennung bleiben davon unberührt."
           }
         },
         "library": {
@@ -1824,7 +1816,7 @@
           "bodyBefore": "Dadurch wird",
           "bodyMiddle": "dauerhaft gelöscht und dessen gespeicherte Werte werden entfernt aus",
           "bodyAfter": ". Dies kann nicht rückgängig gemacht werden.",
-          "confirmBefore": "Typ",
+          "confirmBefore": "Geben Sie",
           "confirmAfter": "zur Bestätigung ein",
           "confirmPlaceholder": "Geben Sie die Feldbezeichnung zur Bestätigung ein"
         },
@@ -1927,18 +1919,6 @@
         "fontSizeHint": "Grundtextgröße in Pixeln",
         "lineHeight": "Zeilenhöhe",
         "lineHeightHint": "Vertikaler Abstand zwischen den Zeilen",
-        "paragraphSpacing": "Absatzabstand",
-        "paragraphSpacingHint": "Abstand zwischen den Absätzen. Standard Buch bewahrt den Abstand des Herausgebers.",
-        "paragraphSpacingDefault": "Buchstandard",
-        "paragraphSpacingValue": "{value} em",
-        "letterSpacing": "Zeichenabstand",
-        "letterSpacingHint": "Abstand zwischen Buchstaben. Buchstandard bewahrt den Abstand des Herausgebers.",
-        "wordSpacing": "Wortabstand",
-        "wordSpacingHint": "Abstand zwischen Wörtern. Buchstandard bewahrt den Abstand des Herausgebers.",
-        "textIndent": "Einzug erste Zeile",
-        "textIndentHint": "Einzug am Anfang von normalen Absätzen. Buchstandard beibehaltet die vom Verlag vorgegebenen Einzug.",
-        "custom": "Benutzerdefiniert",
-        "emValue": "{value} em",
         "justify": "Text ausrichten",
         "justifyHint": "Text an beiden Rändern ausrichten",
         "hyphenation": "Silbentrennung",
@@ -2081,17 +2061,17 @@
         "serverFontVisibilityFailed": "Fehler beim Aktualisieren der Schriftart-Sichtbarkeit"
       },
       "bookDock": {
-        "title": "Bücherablage",
-        "subtitle": "Konfigurieren Sie, wie Dateien verarbeitet werden, wenn sie in die Bücherablage gelangen.",
+        "title": "Book Dock",
+        "subtitle": "Konfigurieren Sie, wie Dateien verarbeitet werden, wenn sie in Book Dock gelangen.",
         "dropFolder": "Ablageordner",
         "containerPath": "Container-Pfad",
-        "containerPathHint": "Kopieren oder verschieben Sie Buchdateien in diesen Ordner, damit sie automatisch von der Bücherablage erkannt und verarbeitet werden. Unterverzeichnisse werden unterstützt.",
+        "containerPathHint": "Kopieren oder verschieben Sie Buchdateien in diesen Ordner, damit sie automatisch von Book Dock erkannt und verarbeitet werden. Unterverzeichnisse werden unterstützt.",
         "changePathPrefix": "Um diesen Pfad zu ändern, setzen Sie",
-        "changePathMiddle": "in deiner",
+        "changePathMiddle": "in Ihrer",
         "changePathSuffix": "Datei.",
         "metadata": "Metadaten",
         "autoFetch": "Metadaten automatisch von Anbietern abrufen",
-        "autoFetchHint": "Ruft automatisch Metadaten von konfigurierten Anbietern ab (Google Books, iTunes, Open Library usw.), nachdem eine Datei zur Bücherablage hinzugefügt wurde.",
+        "autoFetchHint": "Ruft automatisch Metadaten von konfigurierten Anbietern ab (Google Books, iTunes, Open Library usw.), nachdem eine Datei zu Book Dock hinzugefügt wurde.",
         "autoFinalize": "Automatische Finalisierung",
         "enableAutoFinalize": "Automatische Finalisierung aktivieren",
         "enableAutoFinalizeHint": "Dateien mit einem Metadaten-Konfidenzwert am oder über dem Schwellenwert werden automatisch finalisiert.",
@@ -2147,10 +2127,10 @@
         "modInitial": "Nur Anfangsbuchstabe",
         "modFixed2": "Zwei Dezimalstellen",
         "modMax3": "Bis zu drei Werte, sonst keine",
-        "folderOnlyPrefix": "Beende ein Muster mit",
+        "folderOnlyPrefix": "Beenden Sie ein Muster mit",
         "folderOnlySuffix": "um nur einen Ordner anzugeben. Der ursprüngliche Dateiname bleibt darin erhalten.",
         "conditionalLogic": "Bedingte Logik",
-        "conditionalPart1": "Umbruch in",
+        "conditionalPart1": "Umschließen Sie mit",
         "conditionalPart2": "um ein Segment zu überspringen, wenn sein Token leer ist. Verwenden Sie",
         "conditionalPart3": "für einen Standardwert.",
         "examples": "Beispiele",
@@ -2204,8 +2184,8 @@
         "tokenAuthors": "Autore(n), durch Komma getrennt",
         "tokenNarrators": "Erzähler, durch Kommas getrennt",
         "tokenYear": "Jahr der Veröffentlichung",
-        "tokenSeries": "Reihenname",
-        "tokenSeriesIndex": "Reihe-Index (Führende Null)",
+        "tokenSeries": "Serienname",
+        "tokenSeriesIndex": "Serien-Index (Führende Null)",
         "tokenPublisher": "Verlag",
         "tokenIsbn": "ISBN-13",
         "tokenLanguage": "Sprache",
@@ -2256,16 +2236,16 @@
         "paletteSeparatorHint": "Startet eine neue Ordnerebene",
         "modUpper": "GROSSBUCHSTABEN",
         "modLower": "kleinbuchstaben",
-        "recipesLabel": "Oder beginne mit einem Rezept",
+        "recipesLabel": "Oder beginnen Sie mit einem Rezept",
         "recipe": {
-          "seriesShelf": "Reihen-Regal",
+          "seriesShelf": "Serien-Regal",
           "calibre": "Calibre Stil",
           "alphabetical": "Alphabetisch",
           "flat": "Flach, keine Ordner",
           "originalName": "Original-Dateiname",
           "authorTitle": "Autor und Titel",
           "titleOnly": "Nur Titel",
-          "seriesOrdered": "Reihen sortiert"
+          "seriesOrdered": "Serie sortiert"
         },
         "resultPanel": "Aufgelöstes Ergebnis",
         "resultFor": "Ergebnis: {rule}",
@@ -2495,15 +2475,15 @@
           "preview": "Vorschau",
           "saveAccount": "Kontostandard speichern",
           "deviceTitle": "Überschreibungen für KOReader-Geräte",
-          "deviceDescription": "Passen Sie eine beliebige Kombination aus Standard-, Reihen- und Einzelbuchpfaden an. Leere gerätespezifische Felder übernehmen den Gerätestandard, der wiederum das Standard-KOReader-Muster des Kontos übernehmen kann.",
+          "deviceDescription": "Passen Sie eine beliebige Kombination aus Standard-, Serien- und Einzelbuchpfaden an. Leere gerätespezifische Felder übernehmen den Gerätestandard, der wiederum das Standard-KOReader-Muster des Kontos übernehmen kann.",
           "noDevices": "Geräte werden hier angezeigt, nachdem sie mit BookOrbit synchronisiert wurden.",
           "customOrganization": "Benutzerdefinierte Organisation",
           "usingAccountDefault": "Kontostandard wird verwendet",
           "deviceDefaultHelp": "Ausweichmuster für dieses Gerät. Lassen Sie es mit dem Kontostandard identisch, damit zukünftige Änderungen automatisch übernommen werden.",
-          "seriesBooks": "Bücher einer Reihe",
-          "seriesHelp": "Optionaler Pfad, der nur für Bücher mit Reihenmetadaten verwendet wird. Leer lassen, um das Standardpfadmuster dieses Geräts zu verwenden.",
-          "standaloneBooks": "Bücher ohne Reihe",
-          "standaloneHelp": "Optionaler Pfad, der nur für Bücher ohne Reihenmetadaten verwendet wird. Leer lassen, um das Standardpfadmuster dieses Geräts zu verwenden.",
+          "seriesBooks": "Bücher einer Serie",
+          "seriesHelp": "Optionaler Pfad, der nur für Bücher mit Serienmetadaten verwendet wird. Leer lassen, um das Standardpfadmuster dieses Geräts zu verwenden.",
+          "standaloneBooks": "Bücher ohne Serie",
+          "standaloneHelp": "Optionaler Pfad, der nur für Bücher ohne Serienmetadaten verwendet wird. Leer lassen, um das Standardpfadmuster dieses Geräts zu verwenden.",
           "inheritPlaceholder": "Leer lassen, um das Standardmuster dieses Geräts zu verwenden",
           "useAccount": "Kontostandard verwenden",
           "saveOverride": "Überschreibung speichern",
@@ -2579,7 +2559,7 @@
         "copyUrl": "URL kopieren",
         "preconfiguredPlugin": "Vorkonfiguriertes BookOrbit-Plugin",
         "preconfiguredPluginHintPrefix": "Laden Sie eine ZIP-Datei mit bereits konfigurierter Server-URL und Ihren Synchronisierungsanmeldedaten herunter. Das Plugin umfasst Katalogsuche und Synchronisierung. Kopieren Sie den Ordner nach",
-        "preconfiguredPluginHintSuffix": "und starte KOReader neu.",
+        "preconfiguredPluginHintSuffix": "und starten Sie KOReader neu.",
         "latestPluginNote": "{label}. Geräteaktualisierungen erfolgen über das BookOrbit-Menü in KOReader.",
         "preparing": "Wird vorbereitet ...",
         "downloadPlugin": "Plugin herunterladen",
@@ -2604,11 +2584,11 @@
         "setupStepsHint": "Verwenden Sie das BookOrbit-Plugin für Katalogsuche, Downloads, Fortschritt, Leseereignisse und Markierungen. Verwenden Sie das Standard-Plugin nur für den Fortschritt.",
         "pluginGuideTitle": "BookOrbit-Plugin",
         "pluginStep1": "Laden Sie das oben vorkonfigurierte Plugin herunter.",
-        "pluginStep2Prefix": "Entpacken und kopieren",
+        "pluginStep2Prefix": "Entpacken Sie es und kopieren Sie",
         "pluginStep2Middle": "nach",
         "pluginStep2Suffix": "auf Ihrem Gerät.",
         "pluginStep3": "Starten Sie KOReader neu. Server und Anmeldung werden automatisch konfiguriert.",
-        "pluginStep4Prefix": "Öffnen",
+        "pluginStep4Prefix": "Öffnen Sie",
         "pluginStep4Suffix": "um Bücher zu suchen, herunterzuladen und für die Synchronisierung zu verknüpfen.",
         "stockGuideTitle": "Standard-Plugin für Fortschrittssynchronisierung",
         "stockStep1Prefix": "Gehen Sie auf Ihrem KOReader-Gerät zu",
@@ -2811,276 +2791,9 @@
     "system": {
       "tabs": {
         "file-naming": "Dateibenennung",
-        "book-dock": "Bücherablage",
-        "requests": "Anfragen",
+        "book-dock": "Book Dock",
         "maintenance": "Wartung",
         "audit-log": "Prüfprotokoll"
-      },
-      "requests": {
-        "title": "Anfragen",
-        "subtitle": "Wo Veröffentlichungen gefunden werden, was holt sie herab und was passiert, sobald sie verfügbar werden.",
-        "tabs": {
-          "sources": "Quellen",
-          "clients": "Download Programme",
-          "automation": "Automatisierung"
-        },
-        "loading": "Lädt Download Programme...",
-        "clients": "Download Programme",
-        "addClient": "Programm hinzufügen",
-        "editClient": "Programm bearbeiten",
-        "deleteClient": "{name} löschen",
-        "clientsEmpty": {
-          "title": "Noch kein Download Programm",
-          "body": "Ein direkter HTTP-Download benötigt kein Programm. Verbinde eins, damit BookOrbit auch das abrufen kann, was ein Tracker als Torrent anbietet.",
-          "note": "qBittorrent, Transmission und Deluge werden unterstützt."
-        },
-        "summary": "{type} - Kategorie {category}, Priorität {priority}",
-        "disabled": "Deaktiviert",
-        "test": "Verbindung testen",
-        "testSaveFirst": "Änderungen vor dem Testen speichern",
-        "testOk": "Verbunden mit {client} {version}",
-        "testOkNoVersion": "Verbunden mit {client}",
-        "lastTestOk": "Zuletzt getestet {time}: verbunden",
-        "lastTestFailed": "Zuletzt getestet: {time}: {error}",
-        "saved": "Download Programm gespeichert",
-        "deleted": "Download Programm entfernt",
-        "clientTypes": {
-          "qbittorrent": "qBittorrent",
-          "transmission": "Transmission",
-          "deluge": "Deluge"
-        },
-        "color": {
-          "label": "Farbe",
-          "hint": "Markiert dieses Programm in Transferdetails. Das Transferprotokoll behält seine eigene Farbe.",
-          "none": "Keine Farbe"
-        },
-        "fields": {
-          "name": "Name",
-          "type": "Programm-Typ",
-          "baseUrl": "Basis URL",
-          "username": "Benutzername",
-          "password": "Passwort",
-          "passwordKeep": "Leer lassen, um das aktuelle Passwort beizubehalten",
-          "passwordClear": "Leeren",
-          "passwordKeepAction": "Behalten",
-          "passwordWillClear": "Das gespeicherte Passwort wird beim Speichern entfernt",
-          "category": "Kategorie",
-          "categoryHint": "Schlagwörter, die der BookOrbit hinzufügt, so dass er nur eigene Torrents bearbeitet.",
-          "priority": "Priorität",
-          "enabled": "Aktiviert",
-          "useHardlinks": "Hardlinks verwenden",
-          "allowPrivateAddress": "Erlaube private Adressen",
-          "allowPrivateAddressHint": "Benötigt, wenn das Programm in Ihrem lokalen Netzwerk oder auf dem gleichen Rechner läuft.",
-          "passwordBrief": "Verschlüsselt gespeichert.",
-          "useHardlinksBrief": "Seeded ohne den Speicherplatz zweimal zu verwenden. Verwendet nur eine Kopie über Dateisysteme."
-        },
-        "mappings": {
-          "title": "Pfadzuordnungen",
-          "hint": "Geben Sie die Pfade, die das Programm meldet, in Pfade an, die BookOrbit öffnen kann. Benötigt wenn die beiden in separaten Containern ausgeführt werden.",
-          "add": "Zuordnung hinzufügen",
-          "remove": "Zuordnung entfernen",
-          "remotePath": "Programm Pfad",
-          "localPath": "BookOrbit Pfad",
-          "brief": "Erforderlich. Bestimmt das Verzeichnis , aus dem BookOrbit importiert; wenn das Programm die gleichen Dateien in den gleichen Pfaden sieht, ordnet das Downloadverzeichnis sich selbst zu.",
-          "identityExample": "Gleiches Dateisystem? Benutzen Sie den gleichen Pfad auf beiden Seiten, zum Beispiel /downloads auf der linken Seite und /downloads auf der rechten Seite."
-        },
-        "hardlink": {
-          "test": "Hardlink testen",
-          "checking": "Überprüfe...",
-          "works": "Hardlinks funktionieren: Importe verwenden den Speicherplatz nicht doppelt.",
-          "unavailable": "Hardlinks sind hier nicht verfügbar: Importe werden kopiert und der Speicherplatz doppelt verwendet.",
-          "link_refused": "Dieses Dateisystem hat den Hardlink abgelehnt ({code}): Importe werden kopiert und der Speicherplatz doppelt verwendet.",
-          "download_dir_unwritable": "BookOrbit kann nicht in das Downloadverzeichnis schreiben ({code}), daher konnte Hardlink nicht getestet werden.",
-          "localMissing": "BookOrbit kann diesen Pfad nicht erkennen.",
-          "dockMissing": "Der Ordner Book Dock ist nicht lesbar."
-        },
-        "reconciliation": {
-          "action": "Abgleichen",
-          "clean": "Jedes eigene Programm-Element entspricht einem gespeicherten BookOrbit-Downloadversuch.",
-          "unsupported": "Dieses Programm kann keine Einträge nach BookOrbit Eigentümer-Kennzeichnung auflisten. Aktivieren Sie für Deluge das Label-Plugin; für Transmission konfigurieren Sie einen Kategorie-Ordner.",
-          "truncated": "Das Programm hat mehr als 1.000 Einträge zurückgegeben. Beheben Sie die sichtbaren Einträge, dann gleichen Sie nochmal ab.",
-          "orphan": "Kein BookOrbit Versuch besitzt diesen Programm-Eintrag.",
-          "failedAttempt": "Das Programm enthält diesen Artikel noch, aber der Versuch nach \"{title}\" ist fehlgeschlagen.",
-          "missing": "Dieser {status} Versuch ist nicht mehr im Download-Programm vorhanden.",
-          "adopt": "An {title} anhängen",
-          "adopted": "Programm-Eintrag an {title} angehängt",
-          "remove": "Vom Programm entfernen",
-          "removed": "Verwaiste Programm-Element entfernt.",
-          "removeTitle": "Das verwaiste Client-Element entfernen?",
-          "removeDescription": "{name} wurde vom Download-Programm entfernt. Die heruntergeladenen Dateien werden beibehalten.",
-          "notOrphan": "Dieses Client-Element ist noch mit einem BookOrbit Download-Versuch verbunden."
-        },
-        "errors": {
-          "loadFailed": "Download Programm konnte nicht laden werden",
-          "saveFailed": "Download Programm konnte nicht gespeichert werden",
-          "deleteFailed": "Download Programm konnte nicht entfernt werden",
-          "testFailed": "Download Programm konnte nicht erreicht werden",
-          "nameAndUrlRequired": "Ein Name und eine Basis-URL sind erforderlich",
-          "nameTaken": "Ein Download Programm mit diesem Namen existiert bereits",
-          "urlPrivate": "Diese Adresse ist in einem privaten oder lokalen Netzwerk. Aktivieren Sie \"Private Adressen erlauben\", wenn der Client dort läuft.",
-          "nameRequired": "Geben Sie diesem Client einen Namen.",
-          "urlRequired": "Geben Sie die Adresse ein, unter der BookOrbit diesen Client erreichen soll."
-        },
-        "confirmDelete": {
-          "title": "Dieses Download Programm entfernen?",
-          "confirm": "Programm entfernen"
-        },
-        "indexers": {
-          "title": "Torrent-Indexer",
-          "loading": "Lade Indexer...",
-          "empty": {
-            "title": "Noch keine Quellen",
-            "pluginTitle": "Plugin installieren",
-            "torznabTitle": "Torznab-Indexer hinzufügen"
-          },
-          "add": "Indexer hinzufügen",
-          "edit": "Indexer bearbeiten",
-          "delete": "{name} löschen",
-          "none": "Noch kein Indexer.",
-          "disabled": "Deaktiviert",
-          "test": "Verbindung testen",
-          "testSaveFirst": "Änderungen vor dem Testen speichern",
-          "testOk": "Verbunden mit ${name}",
-          "toggleAria": "Suche mit {name}",
-          "enabledNotice": "{name} wird durchsucht",
-          "disabledNotice": "{name} wird nicht durchsucht",
-          "lastTestOk": "Zuletzt getestet {time}: verbunden",
-          "lastTestFailed": "Zuletzt getestete {time}: {error}",
-          "saved": "Indexer gespeichert",
-          "deleted": "Quelle gelöscht",
-          "pluginFailed": "Das Plugin in \"{directory}\" wurde nicht geladen: {reason}",
-          "network": {
-            "title": "Erweitertes Netzwerk",
-            "resolvers": "DNS-Server",
-            "proxyUrl": "Proxy-URL"
-          },
-          "types": {
-            "torznab": "Torznab (Jackett, Prowlarr, NZBHydra)"
-          },
-          "fields": {
-            "name": "Name",
-            "type": "Indexer-Typ",
-            "baseUrl": "Basis-URL",
-            "credential": {
-              "apiKey": "API-Schlüssel",
-              "sessionId": "Session-ID"
-            },
-            "credentialKeep": "Leer lassen, um das aktuelle Passwort beizubehalten",
-            "credentialClear": "Leeren",
-            "credentialKeepAction": "Behalten",
-            "credentialWillClear": "Die gespeicherten Anmeldeinformationen werden beim Speichern entfernt",
-            "enabled": "Aktiviert",
-            "allowPrivateAddress": "Private Adressen erlauben",
-            "credentialBrief": "Verschlüsselt gespeichert.",
-            "searchByIsbn": "Suche nach ISBN"
-          },
-          "color": {
-            "label": "Farbe",
-            "none": "Keine Farbe",
-            "options": {
-              "blue": "Blau",
-              "indigo": "Indigo",
-              "purple": "Lila",
-              "pink": "Pink",
-              "red": "Rot",
-              "orange": "Orange",
-              "yellow": "Gelb",
-              "lime": "Lindgrün",
-              "green": "Grün",
-              "teal": "Aquamarin"
-            }
-          },
-          "mediaKinds": {
-            "label": "Diese Quelle durchsuchen nach"
-          },
-          "categories": {
-            "title": "Kategorien"
-          },
-          "settings": {
-            "restoreDefault": "Standard wiederherstellen"
-          },
-          "confirmDelete": {
-            "title": "Diese Quelle löschen",
-            "confirm": "Quelle löschen"
-          },
-          "errors": {
-            "loadFailed": "Indexer konnte nicht geladen werden",
-            "saveFailed": "Indexer konnte nicht gespeichert werden",
-            "deleteFailed": "Quelle konnte nicht gelöscht werden",
-            "testFailed": "Indexer konnte nicht erreicht werden",
-            "nameAndUrlRequired": "Ein Name und eine Basis-URL sind erforderlich",
-            "nameTaken": "Ein Indexer mit diesem Namen existiert bereits",
-            "urlUnsafe": "Diese Basis-URL konnte nicht erreicht werden. Überprüfe die Adresse und ob sie http oder https verwendet.",
-            "urlPrivate": "Diese Adresse ist in einem privaten oder lokalen Netzwerk. Aktivieren Sie \"Private Adressen erlauben\", wenn der Indexer dort läuft.",
-            "credentialRequired": "Dieser Indexer benötigt Anmeldeinformationen, bevor er verwendet werden kann",
-            "nameRequired": "Geben Sie diesem Indexer einen Namen.",
-            "urlRequired": "Geben Sie die Adresse ein, nach der BookOrbit suchen soll."
-          },
-          "editName": "{name} bearbeiten",
-          "editorDescription": "Einstellungen für diesen Indexer.",
-          "chooseType": "Wählen Sie einen Indexer-Typ",
-          "builtIn": "Integriert",
-          "plugin": "Plugin",
-          "plugins": {
-            "title": "Plugins",
-            "install": "Plugin installieren",
-            "installFailed": "Dieses Plugin konnte nicht installiert werden.",
-            "inspectFailed": "Diese Datei konnte nicht als Plugin gelesen werden.",
-            "removeAction": "Plugin löschen",
-            "removed": "{type} und seine Quellen gelöscht.",
-            "removeFailed": "Dieses Plugin konnte nicht gelöscht werden.",
-            "confirmRemove": "{label} Plugin löschen?",
-            "replaces": "Dies ersetzt das bereits installierte {type} Plugin.",
-            "restartRequired": "Starte BookOrbit neu, damit die Plugin-Änderung wirksam wird.",
-            "confirmInstall": "Plugin installieren",
-            "configure": "Einrichten",
-            "notSetUp": "Noch nicht eingerichtet",
-            "brokenTitle": "Ein Plugin lädt nicht",
-            "update": "Plugin updaten",
-            "replaceTitle": "Dieses Plugin ersetzen?",
-            "replace": "Plugin ersetzen",
-            "reviewTitle": "Dieses Plugin installieren?",
-            "type": "Typ",
-            "version": "Version",
-            "versionLabel": "Plugin-Version {version}",
-            "versionUnknown": "Plugin-Version unbekannt",
-            "versionUnknownValue": "Unbekannt",
-            "media": "Medien",
-            "credential": "Anmeldeinformationen",
-            "credentialRequired": "Erforderlich",
-            "credentialNone": "Keine",
-            "sectionTitle": "Plugin"
-          }
-        },
-        "automation": {
-          "title": "Automatisierung",
-          "groupDownloads": "Automatische Downloads",
-          "groupImports": "Import-Prüfungen",
-          "stateOn": "An",
-          "stateOff": "Aus",
-          "howDownloads": "Wie automatische Downloads funktionieren",
-          "howImports": "Wie Import-Prüfungen funktionieren",
-          "saveFailed": "Diese Einstellung konnte nicht gespeichert werden",
-          "autoGrabEnabled": "Automatische Downloads sind an",
-          "autoGrabDisabled": "Automatische Downloads sind aus",
-          "minScore": "Minimaler Release-Wert",
-          "maxAttempts": "Versuche pro Anfrage",
-          "autoSearchInterval": "Suche erneut nach",
-          "autoSearchIntervalUnit": "Stunden",
-          "autoSearchMaxAgeUnit": "Tage",
-          "selectFolder": "Wähle einen Ordner"
-        },
-        "profiles": {
-          "anyLayout": "Beliebig",
-          "anyChannels": "Beliebig",
-          "mono": "Mono",
-          "multiSelectAny": "Beliebig"
-        },
-        "continueWithType": "Weiter",
-        "editorDescription": "Einstellungen für dieses Download Programm.",
-        "searchHealth": {
-          "failingStreak": "{count} Suche in einer Zeile fehlgeschlagen"
-        }
       }
     },
     "nav": {
@@ -3089,6 +2802,7 @@
       "searchPlaceholder": "Sucheinstellungen",
       "clearSearch": "Suche zurücksetzen",
       "noResults": "Keine Einstellungen entsprechen {query}.",
+      "shortcutHint": "Drücke Cmd K um zu einer beliebigen Einstellung zu springen",
       "groups": {
         "you": "Du",
         "library": "Bibliothek",
@@ -3109,7 +2823,7 @@
         "readerAudio": "Wiedergabegeschwindigkeit, überspringe Intervalle und Sleep-Timer.",
         "readerFonts": "Schriftarten während des Lesens verfügbar.",
         "readerGeneral": "Standardwerte werden von jedem Lesemodus geteilt.",
-        "notifications": "Was BookOrbit über Dich erzählt und wo.",
+        "notifications": "Was BookOrbit erzählt und wo.",
         "privacy": "Lese-Einsichten, gemeinsame Links und Aktivitätssichtbarkeit.",
         "restrictions": "Altersbewertungen und verborgene Inhalte für dieses Konto.",
         "libraries": "Scanne Pfade, beobachtete Ordner und ErfassungesRegeln.",
@@ -3222,11 +2936,8 @@
       "trend": "Täglicher Lesetrend",
       "emptyTitle": "Keine Leseaktivität in diesem Zeitraum",
       "noData": "Für diesen Zeitraum sind keine Lesedaten erfasst.",
-      "sessionCount": "{count, plural, one {# Sitzung} other {# Sitzungen}}",
       "sourceNames": {
         "web": "Web-Reader",
-        "ios": "iOS app",
-        "watchos": "Apple Watch",
         "koreader": "KOReader",
         "manual": "Manuell",
         "kobo": "Kobo",
@@ -3308,11 +3019,7 @@
         "email": "E-Mail",
         "administration": "Verwaltung",
         "notifications": "Benachrichtigungen",
-        "restrictions": "Einschränkungen",
-        "bookDock": "Bücherablage"
-      },
-      "permissionLevels": {
-        "use": "Verwenden"
+        "restrictions": "Einschränkungen"
       },
       "superuserTarget": "Superuser-Ziel",
       "superuserTargetHint": "Inhaltseinschränkungen können nicht auf Superuser angewendet werden.",
@@ -3344,9 +3051,6 @@
         "emailRequired": "E-Mail ist erforderlich",
         "createSharedAccount": "Erstellen des gemeinsamen Kontos fehlgeschlagen",
         "createUser": "Erstellen des Benutzers fehlgeschlagen"
-      },
-      "sectionSummary": {
-        "restrictionsNone": "Keine"
       }
     },
     "usersPage": {
@@ -3758,8 +3462,7 @@
       "Book": "Buch",
       "Collection": "Sammlung",
       "SmartScope": "Intelligenter Bereich",
-      "BookDockFile": "Bücherablage-Datei",
-      "DownloadClient": "Download Programm",
+      "BookDockFile": "Buchdock-Datei",
       "Author": "Autor",
       "AppSettings": "App-Einstellungen",
       "Genre": "Genre",
@@ -3787,10 +3490,6 @@
       "BookUpload": "Buch hochladen",
       "BookDelete": "Buch löschen",
       "BookBulkDelete": "Bücher löschen",
-      "BookDockFinalize": "Bücherablage-Datei finalisieren",
-      "DownloadClientCreate": "Download Programm erstellen",
-      "DownloadClientUpdate": "Download Programm aktualisieren",
-      "DownloadClientDelete": "Download Programm löschen",
       "EntityManagerSplit": "Entität aufteilen"
     }
   },
@@ -3826,7 +3525,6 @@
       "orDivider": "oder",
       "forgotPassword": "Passwort vergessen?",
       "signUp": "Registrieren",
-      "registeredNotice": "Konto erstellt. Melden Sie sich an, um fortzufahren. Ein Administrator muss Berechtigungen erteilen, bevor Sie auf die Bibliothek zugreifen können.",
       "errors": {
         "invalidCredentials": "Ungültiger Benutzername oder ungültiges Passwort",
         "tooManyAttempts": "Zu viele Anmeldeversuche. Bitte warten Sie eine Minute und versuchen Sie es erneut."
@@ -3853,7 +3551,7 @@
       }
     },
     "forgotPassword": {
-      "subtitle": "Setze Dein Passwort zurück",
+      "subtitle": "Setzen Sie Ihr Passwort zurück",
       "submitted": "Falls ein Konto mit dieser E-Mail-Adresse existiert, wurde ein Link zum Zurücksetzen gesendet. Überprüfen Sie Ihren Posteingang.",
       "sending": "Wird gesendet ...",
       "sendResetLink": "Link zum Zurücksetzen senden",
@@ -3914,7 +3612,6 @@
         "all": "Alle",
         "noPortrait": "Kein Portrait",
         "multipleBooks": "2+ Bücher",
-        "recentlyAdded": "Diese Woche hinzugefügt",
         "noSortName": "Keine Namenssortierung"
       }
     },
@@ -4135,8 +3832,7 @@
         "lastReadAt": "Zuletzt gelesen",
         "startedAt": "Datum angefangen",
         "random": "Zufällig",
-        "language": "Sprache",
-        "collectionOrder": "Reihenfolge hinzugefügt"
+        "language": "Sprache"
       },
       "customFieldFallback": "Benutzerdefiniertes Feld",
       "remove": "Entfernen",
@@ -4164,15 +3860,11 @@
         "addedAt": "Datum hinzugefügt",
         "startedAt": "Datum angefangen",
         "rating": "Bewertung",
-        "readStatus": "Lesestatus",
-        "description": "Beschreibung",
         "isbn": "ISBN",
-        "cover": "Cover",
-        "lockStatus": "Lock status"
+        "cover": "Cover"
       },
       "operators": {
         "contains": "enthält",
-        "startsWith": "beginnt mit",
         "endsWith": "endet mit",
         "eq": "ist",
         "notEq": "ist nicht",
@@ -4185,18 +3877,14 @@
         "between": "zwischen",
         "before": "vor",
         "after": "nach",
-        "withinLast": "innerhalb der letzten",
         "isMissing": "fehlt",
         "isPresent": "ist vorhanden",
         "isUnread": "ist ungelesen",
-        "isFinished": "ist fertig",
         "isLocked": "ist gesperrt",
-        "isUnlocked": "ist entsperrt",
         "isUpNext": "ist als nächstes",
         "isTrue": "ist Wahr",
         "isFalse": "ist nicht"
       },
-      "customFieldsGroup": "Benutzerdefinierte Felder",
       "customFieldFallback": "Benutzerdefiniertes Feld",
       "anyProvider": "Beliebiger Anbieter",
       "communityRatingProvider": "Anbieter der Community-Bewertung",
@@ -4551,10 +4239,7 @@
         "filesNotFoundDescription": "Die Datei(en) für dieses Buch können auf dem Datenträger nicht mehr gefunden werden. Die Metadaten sind weiterhin verfügbar. Führen Sie einen Bibliotheks-Scan durch, um dies zu bestätigen, oder entfernen Sie den Eintrag.",
         "resetHoldReleasing": "Veröffentlichen...",
         "editions": "Ausgabe",
-        "moreFormats": "+{count} weitere",
-        "filesOnDisk": "Dateien auf Datenträger",
         "yourReading": "Deine Lesungen",
-        "notStarted": "nicht begonnen",
         "noSessionsYet": "Noch keine Lesesitzungen. Das Öffnen dieses Buches im Reader verfolgt Zeit, Tempo und Fortschritt pro Gerät.",
         "activitySessions": "Sitzungen",
         "activityTime": "Zeit",
@@ -4562,9 +4247,7 @@
         "activityProgress": "Fortschritt",
         "durationS": "{seconds}s",
         "durationM": "{minutes}m",
-        "yourReview": "Deine Bewertung",
         "writeReview": "Schreiben",
-        "collections": "Sammlungen",
         "noCollections": "Keine",
         "onDisk": "Auf dem Datenträger",
         "detailsHeading": "Details",
@@ -4742,10 +4425,8 @@
           "formats": "Formate"
         },
         "filesHeading": "Dateien",
-        "allPresent": "Alle vorhandenen",
         "thisFile": "Diese Datei",
         "writeBackShort": "Zurückschreiben",
-        "editMetadata": "Metadaten bearbeiten",
         "showAllTracks": "Alle anzeigen",
         "collapseTracks": "Einklappen",
         "fileDetails": "Dateiinformationen",
@@ -4800,13 +4481,11 @@
           "description": "Sind Sie sicher, dass Sie \"{filename}\" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
         },
         "deleting": "Wird gelöscht ...",
-        "inspectorAria": "Ausgewählte Datei",
         "libraryRoot": "Bibliotheks-Hauptverzeichnis",
         "onDisk": "Auf dem Datenträger",
         "missing": "Fehlt",
         "resume": "Fortsetzen",
         "audiobook": "Hörbuch",
-        "writeTarget": "Ziel schreiben",
         "enabled": "Aktiviert",
         "disabled": "Aus",
         "notSet": "nicht festgelegt",
@@ -4826,10 +4505,7 @@
         },
         "reader": {
           "none": "Kein Reader",
-          "ebook": "Ebook-Reader",
-          "document": "PDF-Reader",
-          "comic": "Comic-Reader",
-          "audio": "Audio-Player"
+          "document": "PDF-Reader"
         },
         "spec": {
           "format": "Format",
@@ -4840,20 +4516,14 @@
           "indexed": "Indiziert",
           "opensIn": "Öffnen in",
           "writeBack": "Zurückschreiben",
-          "track": "Spur",
-          "targetFile": "Zieldatei",
-          "notWritten": "Nicht geschrieben"
+          "track": "Spur"
         },
         "duration": {
           "minutes": "{minutes}m",
           "seconds": "{seconds}s"
         },
-        "switchFileHeading": "Datei wechseln",
         "neverRun": "Nie gestartet",
-        "historyHeading": "Verlauf",
-        "timeline": {
-          "failed": "Schreiben fehlgeschlagen"
-        }
+        "historyHeading": "Verlauf"
       },
       "highlights": {
         "note": {
@@ -4890,28 +4560,23 @@
         "paginationUnit": "Markierungen",
         "rail": {
           "title": "Markierungen",
-          "withNotes": "eine Notiz tragen",
           "colour": "Farbe",
           "span": "Bereich",
           "firstMark": "Erste Markierung",
-          "lastMark": "Letzte Markierung",
-          "markingDays": "Markierungs-Tage"
+          "lastMark": "Letzte Markierung"
         },
         "row": {
           "showMore": "Mehr anzeigen",
           "showLess": "Weniger anzeigen",
           "note": "Notiz",
           "addNote": "Notiz hinzufügen",
-          "page": "S. {page}",
-          "anchorLost": "Anker verloren",
-          "reAnchored": "Neu verankert"
+          "page": "S. {page}"
         },
         "stream": {
           "title": "Der Stream",
           "all": "Alle",
           "notes": "Notizen",
-          "review": "Überprüfen",
-          "loadingMore": "Mehr laden"
+          "review": "Überprüfen"
         },
         "index": {
           "title": "Index",
@@ -4923,7 +4588,6 @@
           "showFewer": "Weniger anzeigen"
         },
         "inspector": {
-          "previous": "Vorherige Markierung",
           "next": "Nächste Markierung",
           "style": "Stil",
           "openHere": "Hier eröffnen"
@@ -4933,28 +4597,14 @@
           "densest": "Dichtest",
           "end": "Ende"
         },
-        "emptyStage": {
-          "web": {
-            "title": "Hier lesen"
-          },
-          "kobo": {
-            "title": "Mit Kobo synchronisieren"
-          },
-          "koreader": {
-            "title": "KOReader synchronisieren"
-          }
-        },
         "shortcuts": {
           "title": "Tastatur",
           "search": "Suche",
-          "note": "Eine Notiz schreiben",
           "recolour": "Neu färben"
         },
         "chapters": "Kapitel",
         "noChapter": "Keine Kapitel",
         "views": {
-          "newest": "Neueste zuerst",
-          "oldest": "Älteste zuerst",
           "colour": "Nach Farbe",
           "source": "Nach Quelle"
         }
@@ -4967,9 +4617,7 @@
           "totalTime": "Gesamtzeit",
           "sessions": "Sitzungen",
           "avgSession": "Durchschnittliche Sitzung",
-          "activeDays": "Aktive Tage",
           "pace": "Tempo",
-          "pacePerHour": "{percent}%/h",
           "lastRead": "Zuletzt gelesen",
           "addSession": "Sitzung hinzufügen",
           "durationM": "{minutes}m",
@@ -4998,8 +4646,7 @@
           "outcome": {
             "completed": "Abgeschlossen",
             "skimmed": "Überflogen",
-            "abandoned": "Aufgegeben",
-            "inProgress": "In Bearbeitung"
+            "abandoned": "Aufgegeben"
           },
           "spanEnded": "endet {to}",
           "sessionCount": "{count, plural, one {# Sitzung} other {# Sitzungen}}"
@@ -5008,9 +4655,6 @@
           "title": "Datensätze",
           "longestSession": "Längste Sitzung",
           "bestDay": "Bester Tag",
-          "longestStreak": "Längster Streak",
-          "streakDays": "{count, plural, one {# Tag} other {# Tage}}",
-          "jumpedBack": "Zurückgesprungen",
           "empty": "Die Aufzeichnungen erscheinen, sobald dieses Buch Sitzungen hat."
         },
         "band": {
@@ -5020,13 +4664,7 @@
           "curveSubSitting": "Eine Sitzung, Sitzung für Sitzung",
           "traceSub": "Jeder Balken zeigt die Spanne einer Sitzung",
           "traceSubWithBacktracks": "{count, plural, one {Jeder Balken zeigt eine Sitzung, # zurückgesprungen} other {Jeder Balken zeigt eine Sitzung, # zurückgesprungen}}",
-          "legendBacktrack": "Zurückgesprungen",
-          "traceEmptyHint": "Sobald Sessions existieren, zeigen diese die gelesene Spanne, inklusive Rücksprünge auf vorherige Seiten.",
-          "tooltipMinutes": "{minutes} min"
-        },
-        "emptyStage": {
-          "koreaderTitle": "KOReader synchronisieren",
-          "koboTitle": "Mit Kobo synchronisieren"
+          "traceEmptyHint": "Sobald Sessions existieren, zeigen diese die gelesene Spanne, inklusive Rücksprünge auf vorherige Seiten."
         },
         "moreActionsAria": "Weitere Aktionen für das Leseprotokoll",
         "export": {
@@ -5130,8 +4768,6 @@
         "table": {
           "title": "Sitzungen",
           "sourceWeb": "Web",
-          "sourceIos": "iOS app",
-          "sourceWatchos": "Apple Watch",
           "sourceManual": "Manuell",
           "colDate": "Datum",
           "colDateMobile": "Datum",
@@ -5275,11 +4911,7 @@
       "currentLibrary": "Aktuell",
       "continue": "Fortsetzen",
       "back": "Zurück",
-      "review": {
-        "ready": "{count} bereit"
-      },
       "policy": {
-        "suggested": "Vorschlag verwenden",
         "keep_both": "Beide behalten",
         "merge": "Zusammenführen",
         "skip": "Überspringen"
@@ -5397,7 +5029,7 @@
       "isbn13": "ISBN-13",
       "isbn10": "ISBN-10",
       "series": "Reihe",
-      "seriesIndex": "Reihen-Nr. #",
+      "seriesIndex": "Reihen-Nr.",
       "genres": "Genres",
       "genresCommaSeparated": "Genres (durch Komma getrennt)",
       "description": "Beschreibung"
@@ -5408,8 +5040,8 @@
       "nTotal": "{count} gesamt"
     },
     "fileList": {
-      "emptyTitle": "Keine Dateien in der Bücherablage",
-      "emptyMessageDefault": "Dateien hochladen oder in den Bücherablage-Ordner ablegen",
+      "emptyTitle": "Keine Dateien im Book Dock",
+      "emptyMessageDefault": "Dateien hochladen oder in den Book-Dock-Ordner ablegen",
       "colCurrent": "Aktuell",
       "colNew": "Neu",
       "colFile": "Datei",
@@ -5490,13 +5122,11 @@
       },
       "row": {
         "file": "Datei",
-        "noAuthor": "Noch kein Autor",
         "noMatch": "Kein Treffer",
         "applied": "Angewandt"
       },
       "sort": {
         "label": "Sortieren nach",
-        "createdAt": "Kürzlich hinzugefügt",
         "fileName": "Dateiname",
         "fileSize": "Größe",
         "format": "Format",
@@ -5509,47 +5139,7 @@
         "access_denied": "Kein Zugriff",
         "invalid_format": "Ungültiges Format",
         "error": "Würde scheitern"
-      },
-      "unit": {
-        "role": {
-          "content": "Buch",
-          "metadata": "Metadaten",
-          "supplement": "Extra"
-        }
       }
-    }
-  },
-  "bookRequests": {
-    "detail": {
-      "series": "Reihe",
-      "dockFileIdLabel": "Bücherablage Datei-ID",
-      "dockFileIdPlaceholder": "z.b. 42",
-      "fulfilFromDock": "Eine Bücherablage-Datei"
-    },
-    "toasts": {
-      "downloadRemoved": "Vom Download Programm entfernt"
-    },
-    "errors": {
-      "removeDownloadFailed": "Dieser Torrent konnte nicht vom Download Programm entfernt werden"
-    },
-    "grab": {
-      "title": "An ein Download Programm senden",
-      "noClientList": "BookOrbit verwendet das aktivierte Download Programm mit der höchsten Priorität."
-    },
-    "releases": {
-      "refused": {
-        "clientRefused": "Ihr Download Programm hat eine frühere Veröffentlichung abgelehnt"
-      }
-    },
-    "seed": {
-      "loadFailed": "Das Download Programm konnte für diese Anfrage nicht erreicht werden.",
-      "notInClient": "Das Download Programm hat diesen Torrent nicht mehr."
-    },
-    "table": {
-      "age": "Alter"
-    },
-    "review": {
-      "openDock": "Bücherablage öffnen"
     }
   },
   "collection": {
@@ -5617,13 +5207,12 @@
       "uploadedToast": "{uploaded} hochgeladen",
       "uploadFailedToast": "Hochladen für {failed} fehlgeschlagen",
       "uploadPartialToast": "{uploaded} hochgeladen, {failed} fehlgeschlagen",
-      "bookDock": "Bücherablage",
+      "bookDock": "Book Dock",
       "statistics": "Statistiken",
       "achievements": "Erfolge",
       "annotations": "Anmerkungen",
       "uploadBooks": "Bücher hochladen",
       "appearance": "Erscheinungsbild",
-      "appearanceDescription": "Wählen Sie Themen-, Akzent-, Eckradius-, Oberflächen- und Hintergrundoptionen.",
       "theme": "Design",
       "accent": "Akzent",
       "radius": "Rundung",
@@ -5643,7 +5232,6 @@
         "body": "Wenn BookOrbit Ihnen bei Ihrer Bibliothek hilft, geben Sie dem Projekt doch einen Stern auf GitHub. Das hilft mehr Menschen, die App zu entdecken, und unterstützt die weitere Entwicklung.",
         "cta": "BookOrbit auf GitHub mit Stern versehen"
       },
-      "surfaceOpacity": "Oberflächentransparenz",
       "surfaceOpacityValue": "{value}%",
       "surfaceBrightnessValue": "{value}%"
     },
@@ -5714,8 +5302,6 @@
       "columnVisibilityHint": "Verwende das Spaltensichtbarkeits-Panel in der Tabellenkopfzeile, um Spalten ein- oder auszublenden.",
       "columnVisibilityMobileHint": "Die Spaltensichtbarkeit kann über die Tabellenkopfzeile verwaltet werden.",
       "searchPlaceholder": "Titel, Autor, Reihe, Sprecher suchen...",
-      "clearSearch": "Clear search",
-      "closeSearch": "Close search",
       "mobileSearch": {
         "description": "Elemente nach Titel, Autor, Reihe oder Sprecher suchen.",
         "done": "Fertig"
@@ -5763,22 +5349,13 @@
       "description": "Dieses {entity} existiert nicht oder wurde gelöscht.",
       "goBack": "Zurück"
     },
-    "media": {
-      "volume": "Volume",
-      "mute": "Mute",
-      "unmute": "Unmute"
-    },
     "themePicker": {
       "light": "Hell",
       "dark": "Dunkel",
       "system": "System"
     },
-    "radiusPicker": {
-      "sharp": "Scharfe Ecken"
-    },
     "languagePicker": {
       "suggested": "Empfohlen",
-      "all": "Alle Sprachen",
       "results": "Ergebnisse"
     },
     "userAvatar": {
@@ -5861,23 +5438,8 @@
         "widgets": "Widgets",
         "shelves": "Regale"
       },
-      "widgetNames": {
-        "readingStreak": "Lese-Streak",
-        "readingDna": "Lese-DNA",
-        "longWait": "Das lange Warten"
-      },
-      "shelfNames": {
-        "recentlyAdded": "Kürzlich hinzugefügt",
-        "continueReading": "Weiterlesen",
-        "continueListening": "Weiterhören",
-        "smartScope": "Intelligenter Bereich"
-      },
       "shelfLayout": {
-        "wide": "Breite Zeilen",
-        "twoColumns": "Zwei Spalten"
-      },
-      "shelfRows": {
-        "label": "Bücherregale"
+        "wide": "Breite Zeilen"
       },
       "reorderHintWidget": "Ziehen zum Neuanordnen. Umschalten, um ein Widget ein- oder auszublenden.",
       "reorderHintShelf": "Ziehen zum Neuanordnen. Umschalten, um ein Regal ein- oder auszublenden.",
@@ -5974,9 +5536,9 @@
         "avgPerDay": "durchschn. {time}/Tag"
       },
       "readingStreak": {
-        "title": "Lese-Streak",
-        "empty": "Lies heute, um deinen Streak zu starten",
-        "streakLabel": "{count, plural, =0 {Tag Streak} one {Tag Streak} other {Tage Streak}}",
+        "title": "Lese-Serie",
+        "empty": "Lies heute, um deine Serie zu starten",
+        "streakLabel": "{count, plural, =0 {Tag Serie} one {Tag Serie} other {Tage Serie}}",
         "best": "{count, plural, =0 {Beste: # Tag} one {Beste: # Tag} other {Beste: # Tage}}",
         "lastSevenDays": "Letzte 7 Tage"
       },
@@ -6182,17 +5744,6 @@
       "failed": "Senden fehlgeschlagen"
     }
   },
-  "errors": {
-    "network": "Could not reach BookOrbit. Check your connection, then try again.",
-    "codes": {
-      "PODCAST_LOCAL_NO_REFRESH": "This show has no feed, so there is nothing to refresh.",
-      "PODCAST_LOCAL_NO_DOWNLOAD": "This episode is one of your own files, so there is nothing to download. Your copy is already the only one.",
-      "PODCAST_LOCAL_FILE_NOT_REMOVABLE": "This episode is one of your own files, so BookOrbit will not delete it. Remove it from the folder yourself.",
-      "PODCAST_LOCAL_MEDIA_MISSING": "The only copy of this episode is no longer on disk, so it cannot be played.",
-      "PODCAST_LOCAL_FOLDER_EMPTY": "This folder holds no audio BookOrbit can import, so it cannot become a show.",
-      "PODCAST_STORAGE_FULL": "This podcast library is out of storage. Free some space or raise its quota, then try again. Files that belong to local shows are never removed to make room."
-    }
-  },
   "hardcover": {
     "settings": {
       "subtitle": "Synchronisieren Sie Ihren Lesefortschritt, Status und Ihre Bewertungen mit Hardcover."
@@ -6210,7 +5761,7 @@
       "tokenPlaceholder": "Fügen Sie Ihr Hardcover-API-Token ein",
       "show": "Anzeigen",
       "hide": "Ausblenden",
-      "findTokenAt": "Finde ein Token unter",
+      "findTokenAt": "Finden Sie Ihr Token unter",
       "validateToken": "Token überprüfen",
       "valid": "Gültig ({username})",
       "invalidToken": "Ungültiges Token",
@@ -6271,7 +5822,7 @@
       "allSynced": "Alle Bücher sind bereits synchronisiert.",
       "lastSyncedLabel": "Zuletzt synchronisiert",
       "lastSuccessfulSync": "Letzte erfolgreiche Synchronisierung",
-      "syncing": "Synchronisieren...",
+      "syncing": "Synchronisierung läuft ...",
       "progressCount": "{synced} / {total} Bücher",
       "unavailable": {
         "permissionDenied": "Sie haben keine Berechtigung, die Hardcover-Synchronisierung zu verwenden.",
@@ -6388,8 +5939,6 @@
       "status": {
         "linked": "Verknüpft"
       },
-      "viewEditions": "Editionen anzeigen",
-      "isbn": "ISBN {isbn}",
       "current": "Aktuell",
       "useThis": "Verwenden"
     }
@@ -6733,13 +6282,10 @@
         "password": "Passwort",
         "passwordSaved": "Gespeichert - unverändert lassen",
         "passwordNotSet": "Kein Passwort festgelegt",
-        "showSecret": "Secret anzeigen",
-        "hideSecret": "Secret ausblenden",
         "database": "Datenbank",
         "mediaRootPath": "Medien-Stammpfad",
         "ssl": "TLS/SSL verwenden",
         "apiMode": "Live API",
-        "backupMode": "Backup-Datei",
         "apiToken": "API-Token"
       },
       "mediaPath": {
@@ -6983,8 +6529,7 @@
       "groups": {
         "library": "Bibliothek",
         "files": "Dateien",
-        "personal": "Persönlich",
-        "app": "App-Updates"
+        "personal": "Persönlich"
       },
       "levels": {
         "off": {
@@ -6998,14 +6543,8 @@
         }
       },
       "categories": {
-        "fileRename": {
-          "label": "Dateiumbenennung"
-        },
-        "bulkRename": {
-          "label": "Massenumbenennung"
-        },
         "bookDock": {
-          "label": "Bücherablage"
+          "label": "Book Dock"
         },
         "koboSync": {
           "label": "Kobo-Synchronisierung"
@@ -7062,7 +6601,6 @@
         "dark": "Dunkel"
       },
       "textSize": "Schriftgröße",
-      "textSizeLarger": "Größerer Text",
       "pixels": "{value} px",
       "percent": "{value}%",
       "pageColor": "Seitenfarbe",
@@ -7087,7 +6625,6 @@
         "singlePage": "Einzelseite"
       },
       "columns": "Spalten",
-      "columnsFewer": "Weniger Spalten",
       "columnGap": "Spaltenabstand",
       "justifyText": "Text ausrichten",
       "hyphenation": "Silbentrennung",
@@ -7212,7 +6749,6 @@
       "widePages": "Breite Seiten",
       "firstPage": "Erste Seite",
       "lastPage": "Letzte Seite",
-      "zoomControls": "Zoom-Steuerung",
       "zoomOut": "Verkleinern",
       "zoomIn": "Vergrößern",
       "fit": {
@@ -7286,9 +6822,6 @@
   "series": {
     "completion": {
       "readOfTotal": "{read} von {total} gelesen ({percentage}%)"
-    },
-    "ownership": {
-      "label": "In Bibliothek"
     },
     "gaps": {
       "label": "Mögliche Lücken:"
@@ -7369,7 +6902,6 @@
     "legend": {
       "read": "Lesen",
       "reading": "Lesen",
-      "unread": "In Bibliothek",
       "missing": "Fehlt"
     },
     "status": {
@@ -7379,7 +6911,6 @@
       "complete": "Vollständig",
       "gaps": "Abstände",
       "read": "Lesen",
-      "inProgress": "Laufend",
       "hasGaps": "Hat Lücken",
       "notStarted": "Nicht begonnen"
     },
@@ -7631,8 +7162,7 @@
       "sourceDistribution": {
         "title": "Wo Sie lesen",
         "emptyTitle": "Noch keine Leseaktivität",
-        "emptyDescription": "Lesen Sie im Web, in KOReader oder auf Kobo, um Ihre Quellenverteilung zu sehen.",
-        "emptyDescriptionWithAppleClients": "Read on the web, iOS app, Apple Watch, KOReader, or Kobo to see your source split."
+        "emptyDescription": "Lesen Sie im Web, in KOReader oder auf Kobo, um Ihre Quellenverteilung zu sehen."
       }
     }
   },
@@ -7676,12 +7206,10 @@
         "error": "Fehler"
       },
       "group": {
-        "error": "Fehlerhaft",
-        "expand": "{kind} erweitern"
+        "error": "Fehlerhaft"
       },
       "review": {
         "loadMore": "Mehr laden",
-        "previous": "Vorheriges Buch",
         "next": "Nächstes Buch",
         "keyboardHint": "verschieben",
         "keyboardSkip": "überspringen",
@@ -7694,8 +7222,7 @@
         "today": "Heute",
         "levelTop": "Hauptordner",
         "levelFilename": "Dateiname",
-        "levelRemoved": "Entfernt",
-        "siblingsMore": "+{count} weitere"
+        "levelRemoved": "Entfernt"
       },
       "empty": {
         "title": "Bibliothek zum Starten auswählen",
@@ -7708,8 +7235,8 @@
       }
     },
     "bookDuplicates": {
+      "scanSettings": "Scan-Einstellungen",
       "title": "Doppelte Bücher",
-      "scope": "Bibliotheksumfang",
       "allLibraries": "Alle verfügbaren Bibliotheken",
       "runScan": "Scan ausführen",
       "rescan": "Erneut scannen",
@@ -7717,6 +7244,7 @@
         "queued": "Scan in Warteschlange",
         "running": "Scanne Bücher"
       },
+      "groupsFound": "{count, plural, =0 {Keine duplizierten Gruppen} one {Eine duplizierte Gruppe} other {# duplizierte Gruppen}}",
       "filter": "Übereinstimmungstyp",
       "allReasons": "Alle Übereinstimmungstypen",
       "reasons": {
@@ -7724,7 +7252,15 @@
         "exact_metadata": "Exakter Titel und Autoren",
         "fuzzy_metadata": "Ähnlicher Titel und Autor"
       },
+      "similarityValue": "{percent}% Titel-Ähnlichkeit",
       "notDuplicates": "Keine Duplikate",
+      "keepThis": "Dieses Buch behalten",
+      "discardThis": "Dieses Buch verwerfen",
+      "moreFiles": "+{count} weitere",
+      "showDetails": "Details anzeigen",
+      "hideDetails": "Details ausblenden",
+      "deleteSelected": "Ausgewählte {count} löschen",
+      "openBook": "Details für {title} öffnen",
       "unknownAuthor": "Unbekannter Autor",
       "unknown": "Unbekannt",
       "none": "Keine",
@@ -7734,13 +7270,21 @@
         "library": "Bibliothek",
         "isbn": "ISBN",
         "formats": "Formate",
+        "fileLocation": "Datei",
+        "files": "Dateien",
+        "readingStatus": "Lesestatus",
+        "progress": "Fortschritt",
+        "path": "Bibliothekspfad",
         "collections": "Sammlungen",
-        "added": "Hinzugefügt"
+        "added": "Hinzugefügt",
+        "updated": "Aktualisiert"
       },
       "initial": {
         "title": "Doppelte Bücher finden"
       },
       "deleteDialog": {
+        "title": "Doppelte Bücher dauerhaft löschen?",
+        "description": "{count, plural, =0 {This will permanently delete # selected book and its files.} one {This will permanently delete # selected book and its files.} other {This will permanently delete # selected books and their files.}}",
         "confirm": "{count, plural, =0 {# Buch löschen} one {# Buch löschen} other {Lösche # Bücher}}",
         "success": "{count, plural, =0 {Keine Bücher gelöscht} one {Ein doppeltes Buch gelöscht} other {# doppelte Bücher gelöscht}}"
       },
@@ -7790,7 +7334,6 @@
         "pairDetails": "Paardetails",
         "dismissEntityTitle": "Alle Paare für diese Entität verwerfen",
         "dismissPairTitle": "Dieses Paar verwerfen",
-        "keepThisOne": "Behalte dieses",
         "mergeAway": "Trotzdem Zusammenführen",
         "notAMatch": "Kein Treffer",
         "thresholdValue": "{percent}%+"
@@ -7827,7 +7370,6 @@
           "status": "Status",
           "actions": "Aktionen"
         },
-        "selectEntity": "{name} auswählen",
         "status": {
           "noBooks": "Keine Bücher"
         },
@@ -7840,13 +7382,10 @@
           "comfortable": "Komfortabel",
           "compact": "Kompakt"
         },
-        "rowsPerPage": "Zeilen pro Seite",
         "pagination": "Seitennummerierung",
-        "previousPage": "Vorherige Seite",
         "nextPage": "Nächste Seite",
         "morePages": "Weitere Seiten",
-        "noMatchesTitle": "Keine Treffer",
-        "clearFilters": "Filter zurücksetzen"
+        "noMatchesTitle": "Keine Treffer"
       },
       "deleteMode": {
         "label": "Löschmodus",
@@ -7885,16 +7424,10 @@
     },
     "missingResources": {
       "untitled": "Unbenannt",
-      "clearSelection": "Auswahl leeren",
       "sweep": {
         "title": "Cover-Überprüfung",
         "run": "Überprüfung ausführen",
-        "running": "Überprüfe",
-        "lastRun": "Zuletzt überprüfte {at}"
-      },
-      "categories": {
-        "missing_books": "Fehlende Bücher",
-        "broken_covers": "Defekte Cover"
+        "running": "Überprüfe"
       },
       "coverSource": {
         "extracted": "Extrahiert",
@@ -7961,17 +7494,17 @@
       }
     },
     "bookDock": {
-      "title": "Bücherablage",
+      "title": "Book Dock",
       "newFilesDetected": "Neue Dateien erkannt",
       "reconnecting": "Verbindung wird wiederhergestellt",
       "rescanFailed": "Erneutes Scannen fehlgeschlagen",
-      "totalInDock": "{size} in der Bücherablage",
-      "dropFiles": "Dateien in die Bücherablage ziehen",
+      "totalInDock": "{size} im Book Dock",
+      "dropFiles": "Dateien in den Book Dock ziehen",
       "supportedFormats": "Unterstützt: {formats}",
       "empty": {
         "noSearchMatch": "Keine Dateien entsprechen \"{query}\"",
         "noStatusFiles": "Keine Dateien mit Status {status}",
-        "uploadPrompt": "Dateien hochladen oder in den Bücherablage-Ordner ziehen"
+        "uploadPrompt": "Dateien hochladen oder in den Book-Dock-Ordner ziehen"
       },
       "retry": {
         "noneToRetry": "Keine fehlerhaften Dateien zum Wiederholen",
@@ -8068,7 +7601,7 @@
     "seeAllReleases": "Alle Veröffentlichungen ansehen",
     "versions": "Versionen",
     "currentVersion": "Aktuelle Version",
-    "youreHere": "Du bist hier",
+    "youreHere": "Sie sind hier",
     "searchPlaceholder": "Veröffentlichungen durchsuchen…",
     "noReleasesFound": "Keine Veröffentlichungen gefunden.",
     "noHighlights": "Keine Highlights für diese Veröffentlichung.",
@@ -8086,471 +7619,13 @@
     "previousImage": "Vorheriges Bild",
     "nextImage": "Nächstes Bild"
   },
-  "podcast": {
-    "actions": {
-      "add": "Hinzufügen",
-      "cancel": "Abbrechen",
-      "save": "Speichern",
-      "play": "Abspielen",
-      "pause": "Pause",
-      "playEpisode": "Episode abspielen",
-      "listen": "Anhören",
-      "remove": "Entfernen",
-      "episodeActions": "Episodenaktionen",
-      "removeFromQueue": "Aus Warteschlange entfernen",
-      "addToQueue": "Zur Warteschlange hinzufügen",
-      "playNext": "Als Nächstes abspielen",
-      "retryDownload": "Download wiederholen",
-      "download": "Herunterladen",
-      "removeDownload": "Download entfernen",
-      "markUnplayed": "Als ungehört markieren",
-      "markPlayed": "Als gehört markieren",
-      "follow": "Folgen",
-      "unfollow": "Nicht mehr folgen",
-      "followPodcast": "Podcast folgen",
-      "unfollowPodcast": "Podcast nicht mehr folgen",
-      "resume": "Fortsetzen",
-      "playLatest": "Neueste abspielen",
-      "moveToTop": "Nach oben verschieben",
-      "moveDown": "Nach unten verschieben",
-      "clearQueue": "Warteschlange leeren",
-      "clearAll": "Alle entfernen",
-      "search": "Suchen",
-      "clearPlayed": "Gehörte entfernen",
-      "downloadSelected": "Ausgewählte herunterladen",
-      "removeSelectedDownloads": "Ausgewählte Downloads entfernen",
-      "selectEpisode": "{title} auswählen",
-      "playNamedEpisode": "Play {title}",
-      "listenToEpisode": "Listen to {title}",
-      "resumeEpisode": "Resume {title}",
-      "playLatestEpisode": "Play latest episode {title}",
-      "episodeDetails": "Episode details",
-      "episodeDetailsNamed": "Episode details for {title}",
-      "openFullPlayer": "Open full player",
-      "reorderEpisode": "Reorder {title}",
-      "playAll": "Play all",
-      "queueAll": "Queue all",
-      "markAllPlayed": "Mark all played",
-      "latestCount": "Latest {count}",
-      "downloadLatest": "Download latest",
-      "removeAllDownloads": "Remove all downloads"
-    },
-    "status": {
-      "nowPlaying": "Wird abgespielt",
-      "paused": "Pausiert",
-      "downloaded": "Heruntergeladen",
-      "downloadQueued": "Download eingereiht",
-      "downloading": "Wird heruntergeladen",
-      "downloadFailed": "Download fehlgeschlagen",
-      "unavailable": "Nicht verfügbar",
-      "played": "Gehört",
-      "following": "Gefolgt",
-      "playbackProgress": "Wiedergabefortschritt",
-      "downloadProgress": "Download progress",
-      "removedFromFeed": "No longer in feed",
-      "inQueue": "In queue",
-      "feedFailing": "Feed failing",
-      "archived": "Archived"
-    },
-    "views": {
-      "queue": "Warteschlange"
-    },
-    "labels": {
-      "episodeCount": "{count} Episoden",
-      "unknownPublisher": "Unbekannter Herausgeber",
-      "durationHoursMinutes": "{hours}h {minutes}m",
-      "durationMinutes": "{minutes}m",
-      "durationSeconds": "{seconds}s",
-      "durationUnavailable": "Duration unavailable",
-      "unknownDate": "Unknown date",
-      "seasonEpisode": "S{season} E{episode}",
-      "season": "S{season}",
-      "episode": "E{episode}",
-      "explicit": "Explicit",
-      "lastListened": "Listened {time}",
-      "timeLeft": "{time} left",
-      "newEpisodeCount": "{count} new",
-      "unplayedShort": "{count} unplayed"
-    },
-    "acquisition": {
-      "title": "Automatische Downloads",
-      "never": "Nie",
-      "newEpisodes": "Neue Episoden",
-      "recentEpisodes": "Aktuelle Episoden",
-      "maximumNewest": "Maximale Anzahl neuer Episoden",
-      "publishedWithinDays": "Veröffentlicht innerhalb der letzten Tage",
-      "remoteDescription": "Episoden standardmäßig streamen. Einzelne Episoden können weiterhin offline gespeichert werden.",
-      "newestDescription": "Lädt automatisch die gewählte Anzahl der neuesten Episoden herunter, die noch nicht gespeichert oder eingereiht sind.",
-      "windowDescription": "Lädt vorhandene und neue Episoden aus diesem Zeitraum herunter. Episoden ohne Veröffentlichungsdatum werden übersprungen."
-    },
-    "player": {
-      "miniPlayer": "Podcast-Miniplayer",
-      "openFullPlayer": "Vollständigen Player öffnen",
-      "expandMiniPlayer": "Miniplayer erweitern",
-      "collapseMiniPlayer": "Player verkleinern",
-      "stopAndClose": "Player stoppen und schließen",
-      "sleepActive": "Sleep timer active: {value}",
-      "previousEpisode": "Vorherige Episode",
-      "nextEpisode": "Nächste Episode",
-      "backSeconds": "{count} Sekunden zurück",
-      "forwardSeconds": "{count} Sekunden vor",
-      "episodePosition": "Episodenposition",
-      "positionValue": "{elapsed} von {duration} abgespielt",
-      "playingAnnouncement": "Playing {title} from {podcast}",
-      "volume": "Volume"
-    },
-    "bookmarks": {
-      "title": "Lesezeichen",
-      "empty": "Keine Lesezeichen",
-      "closeForm": "Lesezeichenformular schließen",
-      "saveAt": "Bei {time} speichern",
-      "titlePlaceholder": "Lesezeichentitel",
-      "notePlaceholder": "Optionale Notiz",
-      "save": "Lesezeichen speichern",
-      "edit": "Lesezeichen bearbeiten",
-      "delete": "Lesezeichen löschen",
-      "titleLabel": "Lesezeichentitel",
-      "noteLabel": "Lesezeichennotiz",
-      "editTitleLabel": "Lesezeichentitel bearbeiten",
-      "editNoteLabel": "Lesezeichennotiz bearbeiten",
-      "defaultTitle": "Bookmark at {time}"
-    },
-    "library": {
-      "episodes": "Episoden",
-      "shows": "Sendungen",
-      "latest": "Neueste",
-      "inProgress": "In Bearbeitung",
-      "unplayed": "Ungehört",
-      "finished": "Abgeschlossen",
-      "health": "Status",
-      "feedHealth": "Feed-Status",
-      "search": "Podcasts durchsuchen",
-      "clearSearch": "Podcast-Suche löschen",
-      "import": "Importieren",
-      "importOpml": "OPML importieren",
-      "importDescription": "Eine OPML-Abonnementliste importieren",
-      "addFeed": "Feed hinzufügen",
-      "settings": "Podcast-Einstellungen",
-      "views": "Podcast-Ansichten",
-      "loading": "Podcasts werden geladen...",
-      "noMatchingShows": "Keine passenden Sendungen",
-      "ready": "Deine Podcast-Bibliothek ist bereit",
-      "tryDifferentSearch": "Versuche einen anderen Titel oder Herausgeber.",
-      "readyDescription": "Füge einen RSS-Feed hinzu oder importiere eine OPML-Datei.",
-      "loadMoreShows": "Weitere Sendungen laden",
-      "upNext": "Als Nächstes",
-      "emptyQueue": "Deine Warteschlange ist leer",
-      "emptyQueueDescription": "Füge eine Episode hinzu, um sie später anzuhören.",
-      "loadMore": "Mehr laden",
-      "lastSuccess": "Letzter Erfolg",
-      "failureCount": "{count} Fehler: {error}",
-      "unknownError": "Unbekannter Fehler",
-      "healthy": "Fehlerfrei",
-      "noFeeds": "Keine Feeds zu überwachen",
-      "noFeedsDescription": "Füge einen Podcast-Feed hinzu, um seinen Status zu sehen.",
-      "noMatchingEpisodes": "Keine passenden Episoden",
-      "noEpisodesLatest": "No episodes yet",
-      "noEpisodesDownloaded": "No downloaded episodes",
-      "noEpisodesInProgress": "No episodes in progress",
-      "noEpisodesUnplayed": "No unplayed episodes",
-      "noEpisodesFinished": "No finished episodes",
-      "noEpisodesDescription": "Neue Episoden deiner Sendungen erscheinen hier.",
-      "loadMoreEpisodes": "Weitere Episoden laden",
-      "addPodcastFeed": "Podcast-Feed hinzufügen",
-      "rssUrl": "RSS-Feed-URL",
-      "preview": "Vorschau",
-      "addPodcast": "Podcast hinzufügen",
-      "storage": "Podcast-Speicher",
-      "currentlyUsing": "Derzeit belegt: {size}",
-      "libraryQuotaGb": "Bibliothekslimit (GB)",
-      "freeSpaceReserveGb": "Freier Speicher (GB)",
-      "defaultRefreshMinutes": "Standardaktualisierung (Minuten)",
-      "finishRemainingSeconds": "Als beendet markieren bei Restsekunden",
-      "exportOpml": "OPML exportieren",
-      "searchShows": "Sendungen durchsuchen",
-      "searchEpisodes": "Episoden durchsuchen",
-      "searchHealth": "Feed-Status durchsuchen",
-      "manageFeeds": "Feeds verwalten",
-      "feedHealth": "Feed health",
-      "feedsNeedAttention": "Feeds need attention",
-      "episodeFilters": "Episodenfilter",
-      "previewing": "Vorschau wird geladen...",
-      "addingPodcast": "Wird hinzugefügt...",
-      "openShow": "{title} öffnen",
-      "retryFeed": "{title} aktualisieren",
-      "confirmClearQueue": "Alle Episoden aus der Warteschlange entfernen?",
-      "importProgress": "Importfortschritt",
-      "jobsQueued": "{count} in Warteschlange",
-      "jobsProcessing": "{count} in Bearbeitung",
-      "jobsFailed": "{count} fehlgeschlagen",
-      "retryUnhealthy": "Fehlerhafte Feeds erneut versuchen",
-      "followedOnly": "Nur gefolgte",
-      "queueDuration": "{duration} insgesamt",
-      "confirmClearPlayed": "Remove every played episode from the queue?",
-      "searchQueue": "Search your queue",
-      "noMatchingQueueEpisodes": "No matching queued episodes"
-    },
-    "import": {
-      "title": "Import local files",
-      "description": "Match audio already in this library's folder to episodes from the feeds you follow.",
-      "placementHint": "Put the files inside this library's folder first. BookOrbit adopts them where they are: nothing is copied, renamed, or moved.",
-      "scan": "Scan for files",
-      "running": "Scanning...",
-      "progress": "{current} of {total} files scanned",
-      "apply": "Import matched files",
-      "applyWithChoices": "Import matched files and your choices",
-      "applied": "Adopted {count} files.",
-      "quota": "{adopt} to adopt, {headroom} of the quota still free",
-      "truncated": "Some lists are shortened. The counts above are complete.",
-      "chooseEpisode": "Choose the episode",
-      "leaveUnresolved": "Leave for later",
-      "noDate": "No date",
-      "fileCount": "{count} files",
-      "subscribe": "Subscribe",
-      "subscribed": "Subscribed",
-      "suggestedFeedsHint": "These folders name a feed you do not follow yet. Subscribe, then scan again to match their files.",
-      "rescanHint": "Scan again to match the files in the folders you just subscribed to.",
-      "duplicateDiffers": "A different file is already attached to this episode",
-      "duplicateSame": "This episode already has this file",
-      "unreadableFolders": "{count} folders could not be read.",
-      "groups": {
-        "matched": "Matched",
-        "ambiguous": "Needs a decision",
-        "unmatched": "No match",
-        "duplicates": "Already attached",
-        "skipped": "Skipped",
-        "suggestedFeeds": "Feeds to subscribe to"
-      },
-      "signals": {
-        "episode_guid": "Episode ID in the file's tags",
-        "episode_id_suffix": "BookOrbit ID in the file name",
-        "enclosure_file_name": "File name matches the feed's",
-        "title_and_date": "Title and date",
-        "title_and_duration": "Title and length",
-        "manual": "Your choice"
-      },
-      "scopes": {
-        "request": "Show you selected",
-        "folder_suffix": "Show folder name",
-        "feed_url_tag": "Feed address in the file's tags",
-        "feed_sidecar": "Saved feed in the folder",
-        "title_similarity": "Similar show title",
-        "library": "No show identified"
-      },
-      "reasons": {
-        "show_unresolved": "No show could be identified for this file",
-        "no_episode_candidate": "The show matched, but no episode did",
-        "single_fuzzy_signal": "Only one signal pointed at an episode",
-        "multiple_candidates": "Several episodes fit equally well",
-        "empty_file": "The file is empty",
-        "unsupported_format": "Not a supported audio file",
-        "symlink": "Symbolic links are not imported",
-        "unreadable": "The file could not be read",
-        "outside_library_root": "The file resolves outside the library folder",
-        "attach_conflict": "The episode gained a file while the scan was running",
-        "quota_exceeded": "Importing these files would exceed this library's storage quota. Raise the quota or import fewer files."
-      },
-      "sources": {
-        "feed_sidecar": "Saved feed file",
-        "metadata_json": "metadata.json",
-        "feed_url_tag": "File tags"
-      },
-      "errors": {
-        "status": "Failed to read the import status",
-        "start": "Failed to start the import",
-        "subscribe": "Failed to subscribe to this feed"
-      },
-      "messages": {
-        "subscribed": "Podcast added. Scan again to match its files."
-      }
-    },
-    "messages": {
-      "podcastAdded": "Podcast hinzugefügt",
-      "feedsQueued": "{count} Podcast-Feeds eingereiht",
-      "settingsSaved": "Podcast-Einstellungen gespeichert",
-      "downloadQueued": "Episodendownload eingereiht",
-      "downloadRemoved": "Episodendownload entfernt",
-      "refreshQueued": "Podcast-Aktualisierung eingereiht",
-      "mergeQueued": "Podcast-Zusammenführung eingereiht",
-      "queueCleared": "Podcast-Warteschlange geleert",
-      "playerClosed": "Player closed",
-      "feedsRefreshQueued": "Aktualisierung für {count} Feeds eingereiht",
-      "finishedQueueCleared": "Gehörte Episoden aus der Warteschlange entfernt",
-      "bulkQueueActionCompleted": "{count} ausgewählte Episoden aktualisiert",
-      "bulkQueueActionFailed": "Updated {completed} episodes, {failed} failed",
-      "bulkQueued": "Queued {completed} episodes; {skipped} were already queued or exceeded the queue limit",
-      "bulkMarkedPlayed": "Marked {count} episodes played",
-      "bulkDownloadsQueued": "Queued {count} episode downloads",
-      "bulkDownloadsRemoved": "Removed {count} episode downloads",
-      "bulkDownloadsRemovedWithFailures": "Removed {completed} downloads; {failed} failed"
-    },
-    "fullPlayer": {
-      "queueNowPlaying": "Wiedergabe #{position} · {count} verbleibend",
-      "queuedCount": "{count} eingereiht",
-      "mediaUnavailable": "Medium nicht verfügbar",
-      "streaming": "Streaming",
-      "backToPodcast": "Zurück zum Podcast",
-      "loading": "Episode wird geladen...",
-      "tryAgain": "Erneut versuchen",
-      "nowListening": "Jetzt hören",
-      "retry": "Wiederholen",
-      "restart": "Neu starten",
-      "durationUnavailable": "Dauer nicht verfügbar",
-      "previousQueued": "Vorherige Episode der Warteschlange",
-      "nextQueued": "Nächste Episode der Warteschlange",
-      "startingPlayback": "Wiedergabe wird gestartet",
-      "speed": "Geschwindigkeit",
-      "playbackSpeed": "Wiedergabegeschwindigkeit",
-      "sleep": "Schlaftimer",
-      "off": "Aus",
-      "endOfChapter": "Kapitelende",
-      "endOfEpisode": "Episodenende",
-      "minutesLeft": "Noch {count} Min.",
-      "aboutEpisode": "Über diese Episode",
-      "showLess": "Weniger anzeigen",
-      "showMore": "Mehr anzeigen",
-      "chapters": "Kapitel",
-      "previousChapter": "Vorheriges Kapitel",
-      "nextChapter": "Nächstes Kapitel",
-      "removeNamedFromQueue": "{title} aus der Warteschlange entfernen",
-      "queueClear": "Deine Warteschlange ist leer.",
-      "transcripts": "Transkripte",
-      "transcript": "Transkript",
-      "sleepMinutes": "{count} min",
-      "speedValue": "{rate}x",
-      "cyclePlaybackSpeed": "Cycle playback speed",
-      "choosePlaybackSpeed": "Choose playback speed",
-      "moreSpeeds": "More",
-      "showSpeedOverride": "This speed is remembered for this show.",
-      "clearSpeedOverride": "Use default speed for this show"
-    },
-    "show": {
-      "loading": "Podcast wird geladen...",
-      "noAlerts": "Keine Hinweise",
-      "immediate": "Sofort",
-      "dailyDigest": "Tägliche Zusammenfassung",
-      "weeklyDigest": "Wöchentliche Zusammenfassung",
-      "refreshFeed": "Feed aktualisieren",
-      "refreshInterval": "Aktualisierungsintervall in Minuten",
-      "restore": "Wiederherstellen",
-      "archive": "Archivieren",
-      "mergeSource": "Andere Podcast-ID in diese Sendung zusammenführen",
-      "queueMerge": "Zusammenführung einreihen",
-      "confirmMerge": "Podcast {id} zusammenführen? Der Quell-Podcast wird endgültig entfernt.",
-      "back": "Zurück",
-      "notificationMode": "Benachrichtigungshäufigkeit",
-      "readMore": "Mehr lesen",
-      "searchEpisodes": "Episoden dieser Sendung durchsuchen",
-      "clearEpisodeSearch": "Episodensuche löschen",
-      "episodeFilter": "Episodenfilter",
-      "episodeSort": "Sortierreihenfolge",
-      "newestFirst": "Neueste zuerst",
-      "oldestFirst": "Älteste zuerst",
-      "noEpisodes": "Keine passenden Episoden",
-      "noEpisodesDescription": "Versuche eine andere Suche, einen anderen Filter oder eine andere Sortierung.",
-      "dangerZone": "Gefahrenbereich",
-      "mergeTitle": "Doppelte Sendung zusammenführen",
-      "mergeDescription": "Suche die Quellsendung, die in diese Sendung übernommen werden soll. Die Quelle wird endgültig entfernt.",
-      "searchMergeSource": "Nach einer doppelten Sendung suchen",
-      "mergeSelected": "„{title}“ in diese Sendung übernehmen",
-      "fromDate": "Von",
-      "toDate": "Bis",
-      "feedFailingTitle": "Feed needs attention",
-      "feedFailingDetail": "{count} consecutive refresh failures. Last successful refresh: {lastSuccess}",
-      "archivedTitle": "This show is archived",
-      "archivedDescription": "Archived shows stop refreshing and do not download new episodes.",
-      "downloadLatestCount": "Number of latest episodes to download",
-      "confirmRemoveAllDownloads": "Remove every downloaded episode for this show? Streamed episodes and listening progress are kept.",
-      "refreshCompleted": "Updated, {count} new episodes",
-      "refreshFailed": "Refresh failed: {error}"
-    },
-    "errors": {
-      "createBookmark": "Lesezeichen konnte nicht erstellt werden",
-      "updateBookmark": "Lesezeichen konnte nicht aktualisiert werden",
-      "deleteBookmark": "Lesezeichen konnte nicht gelöscht werden",
-      "feedPreview": "Feed-Vorschau fehlgeschlagen",
-      "invalidEpisodeLimit": "Gib eine gültige maximale Episodenanzahl ein",
-      "invalidEpisodeWindow": "Gib einen gültigen Zeitraum ein",
-      "addPodcast": "Podcast konnte nicht hinzugefügt werden",
-      "opmlTooLarge": "OPML-Dateien dürfen höchstens 5 MB groß sein",
-      "opmlImport": "OPML-Import fehlgeschlagen",
-      "opmlExport": "OPML-Export fehlgeschlagen",
-      "loadSettings": "Podcast-Einstellungen konnten nicht geladen werden",
-      "invalidStorage": "Speicherwerte müssen nichtnegative Zahlen sein",
-      "invalidRefresh": "Die Aktualisierung muss zwischen 5 und 10.080 Minuten liegen",
-      "invalidCompletion": "Der Abschlusswert muss zwischen 0 und 3.600 Sekunden liegen",
-      "saveSettings": "Podcast-Einstellungen konnten nicht gespeichert werden",
-      "markPlayed": "Episode konnte nicht als gehört markiert werden",
-      "restartEpisode": "Episode konnte nicht neu gestartet werden",
-      "queueDownload": "Download konnte nicht eingereiht werden",
-      "removeDownload": "Download konnte nicht entfernt werden",
-      "addToQueue": "Episode konnte nicht eingereiht werden",
-      "removeFromQueue": "Episode konnte nicht entfernt werden",
-      "loadPodcast": "Podcast konnte nicht geladen werden",
-      "loadEpisodes": "Episoden konnten nicht geladen werden",
-      "queueNext": "Episode konnte nicht als Nächstes eingereiht werden",
-      "follow": "Podcast konnte nicht gefolgt werden",
-      "unfollow": "Podcast konnte nicht entfolgt werden",
-      "updateEpisode": "Episode konnte nicht aktualisiert werden",
-      "refresh": "Aktualisierung konnte nicht eingereiht werden",
-      "updatePodcast": "Podcast konnte nicht aktualisiert werden",
-      "archive": "Podcast konnte nicht archiviert werden",
-      "restore": "Podcast konnte nicht wiederhergestellt werden",
-      "merge": "Zusammenführung konnte nicht eingereiht werden",
-      "libraryAccess": "Bibliothekszugriff konnte nicht geladen werden",
-      "reorderQueue": "Podcast-Warteschlange konnte nicht neu sortiert werden",
-      "clearQueue": "Podcast-Warteschlange konnte nicht geleert werden",
-      "podcastNotFound": "Podcast nicht gefunden",
-      "loadPodcasts": "Podcasts konnten nicht geladen werden",
-      "loadQueue": "Podcast-Warteschlange konnte nicht geladen werden",
-      "loadHealth": "Feed-Status konnte nicht geladen werden",
-      "loadPlaybackSettings": "Podcast-Wiedergabeeinstellungen konnten nicht geladen werden",
-      "invalidPlaybackRate": "Die Wiedergabegeschwindigkeit muss zwischen 0,5 und 3 liegen",
-      "invalidSkipBackward": "Der Rücksprung muss zwischen 5 und 120 Sekunden liegen",
-      "invalidSkipForward": "Der Vorsprung muss zwischen 5 und 120 Sekunden liegen",
-      "invalidDateRange": "Das Startdatum muss vor dem Enddatum liegen",
-      "episodeNotFound": "Podcast episode not found",
-      "loadEpisode": "Failed to load podcast episode",
-      "refreshPlaybackContext": "Failed to refresh playback context",
-      "streamUnavailable": "Unable to load this podcast episode",
-      "bulkAction": "Failed to update podcast episodes",
-      "invalidVolume": "Volume must be from 0 to 100 percent"
-    },
-    "settingsPage": {
-      "title": "Podcast-Einstellungen",
-      "subtitle": "Verwalten Sie Ihre Wiedergabestandards und das Speicherverhalten jeder Podcast-Bibliothek.",
-      "loading": "Podcast-Einstellungen werden geladen...",
-      "saving": "Wird gespeichert...",
-      "playbackTitle": "Wiedergabestandards",
-      "playbackDescription": "Diese Einstellungen gelten geräteübergreifend für Ihr Konto. Gespeicherte Geschwindigkeiten einzelner Sendungen bleiben erhalten.",
-      "defaultPlaybackRate": "Standard-Wiedergabegeschwindigkeit",
-      "skipBackwardSeconds": "Zurückspringen (Sekunden)",
-      "skipForwardSeconds": "Vorspringen (Sekunden)",
-      "playbackSaved": "Podcast-Wiedergabeeinstellungen gespeichert",
-      "playbackSaveFailed": "Podcast-Wiedergabeeinstellungen konnten nicht gespeichert werden",
-      "libraryTitle": "Bibliotheksstandards und Speicher",
-      "libraryDescription": "Wählen Sie eine Podcast-Bibliothek aus, um Speichergrenzen und das standardmäßige Aktualisierungsverhalten anzuzeigen.",
-      "library": "Podcast-Bibliothek",
-      "noLibraries": "Sie haben noch keinen Zugriff auf eine Podcast-Bibliothek.",
-      "loadingLibrary": "Bibliothekseinstellungen werden geladen...",
-      "readOnlyLibrary": "Nur Bibliothekseigentümer mit der Berechtigung zur Podcast-Aufbewahrung können diese Einstellungen ändern.",
-      "showSettingsHint": "Regeln für automatische Downloads und Aktualisierungsabweichungen bleiben in den Einstellungen der jeweiligen Sendung.",
-      "defaultVolume": "Default volume"
-    },
-    "queueReorder": {
-      "lifted": "{title} lifted at position {position} of {total}",
-      "moved": "{title} moved to position {position} of {total}",
-      "dropped": "{title} dropped at position {position} of {total}",
-      "cancelled": "Reordering {title} cancelled"
-    }
-  },
   "titles": {
     "dashboard": "Übersicht",
     "libraries": "Bibliotheken",
     "opds": "OPDS",
     "koboSync": "Kobo-Synchronisierung",
     "koreaderSync": "KOReader-Synchronisierung",
-    "bookDock": "Bücherablage",
+    "bookDock": "Book Dock",
     "whatsNew": "Neuigkeiten",
     "annotations": "Markierungen",
     "achievements": "Erfolge",
@@ -8563,7 +7638,6 @@
     "notFound": "Nicht gefunden",
     "signIn": "Anmelden",
     "initialSetup": "Ersteinrichtung",
-    "register": "Konto erstellen",
     "forgotPassword": "Passwort vergessen",
     "resetPassword": "Passwort zurücksetzen",
     "completingSignIn": "Anmeldung wird abgeschlossen",
@@ -8575,9 +7649,6 @@
     "collection": "Sammlung",
     "author": "Autor",
     "book": "Buch",
-    "podcasts": "Podcasts",
-    "podcast": "Podcast",
-    "podcastEpisode": "Episode",
     "seriesItem": "Reihe",
     "appearance": {
       "theme": "Anzeige",
@@ -8616,13 +7687,11 @@
       "users": "Benutzer",
       "account-activity": "Kontoaktivität",
       "magic-links": "Magic Links",
-      "oidc": "OIDC / SSO",
-      "server-fonts": "Server-Schriftarten"
+      "oidc": "OIDC / SSO"
     },
     "system": {
       "file-naming": "Dateibenennung",
-      "book-dock": "Bücherablage",
-      "requests": "Anfragen",
+      "book-dock": "Book Dock",
       "maintenance": "Wartung",
       "audit-log": "Prüfprotokoll"
     },
@@ -8632,11 +7701,6 @@
       "notifications": "Benachrichtigungen",
       "restrictions": "Inhaltsbeschränkungen"
     },
-    "smartScopes": "Smart Scopes",
-    "collections": "Sammlungen",
-    "missingResources": "Fehlende Ressourcen",
-    "bookRequests": "Anfragen",
-    "bookRequestDetail": "Anfrage",
-    "bookRequestReleases": "Wähle eine Version"
+    "collections": "Sammlungen"
   }
 }

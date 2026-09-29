@@ -3474,7 +3474,7 @@
       "searchPlaceholder": "Search settings",
       "clearSearch": "Clear search",
       "noResults": "No settings match {query}.",
-      "shortcutHint": "Press {shortcut} to jump to any setting",
+      "shortcutHint": "Press Cmd K to jump to any setting",
       "status": {
         "scanning": "Scanning"
       },
@@ -10034,7 +10034,13 @@
         "notStarted": "Not started",
         "outOfHundred": "/100",
         "percentRead": "{percent} read",
-        "fileCount": "{count, plural, one {# file} other {# files}}"
+        "fileCount": "{count, plural, one {# file} other {# files}}",
+        "fileLocation": "File",
+        "files": "Files",
+        "readingStatus": "Reading status",
+        "progress": "Progress",
+        "path": "Library path",
+        "updated": "Updated"
       },
       "initial": {
         "title": "Find duplicate books",
@@ -10047,7 +10053,9 @@
       "deleteDialog": {
         "warning": "Metadata, collections, reading data, and device state are not transferred to the kept book. Associated data for other users is also removed.",
         "confirm": "{count, plural, =0 {Delete # book} one {Delete # book} other {Delete # books}}",
-        "success": "{count, plural, =0 {No books deleted} one {One duplicate book deleted} other {# duplicate books deleted}}"
+        "success": "{count, plural, =0 {No books deleted} one {One duplicate book deleted} other {# duplicate books deleted}}",
+        "title": "Permanently delete duplicate books?",
+        "description": "{count, plural, =0 {This will permanently delete # selected book and its files.} one {This will permanently delete # selected book and its files.} other {This will permanently delete # selected books and their files.}}"
       },
       "errors": {
         "start": "Could not start the duplicate scan.",
@@ -10149,7 +10157,20 @@
         "hide": "Hide dismissed pairs",
         "restore": "Restore this pair",
         "restored": "Pair restored. It can match again on the next scan."
-      }
+      },
+      "scanSettings": "Scan settings",
+      "description": "Scan files and metadata for potential duplicate records. Nothing is deleted during a scan.",
+      "groupsFound": "{count, plural, =0 {No duplicate groups} one {One duplicate group} other {# duplicate groups}}",
+      "similarityValue": "{percent}% title similarity",
+      "keepThis": "Keep this book",
+      "discardThis": "Discard this book",
+      "selectKeeperFirst": "Select a keeper first",
+      "noDirectMatch": "No direct match with keeper",
+      "moreFiles": "+{count} more",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details",
+      "deleteSelected": "Delete {count} selected",
+      "openBook": "Open details for {title}"
     },
     "entityManager": {
       "unknown": "Unknown",
