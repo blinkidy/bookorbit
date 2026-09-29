@@ -16,6 +16,15 @@ type MigrationJournal = {
   entries: MigrationJournalEntry[];
 };
 
+type MigrationSnapshot = {
+  tables: Record<
+    string,
+    {
+      checkConstraints: Record<string, { value: string }>;
+    }
+  >;
+};
+
 const migrationsDirUrl = new URL('./migrations/', import.meta.url);
 const journalPath = fileURLToPath(new URL('./meta/_journal.json', migrationsDirUrl));
 const migrationsDir = fileURLToPath(migrationsDirUrl);
@@ -71,5 +80,20 @@ describe('Drizzle migration journal', () => {
       tag: '0047_audiobook_kosync_sessions',
     });
     expect(journal.entries.filter((entry) => entry.tag.includes('audiobook_kosync_sessions'))).toHaveLength(1);
+  });
+
+  it('keeps audiobook reading sessions valid through the imported v3 migrations', () => {
+    const migration = readFileSync(fileURLToPath(new URL('./0093_add_read_aloud_and_podcasts.sql', migrationsDirUrl)), 'utf8');
+    expect(migration).toContain("'kobo', 'audiobook'");
+
+    for (let idx = 93; idx <= 97; idx += 1) {
+      const prefix = migrationPrefix(idx);
+      const snapshot = JSON.parse(
+        readFileSync(fileURLToPath(new URL(`./meta/${prefix}_snapshot.json`, migrationsDirUrl)), 'utf8'),
+      ) as MigrationSnapshot;
+      const constraint = snapshot.tables['public.reading_sessions'].checkConstraints.reading_sessions_source_chk;
+
+      expect(constraint.value).toContain("'audiobook'");
+    }
   });
 });
