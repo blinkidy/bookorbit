@@ -12,6 +12,7 @@ vi.mock('child_process', () => ({
 
 import { execFile } from 'child_process';
 import { mkdtemp, readFile, rm } from 'fs/promises';
+import { join } from 'path';
 import { extractPdfCover } from './pdf-cover';
 
 const mockExecFile = execFile as MockedFunction<typeof execFile>;
@@ -29,14 +30,26 @@ describe('extractPdfCover', () => {
     const coverBytes = Buffer.from('cover-bytes');
     mockExecFile.mockImplementation((file, args, callback) => {
       expect(file).toBe('pdftoppm');
-      expect(args).toEqual(['-jpeg', '-singlefile', '-cropbox', '-r', '150', '-f', '1', '-l', '1', '/books/test.pdf', '/tmp/pdf-cover-abc/cover']);
+      expect(args).toEqual([
+        '-jpeg',
+        '-singlefile',
+        '-cropbox',
+        '-r',
+        '150',
+        '-f',
+        '1',
+        '-l',
+        '1',
+        '/books/test.pdf',
+        join('/tmp/pdf-cover-abc', 'cover'),
+      ]);
       callback?.(null, '', '');
       return {} as never;
     });
     mockReadFile.mockResolvedValue(coverBytes);
 
     await expect(extractPdfCover('/books/test.pdf')).resolves.toEqual(coverBytes);
-    expect(mockReadFile).toHaveBeenCalledWith('/tmp/pdf-cover-abc/cover.jpg');
+    expect(mockReadFile).toHaveBeenCalledWith(join('/tmp/pdf-cover-abc', 'cover.jpg'));
     expect(mockRm).toHaveBeenCalledWith('/tmp/pdf-cover-abc', { recursive: true, force: true });
   });
 

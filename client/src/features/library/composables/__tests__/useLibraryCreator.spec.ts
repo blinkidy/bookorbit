@@ -69,6 +69,24 @@ describe('useLibraryCreator', () => {
     expect(creator.prescanResult.value).toEqual(result)
   })
 
+  it('includes the current library ID when prescanning an edit', async () => {
+    const { useLibraryCreator } = await import('../useLibraryCreator')
+    const creator = useLibraryCreator()
+    const result: PrescanResult = { paths: [{ path: '/books', accessible: true, fileCount: 2 }], totalFiles: 2 }
+    apiMock.mockResolvedValue(jsonResponse(result))
+    creator.initEdit(makeLibrary({ id: 12 }))
+
+    await creator.runPrescan()
+
+    expect(apiMock).toHaveBeenCalledWith(
+      '/api/v1/libraries/prescan',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ paths: ['/books'], libraryId: 12 }),
+      }),
+    )
+  })
+
   it('surfaces prescan connection failures', async () => {
     const { useLibraryCreator } = await import('../useLibraryCreator')
     const creator = useLibraryCreator()
@@ -112,6 +130,7 @@ describe('useLibraryCreator', () => {
 
     creator.initEdit({
       id: 1,
+      type: 'books',
       name: 'Main Library',
       icon: 'BookOpen',
       displayOrder: 0,
@@ -122,6 +141,7 @@ describe('useLibraryCreator', () => {
       formatPriority: ['epub'],
       allowedFormats: ['epub'],
       organizationMode: 'book_per_folder',
+      addedAtSource: 'imported',
       excludePatterns: [],
       readingThreshold: 0.25,
       markAsFinishedPercentComplete: 98,
@@ -141,7 +161,7 @@ describe('useLibraryCreator', () => {
       fileWriteAudioEnabled: false,
       fileWriteAudioMaxFileSizeMb: 750,
       fileRenameEnabled: true,
-      folders: [{ id: 1, path: '/books', createdAt: '2026-01-01T00:00:00.000Z' }],
+      folders: [{ id: 1, path: '/books', role: 'downloads' as const, createdAt: '2026-01-01T00:00:00.000Z' }],
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     })
@@ -172,12 +192,40 @@ describe('useLibraryCreator', () => {
         body: expect.any(String),
       }),
     )
-    expect(JSON.parse(apiMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+    const payload = JSON.parse(apiMock.mock.calls[0]?.[1]?.body as string)
+    expect(payload).toMatchObject({
       name: 'Audio',
       fileWriteAudioEnabled: true,
       fileWriteAudioMaxFileSizeMb: 750,
     })
+    expect(payload).not.toHaveProperty('localFolders')
+    expect(payload).not.toHaveProperty('watchLocalFolders')
     expect(creator.loading.value).toBe(false)
+  })
+
+  it('sends the podcast local-folder watcher setting without book automation fields', async () => {
+    const { useLibraryCreator } = await import('../useLibraryCreator')
+    const creator = useLibraryCreator()
+    const saved = makeLibrary({ id: 13, type: 'podcasts', name: 'Podcasts', watchLocalFolders: false })
+    apiMock.mockResolvedValue(jsonResponse(saved, 201))
+
+    creator.form.type = 'podcasts'
+    creator.form.name = 'Podcasts'
+    creator.form.icon = 'Podcast'
+    creator.form.folders = ['/podcasts/downloads']
+    creator.form.localFolders = ['/podcasts/local']
+    creator.form.watchLocalFolders = false
+
+    await expect(creator.save()).resolves.toEqual(saved)
+
+    const payload = JSON.parse(apiMock.mock.calls[0]?.[1]?.body as string)
+    expect(payload).toMatchObject({
+      type: 'podcasts',
+      localFolders: ['/podcasts/local'],
+      watchLocalFolders: false,
+    })
+    expect(payload).not.toHaveProperty('watch')
+    expect(payload).not.toHaveProperty('autoScanCronExpression')
   })
 
   it('trims user-entered values and surfaces save connection failures', async () => {
@@ -209,6 +257,7 @@ describe('useLibraryCreator', () => {
     await expect(creator.save()).resolves.toBeNull()
 
     expect(apiMock).toHaveBeenCalledWith('/api/v1/libraries/12', expect.objectContaining({ method: 'PATCH' }))
+    expect(JSON.parse(apiMock.mock.calls[0]?.[1]?.body as string)).not.toHaveProperty('type')
     expect(creator.error.value).toBe('Name already exists')
     expect(creator.loading.value).toBe(false)
   })
@@ -224,6 +273,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 function makeLibrary(overrides: Partial<Library> = {}): Library {
   return {
     id: 1,
+    type: 'books',
     name: 'Main Library',
     icon: 'BookOpen',
     displayOrder: 0,
@@ -234,6 +284,7 @@ function makeLibrary(overrides: Partial<Library> = {}): Library {
     formatPriority: ['epub'],
     allowedFormats: ['epub'],
     organizationMode: 'book_per_folder',
+    addedAtSource: 'imported',
     excludePatterns: [],
     readingThreshold: 0.25,
     markAsFinishedPercentComplete: 98,
@@ -253,7 +304,7 @@ function makeLibrary(overrides: Partial<Library> = {}): Library {
     fileWriteAudioEnabled: false,
     fileWriteAudioMaxFileSizeMb: 750,
     fileRenameEnabled: true,
-    folders: [{ id: 1, path: '/books', createdAt: '2026-01-01T00:00:00.000Z' }],
+    folders: [{ id: 1, path: '/books', role: 'downloads' as const, createdAt: '2026-01-01T00:00:00.000Z' }],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,

@@ -1,4 +1,5 @@
 import { readFile, rename, stat, unlink, writeFile } from 'fs/promises';
+import { join } from 'path';
 import type { MockedFunction } from 'vitest';
 import { randomUUID } from 'crypto';
 import { PDFDocument, PDFName } from 'pdf-lib';
@@ -139,8 +140,9 @@ describe('PdfFormatWriter', () => {
     expect(mockPdfNameOf).toHaveBeenCalledWith('Metadata');
     expect(pdfDoc.catalog.set).toHaveBeenCalledWith('PDFName:Metadata', 'registered-stream');
 
-    expect(mockWriteFile).toHaveBeenCalledWith('/books/.tmp-abc-uuid.pdf', Buffer.from('new-pdf'));
-    expect(mockRename).toHaveBeenCalledWith('/books/.tmp-abc-uuid.pdf', '/books/dune.pdf');
+    const tempPath = join('/books', '.tmp-abc-uuid.pdf');
+    expect(mockWriteFile).toHaveBeenCalledWith(tempPath, Buffer.from('new-pdf'));
+    expect(mockRename).toHaveBeenCalledWith(tempPath, '/books/dune.pdf');
     expect(result.status).toBe('success');
   });
 
@@ -197,7 +199,7 @@ describe('PdfFormatWriter', () => {
       'permission denied',
     );
 
-    expect(mockUnlink).toHaveBeenCalledWith('/books/.tmp-abc-uuid.pdf');
+    expect(mockUnlink).toHaveBeenCalledWith(join('/books', '.tmp-abc-uuid.pdf'));
   });
 
   it('skips encrypted PDFs without mutating or rewriting the file', async () => {

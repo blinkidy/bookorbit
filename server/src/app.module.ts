@@ -7,6 +7,7 @@ import { LoggerModule } from 'nestjs-pino';
 
 import {
   appConfig,
+  audiolessEpubConfig,
   authConfig,
   bookRequestConfig,
   dbConfig,
@@ -14,6 +15,7 @@ import {
   fileWriteConfig,
   migrationConfig,
   oidcRuntimeConfig,
+  podcastConfig,
   storageConfig,
 } from './config/config';
 import { validateEnv } from './config/env.validation';
@@ -87,6 +89,11 @@ import { SharedReadingInsightsModule } from './modules/shared-reading-insights/s
 import { BookDuplicatesModule } from './modules/book-duplicates/book-duplicates.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { BookMoveModule } from './modules/book-move/book-move.module';
+import { AudiobookModule } from './modules/audiobook/audiobook.module';
+import { TtsModule } from './modules/tts/tts.module';
+import { SearchModule } from './modules/search/search.module';
+import { WatchDownloadModule } from './modules/watch-download/watch-download.module';
+import { PodcastModule } from './modules/podcast/podcast.module';
 
 @Module({
   imports: [
@@ -94,7 +101,19 @@ import { BookMoveModule } from './modules/book-move/book-move.module';
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,
-      load: [appConfig, dbConfig, authConfig, storageConfig, fileWriteConfig, emailConfig, migrationConfig, bookRequestConfig, oidcRuntimeConfig],
+      load: [
+        appConfig,
+        dbConfig,
+        authConfig,
+        storageConfig,
+        fileWriteConfig,
+        emailConfig,
+        migrationConfig,
+        bookRequestConfig,
+        oidcRuntimeConfig,
+        podcastConfig,
+        audiolessEpubConfig,
+      ],
     }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot({
@@ -119,6 +138,7 @@ import { BookMoveModule } from './modules/book-move/book-move.module';
     LibraryModule,
     PathModule,
     BookModule,
+    AudiobookModule,
     CatalogModule,
     CoverModule,
     CollectionModule,
@@ -171,6 +191,10 @@ import { BookMoveModule } from './modules/book-move/book-move.module';
     MaintenanceModule,
     BookMoveModule,
     BrowseCountsModule,
+    TtsModule,
+    SearchModule,
+    WatchDownloadModule,
+    PodcastModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

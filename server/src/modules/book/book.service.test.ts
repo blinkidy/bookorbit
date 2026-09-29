@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import type { MockedFunction } from 'vitest';
 import { access, readdir, rm, stat, rename } from 'fs/promises';
 
@@ -125,10 +125,14 @@ function makeService(overrides: { bookMetadataLockService?: unknown } = {}) {
     findKoboSnapshotStates: vi.fn(),
     findKoboSyncCollectionNamesForBook: vi.fn(),
     findFileById: vi.fn(),
+    updateBookFile: vi.fn().mockResolvedValue(undefined),
+    updateBookPrimaryFile: vi.fn().mockResolvedValue(undefined),
     findLibraryIdByBookId: vi.fn(),
     findProgress: vi.fn(),
     findProgressByBook: vi.fn(),
     upsertProgress: vi.fn(),
+    findReadAloudSyncMode: vi.fn().mockResolvedValue('auto'),
+    upsertReadAloudSyncMode: vi.fn(),
     syncKoboReadingStateFromProgress: vi.fn(),
     isKoboTwoWayProgressSyncEnabled: vi.fn().mockResolvedValue(false),
     clearFileProgress: vi.fn(),
@@ -168,6 +172,7 @@ function makeService(overrides: { bookMetadataLockService?: unknown } = {}) {
     emitAuthorsReplaced: vi.fn(),
     downloadAndSaveCover: vi.fn().mockResolvedValue(undefined),
     refreshCoverForBook: vi.fn(),
+    ensureThumbnailForBook: vi.fn().mockResolvedValue(null),
   };
   const pipeline = {
     run: vi.fn(),
@@ -849,7 +854,7 @@ describe('BookService', () => {
     });
 
     it('returns thumbnail path only when file is accessible', async () => {
-      const { service, bookRepo } = makeService();
+      const { service, bookRepo, metadataService } = makeService();
       bookRepo.findLibraryIdByBookId.mockResolvedValue(5);
       mockAccess.mockResolvedValue(undefined);
 
@@ -857,6 +862,18 @@ describe('BookService', () => {
 
       mockAccess.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
       await expect(service.getThumbnailPath(9, makeUser())).resolves.toBeNull();
+      expect(metadataService.ensureThumbnailForBook).toHaveBeenCalledWith(9);
+    });
+
+    it('repairs and returns a missing thumbnail from the active cover', async () => {
+      const { service, bookRepo, metadataService } = makeService();
+      bookRepo.findLibraryIdByBookId.mockResolvedValue(5);
+      mockAccess.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+      metadataService.ensureThumbnailForBook.mockResolvedValue('/tmp/books/covers/9/thumbnail.jpg');
+
+      await expect(service.getThumbnailPath(9, makeUser())).resolves.toBe('/tmp/books/covers/9/thumbnail.jpg');
+
+      expect(metadataService.ensureThumbnailForBook).toHaveBeenCalledWith(9);
     });
 
     it('throws when thumbnail access fails for non-missing errors', async () => {
@@ -2334,31 +2351,6 @@ describe('BookService', () => {
     });
   });
 
-  // ── AUDIO PROGRESS ─────────────────────────────────────────────────────────
-
-  describe('getAudioProgress', () => {
-    it('returns latest audio progress from repo', async () => {
-      const { service, bookRepo } = makeService();
-      const user = makeUser();
-      const progressRow = { fileId: 5, positionSeconds: 1234, updatedAt: new Date().toISOString() };
-
-      bookRepo.findLibraryIdByBookId = vi.fn().mockResolvedValue(1);
-      bookRepo.findAudioProgress = vi.fn().mockResolvedValue(progressRow);
-
-      const result = await service.getAudioProgress(user.id, 10, user);
-      expect(result).toBe(progressRow);
-      expect(bookRepo.findAudioProgress).toHaveBeenCalledWith(user.id, 10);
-    });
-
-    it('throws NotFoundException when book does not exist', async () => {
-      const { service, bookRepo } = makeService();
-      const user = makeUser();
-      bookRepo.findLibraryIdByBookId = vi.fn().mockResolvedValue(null);
-
-      await expect(service.getAudioProgress(user.id, 99, user)).rejects.toThrow();
-    });
-  });
-
   describe('getBookProgress', () => {
     it('returns one row per file with defaults for missing progress', async () => {
       const { service, bookRepo } = makeService();
@@ -2369,6 +2361,9 @@ describe('BookService', () => {
           fileId: 10,
           cfi: null,
           pageNumber: null,
+          positionSeconds: null,
+          mediaOverlayFragment: null,
+          mediaOverlaySectionIndex: null,
           percentage: null,
           koboLocationSource: null,
           koboLocationType: null,
@@ -2381,6 +2376,9 @@ describe('BookService', () => {
           fileId: 11,
           cfi: 'epubcfi(/6/4)',
           pageNumber: 12,
+          positionSeconds: 84,
+          mediaOverlayFragment: 'OEBPS/chapter.xhtml#s4',
+          mediaOverlaySectionIndex: 2,
           percentage: 45,
           koboLocationSource: 'OEBPS/chapter.xhtml',
           koboLocationType: 'KoboSpan',
@@ -2399,6 +2397,9 @@ describe('BookService', () => {
           fileId: 10,
           cfi: null,
           pageNumber: null,
+          positionSeconds: null,
+          mediaOverlayFragment: null,
+          mediaOverlaySectionIndex: null,
           percentage: 0,
           koboLocationSource: null,
           koboLocationType: null,
@@ -2411,6 +2412,9 @@ describe('BookService', () => {
           fileId: 11,
           cfi: 'epubcfi(/6/4)',
           pageNumber: 12,
+          positionSeconds: 84,
+          mediaOverlayFragment: 'OEBPS/chapter.xhtml#s4',
+          mediaOverlaySectionIndex: 2,
           percentage: 45,
           koboLocationSource: 'OEBPS/chapter.xhtml',
           koboLocationType: 'KoboSpan',
@@ -2435,7 +2439,23 @@ describe('BookService', () => {
 
       await service.saveProgress(user.id, 7, { percentage: 25, positionSeconds: 900 } as never, user);
 
-      expect(bookRepo.upsertProgress).toHaveBeenCalledWith(user.id, 7, null, null, 25, 900, null, null, null, null, null);
+      expect(bookRepo.upsertProgress).toHaveBeenCalledWith(
+        user.id,
+        7,
+        null,
+        null,
+        25,
+        900,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        expect.any(Date),
+      );
     });
 
     it('passes null positionSeconds when not provided in DTO', async () => {
@@ -2449,9 +2469,29 @@ describe('BookService', () => {
 
       await service.saveProgress(user.id, 8, { percentage: 50 } as never, user);
 
-      expect(bookRepo.upsertProgress).toHaveBeenCalledWith(user.id, 8, null, null, 50, null, null, null, null, null, null);
+      expect(bookRepo.upsertProgress).toHaveBeenCalledWith(
+        user.id,
+        8,
+        null,
+        null,
+        50,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        expect.any(Date),
+      );
       expect(libraryService.findOne).toHaveBeenCalledWith(2);
-      expect(userBookStatusService.autoUpdate).toHaveBeenCalledWith(user.id, 11, 50, 3, 97);
+      expect(userBookStatusService.autoUpdate).toHaveBeenCalledWith(user.id, 11, 50, 3, 97, {
+        origin: 'bookorbit',
+        timeZone: 'UTC',
+        strongRereadEvidence: false,
+      });
     });
 
     it('does not fail progress save when auto status update fails', async () => {
@@ -2467,8 +2507,28 @@ describe('BookService', () => {
 
       await expect(service.saveProgress(user.id, 8, { percentage: 50 } as never, user)).resolves.toBeUndefined();
 
-      expect(bookRepo.upsertProgress).toHaveBeenCalledWith(user.id, 8, null, null, 50, null, null, null, null, null, null);
-      expect(userBookStatusService.autoUpdate).toHaveBeenCalledWith(user.id, 11, 50, 3, 97);
+      expect(bookRepo.upsertProgress).toHaveBeenCalledWith(
+        user.id,
+        8,
+        null,
+        null,
+        50,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        expect.any(Date),
+      );
+      expect(userBookStatusService.autoUpdate).toHaveBeenCalledWith(user.id, 11, 50, 3, 97, {
+        origin: 'bookorbit',
+        timeZone: 'UTC',
+        strongRereadEvidence: false,
+      });
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[book.progress_status_update] [fail] userId=1 bookId=11 libraryId=2'));
       warnSpy.mockRestore();
     });
@@ -2499,7 +2559,11 @@ describe('BookService', () => {
       );
 
       expect(bookRepo.syncKoboReadingStateFromProgress).toHaveBeenCalledWith(user.id, 8, 50, 'OEBPS/ch1.xhtml', 'KoboSpan', 'kobo.25.1', 25);
-      expect(userBookStatusService.autoUpdate).toHaveBeenCalledWith(user.id, 11, 50, 4, 90);
+      expect(userBookStatusService.autoUpdate).toHaveBeenCalledWith(user.id, 11, 50, 4, 90, {
+        origin: 'bookorbit',
+        timeZone: 'UTC',
+        strongRereadEvidence: false,
+      });
     });
 
     it('does not mirror EPUB percentage to Kobo state when two-way sync is disabled', async () => {
@@ -2516,6 +2580,93 @@ describe('BookService', () => {
 
       expect(bookRepo.isKoboTwoWayProgressSyncEnabled).toHaveBeenCalledWith(user.id);
       expect(bookRepo.syncKoboReadingStateFromProgress).not.toHaveBeenCalled();
+    });
+
+    describe('narration writes', () => {
+      const narrationSetup = (previousPercentage: number | null) => {
+        const made = makeService();
+        const user = makeUser({ permissions: [Permission.KoboSync] });
+        made.bookRepo.findFileById.mockResolvedValue({ id: 8, bookId: 11, libraryId: 2, absolutePath: '/books/b.epub', format: 'epub' });
+        made.bookRepo.upsertProgress.mockResolvedValue(undefined);
+        made.bookRepo.isKoboTwoWayProgressSyncEnabled.mockResolvedValue(true);
+        made.bookRepo.syncKoboReadingStateFromProgress.mockResolvedValue(true);
+        made.bookRepo.findProgress.mockResolvedValue(
+          previousPercentage == null ? null : { percentage: previousPercentage, cfi: 'epubcfi(/6/40)', pageNumber: null },
+        );
+        made.libraryService.verifyUserAccess.mockResolvedValue(undefined);
+        made.libraryService.findOne = vi.fn().mockResolvedValue({ readingThreshold: 4, markAsFinishedPercentComplete: 90 });
+        return { ...made, user };
+      };
+
+      // The read-along resume that started all this: opening at a narration marker 2% in while
+      // the reader had reached 32% by eye.
+      it('keeps the stored text position when the narration marker sits behind it', async () => {
+        const { service, bookRepo, user } = narrationSetup(32);
+
+        await service.saveProgress(
+          user.id,
+          8,
+          {
+            percentage: 2.43,
+            source: 'narration',
+            positionSeconds: 44.3,
+            mediaOverlayFragment: 'split_007.html#s4',
+            mediaOverlaySectionIndex: 8,
+          } as never,
+          user,
+        );
+
+        const [, , cfi, , percentage, , , , , , , , , narration, textUpdatedAt] = bookRepo.upsertProgress.mock.calls[0] as unknown[];
+        expect(percentage).toBe(32);
+        expect(cfi).toBe('epubcfi(/6/40)');
+        expect(narration).toEqual({ percentage: 2.43, updatedAt: expect.any(Date) });
+        expect(textUpdatedAt).toBeNull();
+      });
+
+      it('carries the text position forward when the narration passes it', async () => {
+        const { service, bookRepo, user } = narrationSetup(32);
+
+        await service.saveProgress(user.id, 8, { percentage: 55, source: 'narration', positionSeconds: 900 } as never, user);
+
+        const [, , , , percentage, , , , , , , , , narration, textUpdatedAt] = bookRepo.upsertProgress.mock.calls[0] as unknown[];
+        expect(percentage).toBe(55);
+        expect(narration).toEqual({ percentage: 55, updatedAt: expect.any(Date) });
+        expect(textUpdatedAt).toEqual(expect.any(Date));
+      });
+
+      it('does not mirror a narration marker that stayed put to Kobo or the read status', async () => {
+        const { service, bookRepo, userBookStatusService, user } = narrationSetup(32);
+
+        await service.saveProgress(user.id, 8, { percentage: 2.43, source: 'narration' } as never, user);
+
+        expect(bookRepo.syncKoboReadingStateFromProgress).toHaveBeenCalledWith(user.id, 8, 32, null, null, null, null);
+        expect(userBookStatusService.autoUpdate).toHaveBeenCalledWith(user.id, 11, 32, 4, 90, {
+          origin: 'bookorbit',
+          timeZone: 'UTC',
+          strongRereadEvidence: false,
+        });
+      });
+
+      it('treats a narration write on a file with no stored position as progress', async () => {
+        const { service, bookRepo, user } = narrationSetup(null);
+
+        await service.saveProgress(user.id, 8, { percentage: 3, source: 'narration' } as never, user);
+
+        const [, , , , percentage] = bookRepo.upsertProgress.mock.calls[0] as unknown[];
+        expect(percentage).toBe(3);
+      });
+
+      // Turning back a page is reading, and the text write is the one that speaks for it.
+      it('still lets a text write move the position backwards', async () => {
+        const { service, bookRepo, user } = narrationSetup(32);
+
+        await service.saveProgress(user.id, 8, { percentage: 5, cfi: 'epubcfi(/6/8)' } as never, user);
+
+        const [, , cfi, , percentage, , , , , , , , , narration] = bookRepo.upsertProgress.mock.calls[0] as unknown[];
+        expect(percentage).toBe(5);
+        expect(cfi).toBe('epubcfi(/6/8)');
+        expect(narration).toBeNull();
+      });
     });
 
     it('does not mirror EPUB percentage to Kobo state without Kobo sync permission', async () => {
@@ -2550,102 +2701,6 @@ describe('BookService', () => {
 
       expect(service.verifyFileAccess).toHaveBeenCalledWith(88, user);
       expect(bookRepo.clearFileProgress).toHaveBeenCalledWith(user.id, 88);
-    });
-  });
-
-  describe('saveAudioProgress', () => {
-    it('writes audio progress when current file belongs to the target book', async () => {
-      const { service, bookRepo, libraryService, userBookStatusService } = makeService();
-      const user = makeUser({ id: 21 });
-
-      bookRepo.findLibraryIdByBookId.mockResolvedValue(1);
-      bookRepo.findFileById.mockResolvedValue({
-        id: 7,
-        absolutePath: '/books/audiobook-1.mp3',
-        format: 'mp3',
-        bookId: 10,
-        libraryId: 1,
-      });
-      libraryService.verifyUserAccess.mockResolvedValue(undefined);
-      libraryService.findOne = vi.fn().mockResolvedValue({ readingThreshold: 4, markAsFinishedPercentComplete: 90 });
-
-      await service.saveAudioProgress(
-        user.id,
-        10,
-        {
-          percentage: 33,
-          currentFileId: 7,
-          positionSeconds: 120,
-        },
-        user,
-      );
-
-      expect(bookRepo.upsertAudioProgress).toHaveBeenCalledWith(user.id, 10, 7, 120, 33);
-      expect(libraryService.findOne).toHaveBeenCalledWith(1);
-      expect(userBookStatusService.autoUpdate).toHaveBeenCalledWith(user.id, 10, 33, 4, 90);
-    });
-
-    it('throws BadRequestException when current file belongs to a different book', async () => {
-      const { service, bookRepo, libraryService } = makeService();
-      const user = makeUser({ id: 21 });
-
-      bookRepo.findLibraryIdByBookId.mockResolvedValue(1);
-      bookRepo.findFileById.mockResolvedValue({
-        id: 8,
-        absolutePath: '/books/audiobook-2.mp3',
-        format: 'mp3',
-        bookId: 99,
-        libraryId: 1,
-      });
-      libraryService.verifyUserAccess.mockResolvedValue(undefined);
-
-      await expect(
-        service.saveAudioProgress(
-          user.id,
-          10,
-          {
-            percentage: 40,
-            currentFileId: 8,
-            positionSeconds: 90,
-          },
-          user,
-        ),
-      ).rejects.toThrow(BadRequestException);
-      expect(bookRepo.upsertAudioProgress).not.toHaveBeenCalled();
-    });
-
-    it('propagates ForbiddenException when current file is in an inaccessible library', async () => {
-      const { service, bookRepo, libraryService } = makeService();
-      const user = makeUser({ id: 21 });
-
-      bookRepo.findLibraryIdByBookId.mockResolvedValue(1);
-      bookRepo.findFileById.mockResolvedValue({
-        id: 9,
-        absolutePath: '/books/secret.mp3',
-        format: 'mp3',
-        bookId: 10,
-        libraryId: 2,
-      });
-      libraryService.verifyUserAccess.mockImplementation((_userId: number, libraryId: number) => {
-        if (libraryId === 2) {
-          return Promise.reject(new ForbiddenException());
-        }
-        return Promise.resolve();
-      });
-
-      await expect(
-        service.saveAudioProgress(
-          user.id,
-          10,
-          {
-            percentage: 20,
-            currentFileId: 9,
-            positionSeconds: 44,
-          },
-          user,
-        ),
-      ).rejects.toThrow(ForbiddenException);
-      expect(bookRepo.upsertAudioProgress).not.toHaveBeenCalled();
     });
   });
 
@@ -5255,6 +5310,56 @@ describe('BookService', () => {
       expect(rm).toHaveBeenCalledWith('/path/to/old.epub', { force: true });
       expect(bookRepo.deleteBookFile).toHaveBeenCalledWith(fileId);
       expect(bookRepo.updateBookPrimaryFile).toHaveBeenCalledWith(10, 101);
+    });
+
+    it('uses library format priority and read-aloud capability when replacing a deleted primary', async () => {
+      const { service, bookRepo, libraryService } = makeService();
+      const user = makeUser({ id: 1 });
+      const fileId = 100;
+      const file = { absolutePath: '/path/to/old.epub', bookId: 10, libraryId: 1 };
+
+      bookRepo.findFileById = vi.fn().mockResolvedValue(file);
+      libraryService.checkLibraryAccess = vi.fn().mockResolvedValue(true);
+      libraryService.findOne.mockResolvedValue({
+        readingThreshold: 1,
+        markAsFinishedPercentComplete: 99,
+        formatPriority: ['epub', 'm4b'],
+      });
+      vi.mocked(rm).mockResolvedValue(undefined);
+      bookRepo.deleteBookFile = vi.fn().mockResolvedValue(undefined);
+      bookRepo.findFilesForBook = vi.fn().mockResolvedValue([
+        { id: 100, role: 'content', format: 'epub', sizeBytes: 100, mediaOverlayAvailable: false },
+        { id: 101, role: 'content', format: 'epub', sizeBytes: 100, mediaOverlayAvailable: false },
+        { id: 102, role: 'content', format: 'epub', sizeBytes: 100, mediaOverlayAvailable: true },
+        { id: 103, role: 'content', format: 'm4b', sizeBytes: 100, mediaOverlayAvailable: false },
+      ]);
+      bookRepo.findBookBase = vi.fn().mockResolvedValue({ id: 10, primaryFileId: 100 });
+
+      await service.deleteFile(fileId, user);
+
+      expect(libraryService.findOne).toHaveBeenCalledWith(1);
+      expect(bookRepo.updateBookPrimaryFile).toHaveBeenCalledWith(10, 102);
+    });
+
+    it('preserves the database row and primary file when disk deletion fails', async () => {
+      const { service, bookRepo } = makeService();
+      const fileId = 100;
+      const file = { absolutePath: '/path/to/old.epub', bookId: 10, libraryId: 1 };
+
+      bookRepo.findFileById = vi.fn().mockResolvedValue(file);
+      bookRepo.deleteBookFile = vi.fn();
+      bookRepo.findFilesForBook = vi.fn();
+      bookRepo.findBookBase = vi.fn();
+      bookRepo.updateBookPrimaryFile = vi.fn();
+      vi.mocked(rm).mockRejectedValue(Object.assign(new Error('permission denied'), { code: 'EACCES' }));
+
+      await expect(service.deleteFile(fileId, makeUser())).rejects.toBeInstanceOf(InternalServerErrorException);
+
+      expect(rm).toHaveBeenCalledWith(file.absolutePath, { force: true });
+      expect(bookRepo.findBookBase).not.toHaveBeenCalled();
+      expect(bookRepo.deleteBookFile).not.toHaveBeenCalled();
+      expect(bookRepo.findFilesForBook).not.toHaveBeenCalled();
+      expect(bookRepo.updateBookPrimaryFile).not.toHaveBeenCalled();
     });
   });
 });

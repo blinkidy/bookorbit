@@ -71,16 +71,17 @@ ENV PORT=3000
 
 COPY --from=server-builder --chown=node:node /deploy ./
 COPY --from=client-builder --chown=node:node /app/client/dist ./public
-COPY --from=server-builder --chown=node:node /app/server/entrypoint.sh ./entrypoint.sh
+COPY --from=server-builder --chown=node:node /app/server/entrypoint.sh /app/server/file-env.sh ./
+COPY --chown=node:node LICENSE NOTICE ADDITIONAL_TERMS.md ./
 COPY --chown=node:node server/bin/kepubify/ ./bin/kepubify/
 COPY --chown=node:node koreader-plugin/bookorbit.koplugin/ ./koreader-plugin/bookorbit.koplugin/
 
-RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh /app/bin/kepubify/* && mkdir -p /books /data/covers /data/book-bucket /tmp && chown -R node:node /data /tmp
+RUN sed -i 's/\r$//' /app/entrypoint.sh /app/file-env.sh && chmod +x /app/entrypoint.sh /app/bin/kepubify/* && mkdir -p /books /data/covers /data/book-bucket /tmp && chown -R node:node /data /tmp
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD ["node", "-e", "const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/v1/health').then(response=>{if(!response.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+  CMD ["node", "-e", "let host=(process.env.HOST||'').trim();if(!host||host==='0.0.0.0')host='127.0.0.1';else if(host==='::')host='[::1]';else if(host.includes(':')&&!host.startsWith('['))host='['+host+']';const port=process.env.PORT||'3000';fetch('http://'+host+':'+port+'/api/v1/health').then(response=>{if(!response.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 
 ENTRYPOINT ["/sbin/tini", "-s", "--"]
 CMD ["sh", "/app/entrypoint.sh"]

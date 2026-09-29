@@ -228,7 +228,7 @@ export function validateSlotCountMessage({ key, locale, message }) {
   return totals.every((total) => total === 1) ? [] : [`${locale}: slot count message ${key} must render exactly one # in every branch`]
 }
 
-export function validateLocaleMessage({ key, locale, message, referenceMessage }) {
+export function validateLocaleMessage({ key, locale, message, referenceMessage, allowPlaceholderMismatch = false }) {
   const errors = []
   const referenceIsIcu = isIcuPluralMessage(referenceMessage)
   const messageIsIcu = isIcuPluralMessage(message)
@@ -248,7 +248,7 @@ export function validateLocaleMessage({ key, locale, message, referenceMessage }
       return errors
     }
 
-    if (messageAnalysis.placeholders.join(',') !== referenceAnalysis.placeholders.join(',')) {
+    if (!allowPlaceholderMismatch && messageAnalysis.placeholders.join(',') !== referenceAnalysis.placeholders.join(',')) {
       errors.push(`${locale}: placeholders differ for ${key}`)
     }
 

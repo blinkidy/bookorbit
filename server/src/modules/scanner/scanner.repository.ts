@@ -22,7 +22,7 @@ import {
 
 type Db = NodePgDatabase<typeof schema>;
 type DbTransaction = Parameters<Parameters<Db['transaction']>[0]>[0];
-type MoveBookToLibraryResult = Pick<typeof books.$inferSelect, 'id' | 'libraryId' | 'libraryFolderId' | 'folderPath' | 'status'> & {
+type MoveBookToLibraryResult = Pick<typeof books.$inferSelect, 'id' | 'libraryId' | 'libraryFolderId' | 'folderPath' | 'status' | 'primaryFileId'> & {
   previousLibraryId: number;
   libraryChanged: boolean;
 };
@@ -107,6 +107,7 @@ export class ScannerRepository {
         metadataPrecedence: libraries.metadataPrecedence,
         excludePatterns: libraries.excludePatterns,
         organizationMode: libraries.organizationMode,
+        addedAtSource: libraries.addedAtSource,
       })
       .from(libraries)
       .where(eq(libraries.id, libraryId));
@@ -243,7 +244,11 @@ export class ScannerRepository {
         sizeBytes: bookFiles.sizeBytes,
         mtime: bookFiles.mtime,
         fileHash: bookFiles.fileHash,
+        format: bookFiles.format,
         sortOrder: bookFiles.sortOrder,
+        durationSeconds: bookFiles.durationSeconds,
+        mediaOverlayAvailable: bookFiles.mediaOverlayAvailable,
+        mediaOverlayCheckedAt: bookFiles.mediaOverlayCheckedAt,
       })
       .from(bookFiles)
       .where(eq(bookFiles.libraryFolderId, libraryFolderId));
@@ -283,7 +288,12 @@ export class ScannerRepository {
     const whereClause =
       libraryId == null ? eq(bookFiles.absolutePath, absolutePath) : and(eq(bookFiles.absolutePath, absolutePath), eq(books.libraryId, libraryId));
     const [row] = await this.db
-      .select({ file: bookFiles, libraryId: books.libraryId, primaryFileId: books.primaryFileId, libraryFolderPath: libraryFolders.path })
+      .select({
+        file: bookFiles,
+        libraryId: books.libraryId,
+        primaryFileId: books.primaryFileId,
+        libraryFolderPath: libraryFolders.path,
+      })
       .from(bookFiles)
       .innerJoin(books, eq(books.id, bookFiles.bookId))
       .innerJoin(libraryFolders, eq(libraryFolders.id, bookFiles.libraryFolderId))
@@ -338,6 +348,7 @@ export class ScannerRepository {
           libraryFolderId: books.libraryFolderId,
           folderPath: books.folderPath,
           status: books.status,
+          primaryFileId: books.primaryFileId,
         })
         .from(books)
         .where(eq(books.id, bookId))
@@ -366,6 +377,7 @@ export class ScannerRepository {
           libraryFolderId: books.libraryFolderId,
           folderPath: books.folderPath,
           status: books.status,
+          primaryFileId: books.primaryFileId,
         });
       return book ? { ...book, previousLibraryId: current.libraryId, libraryChanged } : null;
     });
@@ -607,7 +619,16 @@ export class ScannerRepository {
         .where(inArray(bookAuthors.bookId, bookIds))
         .orderBy(bookAuthors.displayOrder),
       this.db
-        .select({ bookId: bookFiles.bookId, id: bookFiles.id, format: bookFiles.format, role: bookFiles.role, sizeBytes: bookFiles.sizeBytes })
+        .select({
+          bookId: bookFiles.bookId,
+          id: bookFiles.id,
+          format: bookFiles.format,
+          role: bookFiles.role,
+          sizeBytes: bookFiles.sizeBytes,
+          mediaOverlayAvailable: bookFiles.mediaOverlayAvailable,
+          mediaOverlayDurationSeconds: bookFiles.mediaOverlayDurationSeconds,
+          mediaOverlayCheckedAt: bookFiles.mediaOverlayCheckedAt,
+        })
         .from(bookFiles)
         .where(inArray(bookFiles.bookId, bookIds)),
       this.db

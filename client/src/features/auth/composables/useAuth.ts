@@ -70,6 +70,9 @@ function clearAuth() {
 
 setOnAuthFailure(() => {
   clearAuth()
+  // Public pages are reached without a session, so a rejected request there is not a reason to
+  // leave. Moving on would strand a reset or magic link, or drop the sign-in redirect.
+  if (router.currentRoute.value.meta.public) return
   const { needsSetup } = useSetupStatus()
   router.push(needsSetup.value ? '/setup' : '/login')
 })
@@ -211,19 +214,11 @@ export function useAuth() {
 
   async function logout(): Promise<void> {
     try {
-      const res = await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' })
+      await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined)
+    } finally {
       clearAuth()
-      if (res.ok) {
-        const data = await res.json().catch(() => ({}))
-        if (data?.logoutUrl) {
-          window.location.href = data.logoutUrl
-          return
-        }
-      }
-    } catch {
-      clearAuth()
+      router.push('/login')
     }
-    router.push('/login')
   }
 
   async function loginWithMagicLink(token: string): Promise<void> {

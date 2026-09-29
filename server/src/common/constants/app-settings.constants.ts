@@ -28,6 +28,7 @@ export const APP_SETTING_KEYS = {
   UPDATE_CHECK_ENABLED: 'update_check_enabled',
   MAX_UPLOAD_SIZE_MB: 'max_upload_size_mb',
   NO_PROGRESS_KOREADER_STATS_REBUILD_CHECKPOINT: 'internal_no_progress_koreader_stats_rebuild_v1',
+  HARDCOVER_ENABLED: 'hardcover_enabled',
 } as const;
 
 export const PRIVATE_APP_SETTING_KEYS = [APP_SETTING_KEYS.OIDC_CONFIG, APP_SETTING_KEYS.NO_PROGRESS_KOREADER_STATS_REBUILD_CHECKPOINT] as const;

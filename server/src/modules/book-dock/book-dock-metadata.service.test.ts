@@ -10,6 +10,7 @@ vi.mock('../metadata/lib/cover', () => ({
 
 import { Logger } from '@nestjs/common';
 import { mkdir, writeFile } from 'fs/promises';
+import { join } from 'path';
 import type { ParsedBookData } from '../metadata/extractors/format-extractor.interface';
 import { generateThumbnail, imageExt } from '../metadata/lib/cover';
 import { BookDockMetadataService } from './book-dock-metadata.service';
@@ -131,12 +132,12 @@ describe('BookDockMetadataService', () => {
         aladinId: 'aladin-id',
         comicMetadata: { issueNumber: '1', pencillers: ['Artist'] },
       },
-      coverPath: '/book-dock/covers/7.jpg',
+      coverPath: join('/book-dock/covers', '7.jpg'),
       status: 'ready',
     });
     expect(mockMkdir).toHaveBeenCalledWith('/book-dock/covers', { recursive: true });
-    expect(mockWriteFile).toHaveBeenCalledWith('/book-dock/covers/7.jpg', Buffer.from('cover-bytes'));
-    expect(mockWriteFile).toHaveBeenCalledWith('/book-dock/covers/7_thumb.jpg', Buffer.from('thumbnail-bytes'));
+    expect(mockWriteFile).toHaveBeenCalledWith(join('/book-dock/covers', '7.jpg'), Buffer.from('cover-bytes'));
+    expect(mockWriteFile).toHaveBeenCalledWith(join('/book-dock/covers', '7_thumb.jpg'), Buffer.from('thumbnail-bytes'));
   });
 
   it('stores an empty ready result when the canonical extractor has no metadata', async () => {
