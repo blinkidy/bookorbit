@@ -284,12 +284,15 @@ describe('MissingResourcesService', () => {
       await mkdir(join(coversRoot, '5', 'ebook'), { recursive: true });
       await writeFile(join(coversRoot, '5', 'ebook', 'cover_extracted.jpg'), 'image');
       const coverStore = coverStoreWith([slotRow(5, 'audio', 'custom'), slotRow(5, 'ebook')]);
-      const { service } = setup(
+      const { service, repo } = setup(
         {
-          findBrokenCoverEntries: vi.fn().mockResolvedValue([
-            { id: 5, title: 'Dune', authors: ['Frank Herbert'], libraryId: 1, libraryName: 'Main', coverSource: 'custom' },
-            { id: 8, title: 'Legacy', authors: null, libraryId: 1, libraryName: 'Main', coverSource: 'extracted' },
-          ]),
+          findBrokenCoverPage: vi.fn().mockResolvedValue({
+            rows: [
+              { id: 5, title: 'Dune', authors: ['Frank Herbert'], libraryId: 1, libraryName: 'Main', coverSource: 'custom' },
+              { id: 8, title: 'Legacy', authors: null, libraryId: 1, libraryName: 'Main', coverSource: 'extracted' },
+            ],
+            total: 2,
+          }),
         },
         coverStore,
       );
@@ -298,6 +301,8 @@ describe('MissingResourcesService', () => {
 
       const page = await service.listBrokenCovers(user, 1, 50);
 
+      expect(repo.findBrokenCoverPage).toHaveBeenCalledWith([5, 8], [1, 2], 0, 50);
+      expect(page.total).toBe(2);
       expect(page.items).toEqual([
         {
           id: 5,
