@@ -14,7 +14,17 @@
     "previous": "Предыдущий",
     "retry": "Повторить",
     "yes": "Да",
-    "no": "Нет"
+    "no": "Нет",
+    "show": "Показать",
+    "hide": "Скрыть",
+    "undo": "Отменить",
+    "pagination": {
+      "label": "Нумерация страниц",
+      "pageOf": "Страница {page} из {totalPages}",
+      "previousPage": "Предыдущая страница",
+      "nextPage": "Следующая страница",
+      "goToPage": "Перейти на страницу {page}"
+    }
   },
   "settings": {
     "privacySharing": {
@@ -417,6 +427,11 @@
         "collapseSeries": {
           "label": "Свернуть по умолчанию",
           "hint": "Группируйте книги одной и той же серии в одну карту в библиотеке и коллекциях"
+        },
+        "bookRequests": {
+          "label": "Показать запросы на книгу",
+          "hint": "Показывать страницы запросов, подсказки и настройки для этой учетной записи. При скрытии все запросы сохраняются.",
+          "saveFailed": "Не удалось обновить отображение запросов на книгу"
         }
       },
       "icons": {
@@ -730,6 +745,8 @@
       "test": {
         "connected": "Подключено - {issuer}",
         "connectionFailed": "Не удалось подключиться",
+        "privateIssuerAddress": "URL-адрес эмитента приходит к частному или локальному сетевому адресу, поэтому сервер отказал в подключении. Установите OIDC_ALLOW_LOCAL_ISSUERS=true на сервере BookOrbit, чтобы разрешить его.",
+        "tlsCertificateUntrusted": "BookOrbit не смог проверить TLS сертификат OIDC провайдера. Если провайдер использует частные сертификаты, установите его PEM сертификат, установите путь к сертификату NODE_EXTRA_CA_CERTS в контейнере и перезапустите BookOrbit.",
         "hide": "Скрыть",
         "details": "Детали",
         "supported": "поддерживается",
@@ -780,10 +797,12 @@
         "updatesGroup": "Обновления",
         "bookloreImportConfigured": "Буккорный импорт настроен",
         "importLibraryData": "Импорт данных библиотеки",
+        "migrationConfigured": "Сконфигурирован источник миграции",
         "migrationRunning": "Миграция запущена",
         "migrationCompleted": "Миграция завершена",
         "migrationFailed": "Сбой миграции",
         "importDescription": "Единоразовый импорт книг, метаданных и прогресс чтения из предыдущей установки Booklore.",
+        "migrationDescription": "Единоразовый импорт книг, метаданных и прогресс чтения из другого библиотечного приложения.",
         "configuredDescription": "Источник: {name}. Переход пока не запущен - продолжайте установку для импорта.",
         "runningDescription": "Этап: {stage} - начато {started}",
         "completedDescription": "От {name} - завершено {date}",
@@ -825,6 +844,7 @@
       "migration": {
         "title": "Миграция",
         "subtitle": "Единоразовый Booklore импорт: подключить источник, сопоставить пользователей, сухой запуск, начать миграцию и экспортировать отчет.",
+        "genericSubtitle": "Единоразовый импорт библиотеки: соединить источник, карту пользователей, запустить сухой пробег, начать миграцию и экспортировать отчет.",
         "progress": "Прогресс",
         "stepSourceConnection": "Подключение к источнику",
         "stepUserPathMapping": "Сопоставление пользователя и пути",
@@ -834,6 +854,7 @@
         "stepReport": "Отчет",
         "stepReportTitle": "Отчет о миграции",
         "subtitleSource": "Настройте подключение к базе данных к исходному экземпляру Booklor.",
+        "genericSubtitleSource": "Настройте подключение к источнику исходной библиотеки.",
         "subtitleMappings": "Сопоставление пользователей с исходными кодами целевым пользователям и перевод файлов.",
         "subtitleDryRun": "Предпросмотр того, что будет импортировано до выполнения миграции в реальном времени.",
         "subtitleRun": "Начните импорт в реальном времени и отслеживайте его прогресс.",
@@ -918,13 +939,16 @@
         "reasonNoFilePathMatch": "Путь к файлу не соответствует ни одной книге в этой библиотеке",
         "reasonNoFileHashMatch": "Файл с хэшем не совпадает ни с одной книгой в этой библиотеке",
         "reasonNoIsbnMatch": "ISBN не совпадает ни с одной книгой в этой библиотеке",
+        "reasonNoAsinMatch": "ASIN не совпадает ни с одной книгой в этой библиотеке",
         "reasonInsufficientSourceData": "Недостаточно метаданных для поиска",
         "reasonAmbiguousIsbnMatch": "Несколько книг совпало с ISBN",
+        "reasonAmbiguousAsinMatch": "Несколько книг совпадает с одним и тем же ASIN",
         "reasonAmbiguousFileHashMatch": "Несколько книг соответствует одному и тому же хешу файла",
         "reasonAmbiguousFilePathMatch": "Несколько книг соответствует тому же пути к файлу",
         "reasonAmbiguousTitleAuthorMatch": "Несколько книг совпало с одним и тем же названием и автором",
         "reasonUnknown": "Не удалось определить причину",
         "strategyIsbn": "Соответствует ISBN",
+        "strategyAsin": "Совпало с ASIN",
         "strategyFileHash": "Совпадает с хэшем файла",
         "strategyPathMapping": "Соответствует указанному пути файла",
         "strategyTitleAuthor": "Соответствует названию и автору",
@@ -960,6 +984,7 @@
         "refresh": "Обновить",
         "sourceUser": "Исходный пользователь",
         "targetUser": "Целевой пользователь",
+        "doNotImport": "Не импортировать этого пользователя",
         "noSourceUsersLoaded": "Исходные пользователи еще не загружены.",
         "noActiveTargetUsers": "Не найдено активных пользователей. Создайте или повторно включите пользователя BookOrbit перед сопоставлением.",
         "pathPrefixMappings": "Сопоставление префиксов",
@@ -1064,6 +1089,7 @@
         "syncMetadataToFiles": "Синхронизировать метаданные с файлами",
         "deleteLibrary": "Удалить библиотеку",
         "bookCount": "{count, plural, =0 {нет книг} one {# книга} few {# книги} many {# книги} other {# книги}}",
+        "booksUnit": "{count, plural, one {# книга} few {# книг} many {# книг} other {# книг}}",
         "folderCount": "{count, plural, =0 {Нет папок} one {# папок} few {# папок} many {# папок} other {# папок}}",
         "fileMode": "Режим файла",
         "folderMode": "Режим папки",
@@ -1092,9 +1118,27 @@
         "deleteFailed": "Не удалось удалить библиотеку",
         "refreshingCovers": "Обновление покрытий {pct}% ({processed}/{total})",
         "coversRefreshed": "Обложки обновлены ( Обработано{count})",
+        "onDiskUnit": "{size} На диске",
+        "noFilesIndexed": "Нет индексированных файлов",
+        "formatEntry": "{format} {count}",
+        "openLibrary": "Открыть {name}",
+        "moreActions": "Больше действий {name}",
+        "statsFailed": "Не удалось загрузить количество библиотек. Всё остальное на этой странице продолжает работать.",
         "filterLabel": "Фильтровать библиотеки",
         "filterPlaceholder": "Фильтр по названию или пути",
         "filterClear": "Сбросить фильтр",
+        "sortLabel": "Сортировка",
+        "noMatchesTitle": "Нет библиотек, соответствующих этому фильтру",
+        "noMatchesHint": "Ничего не соответствует \"{query}\" по имени или пути к папке.",
+        "neverScanned": "Никогда не сканировалась",
+        "neverScannedHint": "Запустите сканирование, чтобы индексировать папки",
+        "scanFailedAt": "Сбой {time}",
+        "scanningPercent": "Сканирование {pct}%",
+        "scanCounting": "Подсчёт файлов",
+        "scanCounts": "{processed} из {total}",
+        "scanNoChange": "без изменений",
+        "outcomeSeparator": ", ",
+        "syncConfirmBody": "Это перезапишет метаданные во всех поддерживаемых файлах непосредственно в папке {name} на диске. Это действие нельзя отменить.",
         "columns": {
           "library": "Библиотека",
           "contents": "Содержимое",
@@ -1109,6 +1153,19 @@
           "books": "Книги",
           "size": "Размер на диске",
           "lastScan": "Последнее сканирование"
+        },
+        "trigger": {
+          "manual": "Вручную",
+          "watcher": "Наблюдение",
+          "schedule": "Расписание"
+        },
+        "capability": {
+          "watch": "Следить за папками",
+          "schedule": "Сканирование по расписанию",
+          "fileWrite": "Записать в файл",
+          "fileRename": "Переименовать файлы",
+          "on": "{name}: вкл",
+          "off": "{name}: выкл"
         },
         "durationSeconds": "{seconds} с",
         "durationMinutes": "{minutes}м {seconds}с",
@@ -1178,9 +1235,52 @@
         "howItWorks": {
           "title": "Как это работает."
         },
+        "compositionTitle": "Источник оценки",
+        "compositionHint": "Проценты всегда складываются до 100.",
+        "searchFields": "Фильтр полей",
+        "clearSearch": "Очистить поиск",
+        "noMatches": "Нет полей, соответствующих запросу.",
+        "totalSummary": "{scoring} из 24 очков за поле, всего {total}",
+        "countGroups": "Подсчитать результат",
+        "notScored": "Не оценено",
         "notScoredHeading": "Не оценено ({count})",
+        "decreaseWeight": "Уменьшить вес {field}",
+        "increaseWeight": "Увеличить вес {field}",
         "revertField": "Вернуть {field} к сохраненному весу",
+        "table": {
+          "field": "Поле",
+          "weight": "Вес",
+          "share": "Поделиться результатом",
+          "versusDefault": "Изменить"
+        },
+        "groups": {
+          "core": "Основное",
+          "publishing": "Издательство",
+          "classification": "Классификация",
+          "enrichment": "Заполненность",
+          "providers": "ID провайдера"
+        },
+        "rules": {
+          "text": "Учитывать, когда не пусто",
+          "positive": "Учитывать, когда выше нуля",
+          "count": "Учитывать, когда задан хотя бы один",
+          "cover": "Учитывать, когда есть обложка",
+          "providerId": "Учитывать, когда есть ID",
+          "seriesIndex": "Учитывается при значении больше нуля, поэтому пустые серии не учитываются"
+        },
         "rail": {
+          "title": "Распределение книг",
+          "description": "Цвет бейджа, который читатель видит на карточке книги, относительно всех доступных сегодня книг.",
+          "bandsLabel": "Цвет значка",
+          "bands": {
+            "poor": "ДО 50",
+            "fair": "50-69",
+            "good": "70-89",
+            "great": "90+"
+          },
+          "median": "Среднее",
+          "belowFifty": "До 50",
+          "ninetyPlus": "90 и более",
           "noBooks": "Еще нет оцененных книг. Запустите переоценку, как только ваша библиотека закончит импорт."
         }
       },
@@ -4546,6 +4646,18 @@
       "seeAllLibraries": "Посмотреть все библиотеки ({count})",
       "seeAllSmartScopes": "Посмотреть все умные списки ({count})",
       "seeAllCollections": "Посмотреть все коллекции ({count})",
+      "podcasts": "Podcasts",
+      "newPodcastLibrary": "New Podcast Library",
+      "noPodcastLibraries": "No podcast libraries yet",
+      "filterPodcastLibraries": "Filter podcast libraries",
+      "filterPodcastLibrariesPlaceholder": "Filter podcast libraries...",
+      "seeAllPodcastLibraries": "See all podcast libraries ({count})",
+      "queue": "Queue",
+      "mode": {
+        "books": "Books",
+        "podcasts": "Podcasts",
+        "switcherAria": "Switch between books and podcasts"
+      },
       "updateAvailable": "Обновить {version}",
       "zones": {
         "browse": "Обзор"
@@ -4598,6 +4710,8 @@
       "columnVisibilityHint": "Используйте панель видимости столбца в заголовке таблицы, чтобы показать или скрыть столбцы.",
       "columnVisibilityMobileHint": "Видимость столбца можно управлять из заголовка таблицы.",
       "searchPlaceholder": "Поиск названия, автора, серии, описания...",
+      "clearSearch": "Clear search",
+      "closeSearch": "Close search",
       "mobileSearch": {
         "description": "Поиск элементов по названию, автору, сериалу или повествователю.",
         "done": "Готово"
@@ -4612,6 +4726,7 @@
         "display": "Отображение",
         "coverSize": "Размер обложки",
         "gridGap": "Разрыв сетки",
+        "pixelValue": "{value} pixels",
         "showJumpRails": "Показать рельсы прыжка",
         "columnsHint": "Используйте панель видимости столбца в заголовке таблицы, чтобы показать или скрыть столбцы.",
         "coverShape": "Форма обложки",
@@ -4662,7 +4777,8 @@
       "sort": {
         "custom": "Свой заказ",
         "name": "Наименование",
-        "bookCount": "Количество книг"
+        "bookCount": "Количество книг",
+        "showCount": "Show count"
       },
       "ascending": "По возрастанию",
       "descending": "По убыванию",
@@ -4671,7 +4787,9 @@
       "noMatches": "Нет совпадений",
       "noMatchesHint": "Попробуйте другое слово для поиска.",
       "bookCount": "Книги: {count}",
+      "showCount": "Shows: {count}",
       "librariesEmptyHint": "Создайте библиотеку для добавления книг.",
+      "podcastLibrariesEmptyHint": "Create a podcast library to start following shows.",
       "smartScopesEmptyHint": "Умные списки сохраняют часто используемый набор фильтров.",
       "collectionsEmptyHint": "Коллекции группируют книги, которые вы выбираете вручную."
     }
@@ -4717,6 +4835,7 @@
       "empty": {
         "continueReading": "Пока нет читаемых книг. Начните читать книгу, чтобы увидеть ее здесь.",
         "continueListening": "Пока нет ни одного аудиокниги. Начните слушать один, чтобы увидеть его здесь.",
+        "continuePodcasts": "No podcast episodes in progress yet. Start one to see it here.",
         "wantToRead": "Никаких книг не помечено для чтения.",
         "upNextInSeries": "Пока нет выбора следующей серии. Закончите громкость к поверхности следующей.",
         "recentlyAdded": "В вашей библиотеке пока нет книг.",
@@ -4748,6 +4867,7 @@
         "recentlyAdded": "Недавно добавленные",
         "continueReading": "Продолжить чтение",
         "continueListening": "Продолжить слушание",
+        "continuePodcasts": "Continue Podcasts",
         "wantToRead": "Хотите прочитать",
         "upNextInSeries": "Следующие книги в сериях",
         "random": "Откройте для себя что-то новое",
@@ -5052,6 +5172,17 @@
       "sending": "Отправка...",
       "queued": "{count, plural, =0 {Нет сообщений в очереди} one {одно письмо в очереди на} few {# писем в очереди} many {# писем в очереди} other {# писем в очереди}}",
       "failed": "Не удалось отправить"
+    }
+  },
+  "errors": {
+    "network": "Could not reach BookOrbit. Check your connection, then try again.",
+    "codes": {
+      "PODCAST_LOCAL_NO_REFRESH": "This show has no feed, so there is nothing to refresh.",
+      "PODCAST_LOCAL_NO_DOWNLOAD": "This episode is one of your own files, so there is nothing to download. Your copy is already the only one.",
+      "PODCAST_LOCAL_FILE_NOT_REMOVABLE": "This episode is one of your own files, so BookOrbit will not delete it. Remove it from the folder yourself.",
+      "PODCAST_LOCAL_MEDIA_MISSING": "The only copy of this episode is no longer on disk, so it cannot be played.",
+      "PODCAST_LOCAL_FOLDER_EMPTY": "This folder holds no audio BookOrbit can import, so it cannot become a show.",
+      "PODCAST_STORAGE_FULL": "This podcast library is out of storage. Free some space or raise its quota, then try again. Files that belong to local shows are never removed to make room."
     }
   },
   "hardcover": {
@@ -6442,9 +6573,7 @@
       }
     },
     "bookDuplicates": {
-      "scanSettings": "Настройки сканирования",
       "title": "Дубликат книг",
-      "description": "Сканировать файлы и метаданные для потенциальных дублирующих записей. Ничто не удаляется во время сканирования.",
       "scope": "Область библиотеки",
       "allLibraries": "Все доступные библиотеки",
       "similarity": "Порог похожих заголовков",
@@ -6456,7 +6585,6 @@
         "queued": "Сканирование в очереди",
         "running": "Поиск книг"
       },
-      "groupsFound": "{count, plural, =0 {Нет дубликатов} one {Одна дублирующая группа} few {# повторяющиеся группы} many {# повторяющиеся группы} other {# повторяющиеся группы}}",
       "filter": "Тип матча",
       "allReasons": "Все типы матчей",
       "reasons": {
@@ -6465,17 +6593,7 @@
         "exact_metadata": "Точное название и авторы",
         "fuzzy_metadata": "Похожие заголовки и автор"
       },
-      "similarityValue": "Схожесть названия {percent}",
       "notDuplicates": "Не дублируются",
-      "keepThis": "Оставить эту книгу",
-      "discardThis": "Отменить эту книгу",
-      "selectKeeperFirst": "Сначала выберите хранителя",
-      "noDirectMatch": "Нет прямого совпадения с хранителем",
-      "moreFiles": "+{count} больше",
-      "showDetails": "Показать подробности",
-      "hideDetails": "Скрыть детали",
-      "deleteSelected": "Удалить {count} выбранных",
-      "openBook": "Открыть детали для {title}",
       "unknownAuthor": "Неизвестный автор",
       "unknown": "Неизвестен",
       "none": "Нет",
@@ -6486,13 +6604,13 @@
         "library": "Библиотека",
         "isbn": "ISBN",
         "formats": "Форматы",
+        "collections": "Коллекции",
+        "added": "Добавлено",
         "fileLocation": "Файл",
         "files": "Файлы",
         "readingStatus": "Статус чтения",
         "progress": "Прогресс",
         "path": "Путь к библиотеке",
-        "collections": "Коллекции",
-        "added": "Добавлено",
         "updated": "Обновлено"
       },
       "initial": {
@@ -6504,11 +6622,11 @@
         "description": "Никакие книги не соответствуют текущим рамкам, уровню сходства и фильтру соответствия."
       },
       "deleteDialog": {
-        "title": "Удалить дублирующиеся книги?",
-        "description": "{count, plural, =0 {Это навсегда удалит # выбранную книгу и её файлы.} one {Это навсегда удалит # выбранную книгу и её файлы.} few {Это навсегда удалит # выбранные книги и их файлы.} many {Это навсегда удалит # выбранные книги и их файлы.} other {Это навсегда удалит # выбранные книги и их файлы.}}",
         "warning": "Метаданные, коллекции, чтение данных и состояние устройства не передаются в хранимую книгу. Связанные данные для других пользователей также удаляются.",
         "confirm": "{count, plural, =0 {Удалите # книгу} one {Удалите # книгу} few {Удалите # книг} many {Удалите # книг} other {Удалите # книг}}",
-        "success": "{count, plural, =0 {Книги не удалены} one {Удалена одна дублирующая книга} few {# удалена дубликатов} many {# удалена дубликатов} other {# удалена дубликатов}}"
+        "success": "{count, plural, =0 {Книги не удалены} one {Удалена одна дублирующая книга} few {# удалена дубликатов} many {# удалена дубликатов} other {# удалена дубликатов}}",
+        "title": "Удалить дублирующиеся книги?",
+        "description": "{count, plural, =0 {Это навсегда удалит # выбранную книгу и её файлы.} one {Это навсегда удалит # выбранную книгу и её файлы.} few {Это навсегда удалит # выбранные книги и их файлы.} many {Это навсегда удалит # выбранные книги и их файлы.} other {Это навсегда удалит # выбранные книги и их файлы.}}"
       },
       "errors": {
         "start": "Не удалось запустить дубликат сканирования.",
@@ -6520,7 +6638,20 @@
       "pagination": {
         "label": "Дублировать страницы групп",
         "page": "Страница {page} из {total}"
-      }
+      },
+      "scanSettings": "Настройки сканирования",
+      "description": "Сканировать файлы и метаданные для потенциальных дублирующих записей. Ничто не удаляется во время сканирования.",
+      "groupsFound": "{count, plural, =0 {Нет дубликатов} one {Одна дублирующая группа} few {# повторяющиеся группы} many {# повторяющиеся группы} other {# повторяющиеся группы}}",
+      "similarityValue": "Схожесть названия {percent}",
+      "keepThis": "Оставить эту книгу",
+      "discardThis": "Отменить эту книгу",
+      "selectKeeperFirst": "Сначала выберите хранителя",
+      "noDirectMatch": "Нет прямого совпадения с хранителем",
+      "moreFiles": "+{count} больше",
+      "showDetails": "Показать подробности",
+      "hideDetails": "Скрыть детали",
+      "deleteSelected": "Удалить {count} выбранных",
+      "openBook": "Открыть детали для {title}"
     },
     "entityManager": {
       "unknown": "Неизвестен",
@@ -6806,6 +6937,7 @@
   "titles": {
     "dashboard": "Панель",
     "libraries": "Библиотеки",
+    "podcastLibraries": "Podcast Libraries",
     "opds": "OPDS",
     "koboSync": "Kobo Sync",
     "koreaderSync": "Синхронизация KOReader",

@@ -30,9 +30,10 @@ import type {
   MetadataSeriesMembership,
 } from '@bookorbit/types';
 import {
-  DEFAULT_FORMAT_PRIORITY,
+  formatKeyRank,
   isAudioFormat,
   MetadataProviderKey,
+  normalizeFormatPriority,
   NotificationType,
   parseSeriesIndex,
   Permission,
@@ -47,17 +48,19 @@ import { SeriesMembershipService } from '../../common/services/series-membership
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { resolveExistingPathSpelling } from '../../common/utils/path-identity.utils';
 import { normalizePublishedDate, publishedYearFromDateKey } from '../../common/utils/published-date.utils';
-import { buildPatternTokens } from '../../common/utils/pattern-tokens.utils';
+import { buildPatternTokens, patternReferencesToken } from '../../common/utils/pattern-tokens.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 import { bookMetadata, libraries, libraryFolders } from '../../db/schema';
 import { AppSettingsService } from '../app-settings/app-settings.service';
+import { FileWriteService } from '../file-write/file-write.service';
 import { LibraryService } from '../library/library.service';
 import { MetadataService } from '../metadata/metadata.service';
 import { MetadataScoreService } from '../metadata-score/metadata-score.service';
 import { UploadProcessorService, type UnitBookFileInput, type UnitBookRecords } from '../upload/upload-processor.service';
 import { UploadStorageService } from '../upload/upload-storage.service';
 import { UploadValidatorService } from '../upload/upload-validator.service';
+import { inspectEpubMediaOverlayFields } from '../reader/epub/epub-media-overlay-capability';
 import { BookDockRepository } from './book-dock.repository';
 import { BookDockEventsService, BOOK_DOCK_FILE_INGESTED } from './book-dock-events.service';
 import { BookDockGateway } from './book-dock.gateway';
@@ -190,16 +193,15 @@ function reduceUnitForLibrary(
 
   if (importFormats === 'all') return { files: kept };
 
-  const priority = library.formatPriority?.length ? library.formatPriority : [...DEFAULT_FORMAT_PRIORITY];
+  const priority = normalizeFormatPriority(library.formatPriority);
   const best = [...content].sort((a, b) => formatRank(a.format, priority) - formatRank(b.format, priority))[0]!;
   // The chosen format keeps the artwork and sidecars that came with the unit; the other formats go.
   return { files: looseFileLibrary ? [best] : [best, ...unitFiles.filter((file) => file.role !== 'content')] };
 }
 
-function formatRank(format: string | null, priority: string[]): number {
-  if (!format) return Number.MAX_SAFE_INTEGER;
-  const index = priority.indexOf(format.toLowerCase());
-  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+/** Dock files are not inspected for media overlays yet, so an EPUB ranks by the plain `epub` entry. */
+function formatRank(format: string | null, priority: readonly string[]): number {
+  return format ? formatKeyRank(format.toLowerCase(), priority) : Number.MAX_SAFE_INTEGER;
 }
 
 /**
@@ -234,6 +236,7 @@ export class BookDockFinalizeService implements OnModuleInit, OnApplicationBoots
     private readonly gateway: BookDockGateway,
     private readonly notificationService: NotificationService,
     private readonly processingState: BookDockProcessingStateService,
+    private readonly fileWriteService: FileWriteService,
     @Optional() private readonly seriesIdentity?: SeriesIdentityService,
     @Optional() private readonly seriesMemberships?: SeriesMembershipService,
   ) {
@@ -407,7 +410,7 @@ export class BookDockFinalizeService implements OnModuleInit, OnApplicationBoots
         bookId = written.bookIds[0]!;
         // Several ids only in a loose-file library, where each format is its own book. They are the
         // same work, so they get the same metadata rather than one of them getting all of it.
-        for (const created of written.bookIds) await this.applyMetadata(created, row);
+        for (const created of written.bookIds) await this.applyMetadata(created, row, created === bookId);
       } catch (err) {
         // The books committed before the failure, and metadata runs against services that cannot
         // join that transaction, so the compensation is explicit: take back exactly what this unit
@@ -417,7 +420,13 @@ export class BookDockFinalizeService implements OnModuleInit, OnApplicationBoots
         throw err;
       }
 
+      this.processor.reconcileCoversAsync(written.bookIds);
       await this.cleanupBookDockRecord(row);
+      if (library.fileWriteEnabled) {
+        for (const created of written.bookIds) {
+          this.fileWriteService.scheduleWrite(created, 'auto', row.uploadedBy ?? undefined);
+        }
+      }
       existingDestinations.set(this.destinationKey(library.id, destPath), bookId);
       existingDestinations.set(this.destinationKey(library.id, persistedDestPath), bookId);
 
@@ -1048,15 +1057,17 @@ export class BookDockFinalizeService implements OnModuleInit, OnApplicationBoots
       ? new Map((await this.db.select().from(libraries).where(inArray(libraries.id, libraryIds))).map((lib) => [lib.id, lib]))
       : new Map<number, typeof libraries.$inferSelect>();
 
-    return rows.map((row) => {
-      const format = row.format ?? extname(row.fileName).toLowerCase().slice(1);
-      const effectiveLibraryId = row.targetLibraryId ?? defaultLibraryId ?? null;
-      const lib = effectiveLibraryId !== null ? libraryMap.get(effectiveLibraryId) : undefined;
-      const pattern = lib?.fileNamingPattern ?? (lib?.organizationMode === 'book_per_folder' ? appPatternFolder : appPatternFile);
-      const newName = this.resolveRelativeDestination(lib, row, format, pattern, sanitizeForCrossPlatform);
+    return Promise.all(
+      rows.map(async (row) => {
+        const format = row.format ?? extname(row.fileName).toLowerCase().slice(1);
+        const effectiveLibraryId = row.targetLibraryId ?? defaultLibraryId ?? null;
+        const lib = effectiveLibraryId !== null ? libraryMap.get(effectiveLibraryId) : undefined;
+        const pattern = lib?.fileNamingPattern ?? (lib?.organizationMode === 'book_per_folder' ? appPatternFolder : appPatternFile);
+        const newName = await this.resolveRelativeDestination(lib, row, format, pattern, sanitizeForCrossPlatform);
 
-      return { fileId: row.id, fileName: row.fileName, newName };
-    });
+        return { fileId: row.id, fileName: row.fileName, newName };
+      }),
+    );
   }
 
   private async resolveDestination(library: NamingLibrary, folderPath: string, row: BookDockFileRow, format: string): Promise<string> {
@@ -1067,7 +1078,7 @@ export class BookDockFinalizeService implements OnModuleInit, OnApplicationBoots
         : await this.appSettings.getUploadPattern());
     const sanitizeForCrossPlatform = await this.appSettings.isCrossPlatformPathSanitizationEnabled();
 
-    return join(folderPath, this.resolveRelativeDestination(library, row, format, pattern, sanitizeForCrossPlatform));
+    return join(folderPath, await this.resolveRelativeDestination(library, row, format, pattern, sanitizeForCrossPlatform));
   }
 
   /**
@@ -1078,16 +1089,19 @@ export class BookDockFinalizeService implements OnModuleInit, OnApplicationBoots
    * services; `book_per_file` differs only in that the file itself is the book, so without a
    * pattern it stays where it is instead of gaining a folder of its own.
    */
-  private resolveRelativeDestination(
+  private async resolveRelativeDestination(
     library: NamingLibrary | undefined,
     row: BookDockFileRow,
     format: string,
     pattern: string | null,
     sanitizeForCrossPlatform: boolean,
-  ): string {
+  ): Promise<string> {
     if (pattern) {
       const meta = row.selectedMetadata ?? row.embeddedMetadata ?? {};
-      const tokens = this.buildFilePatternTokens(meta, row.fileName, format, library?.name);
+      const mediaOverlayAvailable = patternReferencesToken(pattern, 'readaloud')
+        ? await this.inspectMediaOverlayAvailable(row.absolutePath, format)
+        : false;
+      const tokens = this.buildFilePatternTokens(meta, row.fileName, format, library?.name, mediaOverlayAvailable);
       const resolved = resolveUploadPath(pattern, tokens, format, { sanitizeForCrossPlatform });
       if (resolved) return resolved;
     }
@@ -1099,7 +1113,13 @@ export class BookDockFinalizeService implements OnModuleInit, OnApplicationBoots
     return row.fileName;
   }
 
-  private buildFilePatternTokens(meta: BookDockMetadata, fileName: string, format: string, libraryName?: string | null): Record<string, string> {
+  private buildFilePatternTokens(
+    meta: BookDockMetadata,
+    fileName: string,
+    format: string,
+    libraryName?: string | null,
+    mediaOverlayAvailable = false,
+  ): Record<string, string> {
     return buildPatternTokens({
       metadata: meta,
       authors: meta.authors,
@@ -1107,23 +1127,40 @@ export class BookDockFinalizeService implements OnModuleInit, OnApplicationBoots
       originalStem: basename(fileName, extname(fileName)),
       format,
       libraryName,
+      mediaOverlayAvailable,
     });
   }
 
-  private async applyMetadata(bookId: number, row: BookDockFileRow): Promise<void> {
+  private async inspectMediaOverlayAvailable(absolutePath: string, format: string): Promise<boolean> {
+    const startedAt = Date.now();
+    const fields = await inspectEpubMediaOverlayFields(absolutePath, format, (err) => {
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.logger.warn(
+        `[book_dock.media_overlay_capability] [fail] path="${sanitizeLogValue(absolutePath)}" durationMs=${Date.now() - startedAt} errorClass=${error.constructor.name} error="${sanitizeLogValue(error.message)}" - EPUB media-overlay inspection failed`,
+      );
+    });
+    return fields.mediaOverlayAvailable;
+  }
+
+  /**
+   * The staged cover was read from the unit's primary file, so it fills only that file's medium on
+   * the book that owns it. The other books of a loose-file unit get their own art from reconcile.
+   */
+  private async applyMetadata(bookId: number, row: BookDockFileRow, ownsStagedCover = true): Promise<void> {
     const meta = normalizeFinalizeMetadata(row.selectedMetadata ?? row.embeddedMetadata);
     const audio = resolveAudioFinalizeFields(row.embeddedMetadata, row.selectedMetadata);
     let selectedCoverApplied = false;
 
+    const medium = row.format && isAudioFormat(row.format) ? 'audio' : 'ebook';
     const selectedCoverUrl = meta.coverUrl;
     if (selectedCoverUrl) {
-      selectedCoverApplied = await this.metadataService.downloadAndSaveCover(selectedCoverUrl, bookId);
+      selectedCoverApplied = await this.metadataService.downloadAndSaveCover([{ url: selectedCoverUrl }], bookId, medium, { userChosen: true });
     }
 
-    if (!selectedCoverApplied && row.coverPath) {
+    if (!selectedCoverApplied && ownsStagedCover && row.coverPath) {
       try {
         const bytes = await readFile(row.coverPath);
-        await this.metadataService.saveExtractedCoverBytes(bookId, bytes);
+        await this.metadataService.saveExtractedCoverBytes(bookId, bytes, medium);
       } catch (err) {
         this.logger.warn(`Failed to copy Book Dock cover to book ${bookId}: ${err instanceof Error ? err.message : String(err)}`);
       }

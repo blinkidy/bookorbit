@@ -1,5 +1,8 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
+import { eq } from 'drizzle-orm';
+
+import * as schema from '../src/db/schema';
 
 import type { FixtureEntry } from './e2e/scanner/scanner-fixture-builder';
 import { createFixtureTree, file } from './e2e/scanner/scanner-fixture-builder';
@@ -373,6 +376,7 @@ function assertScenarioOutcome(rootPath: string, expected: ExpectedBook[], actua
 async function runScenario(context: ScannerE2EContext, scenario: ScannerScenario, results: ScenarioRunResult[]): Promise<void> {
   const fixture = await createFixtureTree(scenario.entries, `scanner-e2e-${scenario.id}-`);
   const startedAt = Date.now();
+  let scenarioLibraryId: number | undefined;
 
   try {
     const { libraryId } = await seedLibrary(context.db, {
@@ -381,6 +385,7 @@ async function runScenario(context: ScannerE2EContext, scenario: ScannerScenario
       allowedFormats: scenario.allowedFormats,
       excludePatterns: scenario.excludePatterns,
     });
+    scenarioLibraryId = libraryId;
 
     const jobId = await triggerLibraryScan(context, libraryId);
     await waitForScanCompletion(context.db, jobId);
@@ -405,6 +410,7 @@ async function runScenario(context: ScannerE2EContext, scenario: ScannerScenario
     });
     throw err;
   } finally {
+    if (scenarioLibraryId !== undefined) await context.db.delete(schema.libraries).where(eq(schema.libraries.id, scenarioLibraryId));
     await fixture.cleanup();
   }
 }

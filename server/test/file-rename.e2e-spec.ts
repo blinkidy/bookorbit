@@ -268,9 +268,9 @@ describe('Bulk file rename (e2e)', { timeout: SUITE_TIMEOUT_MS }, () => {
       expect(books).toHaveLength(3);
 
       const seriesData = [
-        { title: 'Book One', seriesName: 'My Series', seriesIndex: 1 },
-        { title: 'Book Two', seriesName: 'My Series', seriesIndex: 2 },
-        { title: 'Book Three', seriesName: 'My Series', seriesIndex: 3 },
+        { title: 'Book One', seriesName: 'My Series', seriesIndex: '1' },
+        { title: 'Book Two', seriesName: 'My Series', seriesIndex: '2' },
+        { title: 'Book Three', seriesName: 'My Series', seriesIndex: '3' },
       ];
 
       for (let i = 0; i < books.length; i++) {

@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useElementSize } from '@vueuse/core'
 import { FilePlus, Files, X } from '@lucide/vue'
 import type { BookDetail } from '@bookorbit/types'
-import { Permission } from '@bookorbit/types'
+import { getPrimaryBookFile, isAudioFormat, Permission } from '@bookorbit/types'
 import { api } from '@/lib/api'
 import { copyToClipboard } from '@/lib/clipboard'
 import { useBookDownload } from '@/features/book/composables/useBookDownload'
@@ -95,10 +95,14 @@ const runtimeLabel = computed(() => {
   return t('book.detail.files.duration.minutes', { minutes: Math.max(minutes, 1) })
 })
 
+/** Write-back goes to the primary file, or to every track when the primary is an audiobook. */
 const isWriteTarget = computed(() => {
-  const format = selectedFile.value?.formatKey
-  if (!format) return false
-  return (props.book.fileWriteStatus?.writableFormats ?? []).includes(format as never)
+  const file = selectedFile.value
+  if (!file?.formatKey) return false
+  if (!(props.book.fileWriteStatus?.writableFormats ?? []).includes(file.formatKey as never)) return false
+  if (file.role === 'primary') return true
+  const primaryFormat = getPrimaryBookFile(props.book.files)?.format
+  return file.isAudio && primaryFormat != null && isAudioFormat(primaryFormat)
 })
 
 function handleSort(key: SortKey) {
@@ -325,7 +329,7 @@ async function confirmDelete() {
 
     <!-- Rename -->
     <div v-if="renameTarget" class="fixed inset-0 z-[70] flex items-end justify-center md:items-center md:px-4" @click.self="closeRenameModal">
-      <button class="absolute inset-0 bg-black/45" :aria-label="t('common.cancel')" @click="closeRenameModal" />
+      <button class="absolute inset-0 bg-scrim" :aria-label="t('common.cancel')" @click="closeRenameModal" />
       <div
         class="relative w-full rounded-t-lg border border-border bg-card p-4 shadow-xl md:max-w-md md:rounded-lg md:p-5"
         role="dialog"
@@ -361,7 +365,7 @@ async function confirmDelete() {
 
     <!-- Delete -->
     <div v-if="deleteTarget" class="fixed inset-0 z-[70] flex items-end justify-center md:items-center md:px-4" @click.self="closeDeleteModal">
-      <button class="absolute inset-0 bg-black/45" :aria-label="t('common.cancel')" @click="closeDeleteModal" />
+      <button class="absolute inset-0 bg-scrim" :aria-label="t('common.cancel')" @click="closeDeleteModal" />
       <div
         class="relative w-full rounded-t-lg border border-border bg-card p-4 shadow-xl md:max-w-md md:rounded-lg md:p-5"
         role="dialog"

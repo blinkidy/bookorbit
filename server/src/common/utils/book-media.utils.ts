@@ -1,6 +1,17 @@
-import { getBookMediaProfile } from '@bookorbit/types';
+import { basename } from 'node:path';
+
+import { getBookMediaProfile, type CoverMedia, type CoverMedium } from '@bookorbit/types';
+
+import { naturalCompare } from './natural-sort.utils';
 
 type BookMediaFileRow = { format: string | null; role: string };
+
+/** What a metadata fetch needs to know about a book's cover slots. */
+export type CoverFetchState = {
+  media: CoverMedia;
+  filled: Record<CoverMedium, boolean>;
+  locked: CoverMedium[];
+};
 
 type AudiobookMetadataSignals = {
   durationSeconds?: number | null;
@@ -16,4 +27,24 @@ export function resolveIsAudiobook(files: readonly BookMediaFileRow[] | undefine
   const primaryMediaKind = files?.length ? getBookMediaProfile(files).primaryMediaKind : 'unknown';
   if (primaryMediaKind !== 'unknown') return primaryMediaKind === 'audiobook';
   return meta?.durationSeconds != null || !!meta?.audibleId || !!meta?.librofmId;
+}
+
+/** The pipeline's view of the slots: each is an existing field when filled, and locked slots are skipped. */
+export function coverFetchInputs(state: CoverFetchState): {
+  existing: { cover: true | null; audioCover: true | null };
+  options: { coverMedia: CoverMedia; lockedCoverSlots: CoverMedium[] };
+} {
+  return {
+    existing: { cover: state.filled.ebook ? true : null, audioCover: state.filled.audio ? true : null },
+    options: { coverMedia: state.media, lockedCoverSlots: state.locked },
+  };
+}
+
+type AudioTrackOrderRow = { sortOrder?: number | null; absolutePath: string };
+
+/** Playback order of an audiobook's tracks: explicit sort order first, unset last, then natural file name. */
+export function compareAudioTracks(left: AudioTrackOrderRow, right: AudioTrackOrderRow): number {
+  const byOrder = (left.sortOrder ?? Number.MAX_SAFE_INTEGER) - (right.sortOrder ?? Number.MAX_SAFE_INTEGER);
+  if (byOrder !== 0) return byOrder;
+  return naturalCompare(basename(left.absolutePath), basename(right.absolutePath));
 }

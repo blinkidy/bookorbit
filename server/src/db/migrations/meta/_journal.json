@@ -694,6 +694,34 @@
       "when": 1790119788880,
       "tag": "0098_add_android_reading_session_source",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1790137565077,
+      "tag": "0099_add_book_covers",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1790398181669,
+      "tag": "0100_add_subtitle_search_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1790446233976,
+      "tag": "0101_fractional_finished_threshold",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1790634252132,
+      "tag": "0102_audio_bookmark_position_ignores_tombstones",
+      "breakpoints": true
     }
   ]
 }

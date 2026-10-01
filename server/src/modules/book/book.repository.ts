@@ -16,11 +16,13 @@ import type {
 import type { UnscopedBookRecommendation } from '@bookorbit/types';
 import { isAudioFormat, isComicFormat, normalizeCoverAspectRatio } from '@bookorbit/types';
 import { buildContentFilterClauses } from '../../common/utils/content-filter-sql.utils';
+import { rankFileRowsByBook } from '../../common/utils/primary-file-selection.utils';
 import { accentInsensitiveIlike } from '../../common/utils/accent-insensitive-search.utils';
 import { advanceIsoTimestamp } from '../../common/utils/iso-timestamp.utils';
 import { parsePgTimestamptz } from '../../common/utils/pg-timestamp.utils';
 import { scanStateInvalidationPaths } from '../../common/utils/scan-state-paths.utils';
 import { seriesIndexSortKeySql } from '../../common/utils/series-index-sql.utils';
+import { hasReachedProgressThreshold } from '../../common/utils/progress-threshold.utils';
 import { SeriesIdentityService } from '../../common/services/series-identity.service';
 import { SeriesMembershipService } from '../../common/services/series-membership.service';
 import { BookQueryBuilder } from './book-query-builder.service';
@@ -608,6 +610,27 @@ export class BookRepository {
     return rows.map((row) => row.id);
   }
 
+  /**
+   * Card files in edition order, so every card, row and search result lists a book's formats the
+   * way its library ranks them. Libraries are few, so their priorities come in one small query.
+   */
+  private async rankCardFileRows<
+    T extends { bookId: number; id: number; format: string | null; role: string; sizeBytes: number | null; mediaOverlayAvailable: boolean },
+  >(fileRows: T[], bookRefs: Array<{ id: number; primaryFileId: number | null }>): Promise<T[]> {
+    if (fileRows.length === 0) return fileRows;
+    const bookIds = [...new Set(fileRows.map((row) => row.bookId))];
+    const priorityRows = await this.db
+      .select({ bookId: books.id, formatPriority: libraries.formatPriority })
+      .from(books)
+      .innerJoin(libraries, eq(libraries.id, books.libraryId))
+      .where(inArray(books.id, bookIds));
+    const priorityByBook = new Map(priorityRows.map((row) => [row.bookId, row.formatPriority as string[] | null]));
+    const contextByBook = new Map(
+      bookRefs.map((book) => [book.id, { formatPriority: priorityByBook.get(book.id), primaryFileId: book.primaryFileId }]),
+    );
+    return rankFileRowsByBook(fileRows, contextByBook);
+  }
+
   private async enrichBookIds(bookRefs: Array<{ id: number; primaryFileId: number | null }>, userId: number) {
     const bookIds = bookRefs.map((book) => book.id);
     const primaryFileIds = bookRefs.map((book) => book.primaryFileId).filter((id): id is number => id != null);
@@ -650,7 +673,7 @@ export class BookRepository {
 
     // Keep book-card hydration below the database pool's capacity when list requests overlap.
     // Three small batches retain useful parallelism without allowing one request to claim nine connections.
-    const [authorRows, fileRows, genreRows] = await Promise.all([
+    const [authorRows, unrankedFileRows, genreRows] = await Promise.all([
       this.db
         .select({ bookId: bookAuthors.bookId, name: authors.name })
         .from(bookAuthors)
@@ -669,13 +692,16 @@ export class BookRepository {
           mediaOverlayCheckedAt: bookFiles.mediaOverlayCheckedAt,
         })
         .from(bookFiles)
-        .where(inArray(bookFiles.bookId, bookIds)),
+        .where(inArray(bookFiles.bookId, bookIds))
+        .orderBy(asc(bookFiles.bookId), asc(bookFiles.sortOrder), asc(bookFiles.id)),
       this.db
         .select({ bookId: bookGenres.bookId, name: genres.name })
         .from(bookGenres)
         .innerJoin(genres, eq(genres.id, bookGenres.genreId))
         .where(inArray(bookGenres.bookId, bookIds)),
     ]);
+
+    const fileRows = await this.rankCardFileRows(unrankedFileRows, bookRefs);
 
     const [tagRows, narratorRows, seriesMembershipRows] = await Promise.all([
       this.db
@@ -1432,6 +1458,7 @@ export class BookRepository {
           absolutePath: bookFiles.absolutePath,
           createdAt: bookFiles.createdAt,
           durationSeconds: bookFiles.durationSeconds,
+          sortOrder: bookFiles.sortOrder,
           mediaOverlayAvailable: bookFiles.mediaOverlayAvailable,
           mediaOverlayDurationSeconds: bookFiles.mediaOverlayDurationSeconds,
           mediaOverlayCheckedAt: bookFiles.mediaOverlayCheckedAt,
@@ -1813,6 +1840,7 @@ export class BookRepository {
           ne(books.status, 'processing'),
           or(
             accentInsensitiveIlike(bookMetadata.title, pattern),
+            accentInsensitiveIlike(bookMetadata.subtitle, pattern),
             accentInsensitiveIlike(bookMetadata.seriesName, pattern),
             isNotNull(matchedAuthors.bookId),
             isNotNull(matchedSeries.bookId),
@@ -2038,10 +2066,16 @@ export class BookRepository {
 
   async findPrimaryFilesByBookIds(
     bookIds: number[],
-  ): Promise<{ bookId: number; absolutePath: string; format: string | null; sizeBytes: number | null }[]> {
+  ): Promise<{ bookId: number; absolutePath: string; format: string | null; sizeBytes: number | null; mediaOverlayAvailable: boolean }[]> {
     if (bookIds.length === 0) return [];
     return this.db
-      .select({ bookId: books.id, absolutePath: bookFiles.absolutePath, format: bookFiles.format, sizeBytes: bookFiles.sizeBytes })
+      .select({
+        bookId: books.id,
+        absolutePath: bookFiles.absolutePath,
+        format: bookFiles.format,
+        sizeBytes: bookFiles.sizeBytes,
+        mediaOverlayAvailable: bookFiles.mediaOverlayAvailable,
+      })
       .from(books)
       .innerJoin(bookFiles, eq(bookFiles.id, books.primaryFileId))
       .where(inArray(books.id, bookIds))
@@ -2067,9 +2101,16 @@ export class BookRepository {
       .orderBy(asc(books.id));
   }
 
-  async findAllFilesByBookIds(
-    bookIds: number[],
-  ): Promise<{ bookId: number; absolutePath: string; format: string | null; sizeBytes: number | null; sortOrder: number }[]> {
+  async findAllFilesByBookIds(bookIds: number[]): Promise<
+    {
+      bookId: number;
+      absolutePath: string;
+      format: string | null;
+      sizeBytes: number | null;
+      sortOrder: number;
+      mediaOverlayAvailable: boolean;
+    }[]
+  > {
     if (bookIds.length === 0) return [];
     return this.db
       .select({
@@ -2078,8 +2119,40 @@ export class BookRepository {
         format: bookFiles.format,
         sizeBytes: bookFiles.sizeBytes,
         sortOrder: bookFiles.sortOrder,
+        mediaOverlayAvailable: bookFiles.mediaOverlayAvailable,
       })
       .from(bookFiles)
+      .where(inArray(bookFiles.bookId, bookIds))
+      .orderBy(asc(bookFiles.bookId), asc(bookFiles.sortOrder), asc(bookFiles.id));
+  }
+
+  async findCoverSourceFilesByBookIds(bookIds: number[]): Promise<
+    {
+      id: number;
+      bookId: number;
+      absolutePath: string;
+      format: string | null;
+      role: string;
+      sizeBytes: number | null;
+      mediaOverlayAvailable: boolean;
+      formatPriority: string[];
+    }[]
+  > {
+    if (bookIds.length === 0) return [];
+    return this.db
+      .select({
+        id: bookFiles.id,
+        bookId: bookFiles.bookId,
+        absolutePath: bookFiles.absolutePath,
+        format: bookFiles.format,
+        role: bookFiles.role,
+        sizeBytes: bookFiles.sizeBytes,
+        mediaOverlayAvailable: bookFiles.mediaOverlayAvailable,
+        formatPriority: libraries.formatPriority,
+      })
+      .from(bookFiles)
+      .innerJoin(books, eq(books.id, bookFiles.bookId))
+      .innerJoin(libraries, eq(libraries.id, books.libraryId))
       .where(inArray(bookFiles.bookId, bookIds))
       .orderBy(asc(bookFiles.bookId), asc(bookFiles.sortOrder), asc(bookFiles.id));
   }
@@ -2760,7 +2833,7 @@ export class BookRepository {
    */
   private deriveKoboStatus(percentage: number, markAsFinishedPercentComplete: number): string {
     const threshold = Number.isFinite(markAsFinishedPercentComplete) ? Math.min(100, Math.max(1, markAsFinishedPercentComplete)) : 100;
-    if (percentage >= threshold) return 'Finished';
+    if (hasReachedProgressThreshold(percentage, threshold)) return 'Finished';
     return percentage > 0 ? 'Reading' : 'ReadyToRead';
   }
 

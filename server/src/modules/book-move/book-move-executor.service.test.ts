@@ -19,6 +19,7 @@ let registry: SelfWriteRegistry;
 type ApplyMoveResult = { moved: boolean; mergedBookId: number | null };
 let applyBookMove: Mock<(input: unknown) => Promise<ApplyMoveResult>>;
 let findMergeIncumbentFiles: Mock<(bookId: number) => Promise<{ id: number; absolutePath: string }[]>>;
+let coverStore: { removeCoverDirectory: Mock<(bookId: number) => Promise<void>> };
 
 function makeTarget(): MoveTargetLibrary {
   return {
@@ -72,7 +73,8 @@ beforeEach(async () => {
   applyBookMove = vi.fn<(input: unknown) => Promise<ApplyMoveResult>>().mockResolvedValue({ moved: true, mergedBookId: null });
   findMergeIncumbentFiles = vi.fn().mockResolvedValue([]);
   const repo = { applyBookMove, findMergeIncumbentFiles } as unknown as BookMoveRepository;
-  executor = new BookMoveExecutorService(repo, new FileLockService(), registry);
+  coverStore = { removeCoverDirectory: vi.fn<(bookId: number) => Promise<void>>().mockResolvedValue(undefined) };
+  executor = new BookMoveExecutorService(repo, new FileLockService(), registry, coverStore as never);
 });
 
 afterEach(async () => {
@@ -200,6 +202,16 @@ describe('successful move', () => {
     expect(result).toMatchObject({ status: 'failed', reason: 'merge failed' });
     expect(await readFile(plan.files[0].from, 'utf8')).toBe('incoming copy');
     expect(await readFile(plan.files[0].to, 'utf8')).toBe('incumbent copy');
+  });
+
+  it('removes the cover folder of the duplicate the merge deleted', async () => {
+    const plan = makePlan();
+    await writeFile(plan.files[0].from, 'x');
+    applyBookMove.mockResolvedValue({ moved: true, mergedBookId: 55 });
+
+    await executor.execute({ plan, target: makeTarget(), mergeDuplicateBookId: 55 });
+
+    expect(coverStore.removeCoverDirectory).toHaveBeenCalledWith(55);
   });
 });
 

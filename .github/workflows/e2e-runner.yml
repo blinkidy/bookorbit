@@ -36,7 +36,7 @@ env:
   JWT_EXPIRES_IN: 15m
   JWT_REFRESH_EXPIRES_IN: 7d
   BOOKS_PATH: ../local/data
-  APP_URL: http://localhost:5173
+  APP_URL: http://localhost:6263
 
 jobs:
   run-suite:
@@ -72,7 +72,12 @@ jobs:
           pnpm-version: ${{ env.PNPM_VERSION }}
           prefetch: "true"
 
+      - name: Install PDF cover dependency
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       - name: Run e2e suite
+        env:
+          APP_DATA_PATH: ${{ runner.temp }}/bookorbit-e2e-data
         shell: bash
         run: |
           if [ -n "${{ inputs.vitest-args }}" ]; then

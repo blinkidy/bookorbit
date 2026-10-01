@@ -278,12 +278,16 @@ async function startAudiobookshelfContainer(paths: {
   await runCommand('docker', ['version', '--format', '{{.Server.Version}}']);
   const containerName = `bookorbit-migration-audiobookshelf-${randomUUID()}`;
   const image = process.env.ABS_E2E_IMAGE || DEFAULT_ABS_IMAGE;
+  const uid = typeof process.getuid === 'function' ? process.getuid() : 1000;
+  const gid = typeof process.getgid === 'function' ? process.getgid() : 1000;
   await runCommand('docker', [
     'run',
     '--rm',
     '-d',
     '--name',
     containerName,
+    '--user',
+    `${uid}:${gid}`,
     '-e',
     'TZ=UTC',
     '-e',
