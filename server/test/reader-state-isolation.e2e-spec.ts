@@ -588,7 +588,7 @@ describe('Reader state isolation (e2e)', { timeout: 120_000 }, () => {
       );
     });
 
-    it('hides inaccessible books from reader-state operations', async () => {
+    it('denies inaccessible books and files using their existing access contracts', async () => {
       const bookmarkResponse = await ctx.app.inject({
         method: 'GET',
         url: `/api/v1/books/${sharedEpub.bookId}/bookmarks`,
@@ -608,7 +608,7 @@ describe('Reader state isolation (e2e)', { timeout: 120_000 }, () => {
         url: `/api/v1/reader/preferences/${sharedEpub.bookFileId}`,
         headers: authHeader(outsider.accessToken),
       });
-      expect(preferenceResponse.statusCode).toBe(404);
+      expect(preferenceResponse.statusCode).toBe(403);
 
       const progressResponse = await ctx.app.inject({
         method: 'POST',
@@ -619,7 +619,7 @@ describe('Reader state isolation (e2e)', { timeout: 120_000 }, () => {
           percentage: 12,
         },
       });
-      expect(progressResponse.statusCode).toBe(404);
+      expect(progressResponse.statusCode).toBe(403);
 
       const sessionResponse = await ctx.app.inject({
         method: 'POST',
@@ -634,7 +634,7 @@ describe('Reader state isolation (e2e)', { timeout: 120_000 }, () => {
           endProgress: 10,
         },
       });
-      expect(sessionResponse.statusCode).toBe(404);
+      expect(sessionResponse.statusCode).toBe(403);
 
       const audioProgressResponse = await ctx.app.inject({
         method: 'PUT',

@@ -355,7 +355,7 @@ function seedAppDatabase(path: string, books: CalibreWebAutomatedSourceFixture['
       .prepare(
         'INSERT INTO kosync_progress (id, user_id, document, progress, percentage, device, device_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .run(1101, 3, QUIET_CHECKSUM, QUIET_CFI, 73.25, 'KOReader', 'fixture-device', '2025-03-03T10:00:00Z');
+      .run(1101, 3, QUIET_CHECKSUM, QUIET_CFI, 0.7325, 'KOReader', 'fixture-device', '2025-03-03T10:00:00Z');
     runMany(database, 'INSERT INTO shelf (id, uuid, name, is_public, user_id, kobo_sync, created, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [
       [1201, 'maya-shelf', 'Maya Reading Order', 1, 1, 0, '2025-03-04T10:00:00Z', '2025-03-04T10:00:00Z'],
       [1202, 'lina-shelf', 'Lina Private Shelf', 0, 4, 0, '2025-03-05T10:00:00Z', '2025-03-05T10:00:00Z'],

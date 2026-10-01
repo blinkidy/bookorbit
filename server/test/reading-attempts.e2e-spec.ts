@@ -698,6 +698,10 @@ describe('Reading attempts main-flow simulation (docker e2e)', { timeout: TIMEOU
     });
     expect(created.statusCode).toBe(201);
 
+    const cleared = await patchStatus(book.bookId, { status: 'unread' });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({ status: 'unread', startedAt: null, finishedAt: null });
+
     const [projected] = await ctx.db
       .select({ status: schema.userBookStatus.status, startedAt: schema.userBookStatus.startedAt, finishedAt: schema.userBookStatus.finishedAt })
       .from(schema.userBookStatus)
