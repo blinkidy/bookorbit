@@ -51,9 +51,11 @@ describe('Series index migration compatibility (e2e)', { timeout: 60_000 }, () =
       `);
 
       const migrationFiles = (await readdir(MIGRATIONS_DIRECTORY)).filter((filename) => filename.endsWith('.sql')).sort();
+      const seriesIndexMigrationFile = migrationFiles.find((filename) => filename.endsWith('_add_series_index_labels.sql'));
+      if (!seriesIndexMigrationFile) throw new Error('Series index labels migration is missing');
       await applyMigrations(
         target,
-        migrationFiles.filter((filename) => filename < '0076_add_series_index_labels.sql'),
+        migrationFiles.filter((filename) => filename < seriesIndexMigrationFile),
       );
       await target.query(`
         WITH new_library AS (
@@ -100,7 +102,7 @@ describe('Series index migration compatibility (e2e)', { timeout: 60_000 }, () =
         JOIN samples USING (folder_path);
       `);
 
-      const seriesIndexMigration = await readFile(join(MIGRATIONS_DIRECTORY, '0076_add_series_index_labels.sql'), 'utf8');
+      const seriesIndexMigration = await readFile(join(MIGRATIONS_DIRECTORY, seriesIndexMigrationFile), 'utf8');
       await target.query('BEGIN');
       await expect(target.query(seriesIndexMigration)).rejects.toThrow('book_series_memberships_series_index_format_chk');
       await target.query('ROLLBACK');
@@ -136,7 +138,7 @@ describe('Series index migration compatibility (e2e)', { timeout: 60_000 }, () =
 
       await applyMigrations(
         target,
-        migrationFiles.filter((filename) => filename > '0076_add_series_index_labels.sql'),
+        migrationFiles.filter((filename) => filename > seriesIndexMigrationFile),
       );
     } finally {
       await pool?.end();

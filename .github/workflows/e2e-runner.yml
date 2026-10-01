@@ -72,7 +72,12 @@ jobs:
           pnpm-version: ${{ env.PNPM_VERSION }}
           prefetch: "true"
 
+      - name: Install PDF cover dependency
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       - name: Run e2e suite
+        env:
+          APP_DATA_PATH: ${{ runner.temp }}/bookorbit-e2e-data
         shell: bash
         run: |
           if [ -n "${{ inputs.vitest-args }}" ]; then

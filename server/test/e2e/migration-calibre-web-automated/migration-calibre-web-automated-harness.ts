@@ -287,6 +287,20 @@ async function ensureRealProgressSchemas(service: CalibreWebAutomatedService): P
 }
 
 async function stopCalibreWebAutomatedContainer(service: CalibreWebAutomatedService): Promise<void> {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : 1000;
+  const gid = typeof process.getgid === 'function' ? process.getgid() : 1000;
+  await runCommand('docker', [
+    'exec',
+    '--user',
+    '0:0',
+    service.containerName,
+    'chown',
+    '-R',
+    `${uid}:${gid}`,
+    '/config',
+    '/calibre-library',
+    '/cwa-book-ingest',
+  ]);
   await runCommand('docker', ['stop', '-t', '20', service.containerName]);
 }
 

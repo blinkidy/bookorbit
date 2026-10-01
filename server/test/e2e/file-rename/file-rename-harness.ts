@@ -246,7 +246,7 @@ export async function setBookMetadata(
     publisher?: string | null;
     publishedYear?: number | null;
     seriesName?: string | null;
-    seriesIndex?: number | null;
+    seriesIndex?: string | null;
     language?: string | null;
     isbn13?: string | null;
     authors?: string[];

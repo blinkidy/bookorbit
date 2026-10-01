@@ -588,27 +588,27 @@ describe('Reader state isolation (e2e)', { timeout: 120_000 }, () => {
       );
     });
 
-    it('returns 403 for reader-state operations against inaccessible libraries', async () => {
+    it('hides inaccessible books from reader-state operations', async () => {
       const bookmarkResponse = await ctx.app.inject({
         method: 'GET',
         url: `/api/v1/books/${sharedEpub.bookId}/bookmarks`,
         headers: authHeader(outsider.accessToken),
       });
-      expect(bookmarkResponse.statusCode).toBe(403);
+      expect(bookmarkResponse.statusCode).toBe(404);
 
       const annotationResponse = await ctx.app.inject({
         method: 'GET',
         url: `/api/v1/books/${sharedEpub.bookId}/annotations`,
         headers: authHeader(outsider.accessToken),
       });
-      expect(annotationResponse.statusCode).toBe(403);
+      expect(annotationResponse.statusCode).toBe(404);
 
       const preferenceResponse = await ctx.app.inject({
         method: 'GET',
         url: `/api/v1/reader/preferences/${sharedEpub.bookFileId}`,
         headers: authHeader(outsider.accessToken),
       });
-      expect(preferenceResponse.statusCode).toBe(403);
+      expect(preferenceResponse.statusCode).toBe(404);
 
       const progressResponse = await ctx.app.inject({
         method: 'POST',
@@ -619,7 +619,7 @@ describe('Reader state isolation (e2e)', { timeout: 120_000 }, () => {
           percentage: 12,
         },
       });
-      expect(progressResponse.statusCode).toBe(403);
+      expect(progressResponse.statusCode).toBe(404);
 
       const sessionResponse = await ctx.app.inject({
         method: 'POST',
@@ -634,7 +634,7 @@ describe('Reader state isolation (e2e)', { timeout: 120_000 }, () => {
           endProgress: 10,
         },
       });
-      expect(sessionResponse.statusCode).toBe(403);
+      expect(sessionResponse.statusCode).toBe(404);
 
       const audioProgressResponse = await ctx.app.inject({
         method: 'PUT',
@@ -649,7 +649,7 @@ describe('Reader state isolation (e2e)', { timeout: 120_000 }, () => {
           manifestRevision: '0'.repeat(64),
         },
       });
-      expect(audioProgressResponse.statusCode).toBe(403);
+      expect(audioProgressResponse.statusCode).toBe(404);
     });
   });
 

@@ -1573,7 +1573,7 @@ describe('Metadata write operations (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, ()
         headers: authHeader(withPermissionUser.accessToken),
         payload: { title: 'Should Fail Access' },
       });
-      expect(missingAccess.statusCode).toBe(403);
+      expect(missingAccess.statusCode).toBe(404);
 
       await grantLibraryAccess(context, withPermissionUser.userId, library.libraryId, 'editor');
 

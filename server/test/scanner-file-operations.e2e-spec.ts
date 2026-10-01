@@ -59,6 +59,7 @@ interface StructuralScenario {
   operations: FileOperation[];
   expected: Partial<Record<LibraryKey, LibraryExpectation>>;
   requiresCaseRename?: boolean;
+  pruneAfterWatcher?: boolean;
 }
 
 interface ScenarioRunResult {
@@ -698,6 +699,7 @@ const structuralScenarios: StructuralScenario[] = [
   {
     id: 'watcher-delete-and-recreate-folder-with-new-file',
     trigger: 'watcher',
+    pruneAfterWatcher: true,
     libraries: [{ key: 'a', rootDir: 'lib-a', mode: 'book_per_folder' }],
     entries: [file('lib-a/Swap/old.epub')],
     operations: [
@@ -960,10 +962,18 @@ async function runStructuralScenario(context: ScannerE2EContext, scenario: Struc
       await assertScenarioExpectations(context, seeded, scenario.expected);
       await assertNoIntegrityViolations(context.db);
     } else {
+      const watcherExpected = scenario.pruneAfterWatcher
+        ? Object.fromEntries(Object.entries(scenario.expected).map(([key, value]) => [key, { ...value, absentFilePaths: undefined }]))
+        : scenario.expected;
       await waitForCondition(async () => {
-        await assertScenarioExpectations(context, seeded, scenario.expected);
+        await assertScenarioExpectations(context, seeded, watcherExpected);
         await assertNoIntegrityViolations(context.db);
       }, 40_000);
+      if (scenario.pruneAfterWatcher) {
+        // Last-file records survive watcher deletion for rename detection until a full scan prunes them.
+        for (const library of seeded) await triggerAndWaitForLibraryScan(context, library.libraryId);
+        await assertScenarioExpectations(context, seeded, scenario.expected);
+      }
     }
 
     results.push({

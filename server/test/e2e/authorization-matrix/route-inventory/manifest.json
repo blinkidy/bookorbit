@@ -1,7 +1,7 @@
 {
-  "totalRoutes": 614,
+  "totalRoutes": 617,
   "byPermission": {
-    "(none)": 262,
+    "(none)": 263,
     "Permission.ManageMetadataConfig": 34,
     "Permission.EmailSend": 30,
     "Permission.LibraryEditMetadata": 35,
@@ -22,7 +22,7 @@
     "Permission.LibraryUpload": 2,
     "Permission.ManageBookDock": 3,
     "Permission.ManageIcons": 1,
-    "Permission.HardcoverSync": 1,
+    "Permission.HardcoverSync": 3,
     "Permission.ReadwiseSync": 1,
     "Permission.StorygraphSync": 1,
     "Permission.BookRequestAccess": 25,
