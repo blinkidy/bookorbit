@@ -985,28 +985,43 @@ export class KoreaderRepository {
 
   async removeDevice(userId: number, deviceId: string): Promise<number> {
     return this.db.transaction(async (tx) => {
-      const [deletedProgress, deletedSweep, deletedPageStats, deletedUnmatchedDeviceLinks, deletedDeviceSettings] = await Promise.all([
-        tx
-          .delete(schema.koreaderDeviceProgress)
-          .where(and(eq(schema.koreaderDeviceProgress.userId, userId), eq(schema.koreaderDeviceProgress.deviceId, deviceId)))
-          .returning({ id: schema.koreaderDeviceProgress.id }),
-        tx
-          .delete(schema.koreaderDeviceSweeps)
-          .where(and(eq(schema.koreaderDeviceSweeps.userId, userId), eq(schema.koreaderDeviceSweeps.deviceId, deviceId)))
-          .returning({ deviceId: schema.koreaderDeviceSweeps.deviceId }),
-        tx
-          .delete(schema.koreaderPageStats)
-          .where(and(eq(schema.koreaderPageStats.userId, userId), eq(schema.koreaderPageStats.deviceId, deviceId)))
-          .returning({ id: schema.koreaderPageStats.id }),
-        tx
-          .delete(schema.koreaderUnmatchedBookDevices)
-          .where(and(eq(schema.koreaderUnmatchedBookDevices.userId, userId), eq(schema.koreaderUnmatchedBookDevices.deviceId, deviceId)))
-          .returning({ hash: schema.koreaderUnmatchedBookDevices.hash }),
-        tx
-          .delete(schema.koreaderDeviceSettings)
-          .where(and(eq(schema.koreaderDeviceSettings.userId, userId), eq(schema.koreaderDeviceSettings.deviceId, deviceId)))
-          .returning({ deviceId: schema.koreaderDeviceSettings.deviceId }),
-      ]);
+      const [deletedProgress, deletedSweep, deletedPageStats, deletedUnmatchedDeviceLinks, deletedDeviceSettings, deletedAnnotationSyncState] =
+        await Promise.all([
+          tx
+            .delete(schema.koreaderDeviceProgress)
+            .where(and(eq(schema.koreaderDeviceProgress.userId, userId), eq(schema.koreaderDeviceProgress.deviceId, deviceId)))
+            .returning({ id: schema.koreaderDeviceProgress.id }),
+          tx
+            .delete(schema.koreaderDeviceSweeps)
+            .where(and(eq(schema.koreaderDeviceSweeps.userId, userId), eq(schema.koreaderDeviceSweeps.deviceId, deviceId)))
+            .returning({ deviceId: schema.koreaderDeviceSweeps.deviceId }),
+          tx
+            .delete(schema.koreaderPageStats)
+            .where(and(eq(schema.koreaderPageStats.userId, userId), eq(schema.koreaderPageStats.deviceId, deviceId)))
+            .returning({ id: schema.koreaderPageStats.id }),
+          tx
+            .delete(schema.koreaderUnmatchedBookDevices)
+            .where(and(eq(schema.koreaderUnmatchedBookDevices.userId, userId), eq(schema.koreaderUnmatchedBookDevices.deviceId, deviceId)))
+            .returning({ hash: schema.koreaderUnmatchedBookDevices.hash }),
+          tx
+            .delete(schema.koreaderDeviceSettings)
+            .where(and(eq(schema.koreaderDeviceSettings.userId, userId), eq(schema.koreaderDeviceSettings.deviceId, deviceId)))
+            .returning({ deviceId: schema.koreaderDeviceSettings.deviceId }),
+          tx
+            .delete(schema.annotationSyncState)
+            .where(
+              and(
+                eq(schema.annotationSyncState.userId, userId),
+                eq(schema.annotationSyncState.source, 'koreader'),
+                eq(schema.annotationSyncState.deviceId, deviceId),
+              ),
+            )
+            .returning({ id: schema.annotationSyncState.id }),
+        ]);
+
+      await tx
+        .delete(schema.koreaderDeviceRetirements)
+        .where(and(eq(schema.koreaderDeviceRetirements.userId, userId), eq(schema.koreaderDeviceRetirements.deviceId, deviceId)));
 
       // Only drop unmatched-book rows this device orphaned - a hash still reported by another
       // device must stay visible until that device is removed (or the hash is matched/linked).
@@ -1041,6 +1056,7 @@ export class KoreaderRepository {
         deletedPageStats.length +
         deletedUnmatchedDeviceLinks.length +
         deletedDeviceSettings.length +
+        deletedAnnotationSyncState.length +
         deletedUnmatchedBooks.length
       );
     });

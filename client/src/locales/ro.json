@@ -2359,7 +2359,6 @@
       "searchPlaceholder": "Setări căutare",
       "clearSearch": "Ștergeți căutarea",
       "noResults": "Nicio setare nu corespunde cu {query}.",
-      "shortcutHint": "Apăsați Cmd K pentru a sări la orice setare",
       "groups": {
         "you": "Tu",
         "library": "Bibliotecă",
@@ -2399,7 +2398,8 @@
         "bookDock": "Acţiuni rapide afişate în paginile de carte.",
         "auditLog": "Cine a schimbat ce și când."
       },
-      "backToApp": "Înapoi la bibliotecă"
+      "backToApp": "Înapoi la bibliotecă",
+      "shortcutHint": "Apăsați Cmd K pentru a sări la orice setare"
     }
   },
   "achievements": {
@@ -6841,9 +6841,7 @@
       }
     },
     "bookDuplicates": {
-      "scanSettings": "Setări scanare",
       "title": "Cărți duplicate",
-      "description": "Scanează fișierele și metadatele pentru potențialele înregistrări duplicat. Nimic nu este șters în timpul unei scanări.",
       "scope": "Sfera bibliotecii",
       "allLibraries": "Toate bibliotecile accesibile",
       "similarity": "Prag de titlu similar",
@@ -6855,7 +6853,6 @@
         "queued": "Scanare în așteptare",
         "running": "Scanare cărți"
       },
-      "groupsFound": "{count, plural, =0 {Niciun grup duplicat} one {Un grup duplicat} few {# grupuri duplicate} other {# de grupuri duplicate}}",
       "filter": "Potrivire tip",
       "allReasons": "Toate tipurile de meciuri",
       "reasons": {
@@ -6865,15 +6862,6 @@
         "fuzzy_metadata": "Titlu și autor similare"
       },
       "notDuplicates": "Nu dublează",
-      "keepThis": "Păstrează această carte",
-      "discardThis": "Renunță la această carte",
-      "selectKeeperFirst": "Selectați mai întâi un deținător",
-      "noDirectMatch": "Nicio potrivire directă cu păstrător",
-      "moreFiles": "+{count} mai mult",
-      "showDetails": "Afișare detalii",
-      "hideDetails": "Ascundeți detaliile",
-      "deleteSelected": "Ștergeți {count} selectate",
-      "openBook": "Deschide detalii pentru {title}",
       "unknownAuthor": "Autor necunoscut",
       "unknown": "Necunoscut",
       "none": "Niciunul",
@@ -6884,13 +6872,13 @@
         "library": "Bibliotecă",
         "isbn": "ISBN",
         "formats": "Formate",
+        "collections": "Colecții",
+        "added": "Adăugat",
         "fileLocation": "Fişier",
         "files": "Fișiere",
         "readingStatus": "Stare citire",
         "progress": "Progresul",
         "path": "Calea bibliotecii",
-        "collections": "Colecții",
-        "added": "Adăugat",
         "updated": "Actualizat"
       },
       "initial": {
@@ -6902,11 +6890,11 @@
         "description": "Nicio carte nu corespunde domeniului de aplicare actual, nivelului de similaritate și nu se potrivește filtrului."
       },
       "deleteDialog": {
-        "title": "Ștergeți definitiv cărțile duplicate?",
-        "description": "{count, plural, =0 {Acest lucru va şterge definitiv # de carte şi fişierele selectate.} one {Aceasta va şterge definitiv # şi fişierele selectate.} few {Aceasta va şterge definitiv # cărţi şi fişierele selectate.} other {Aceasta va şterge definitiv # de cărţi şi fişierele selectate.}}",
         "warning": "Metadata, colectările, datele de citire și starea dispozitivului nu sunt transferate în cartea păstrată. Datele asociate pentru alți utilizatori sunt, de asemenea, eliminate.",
         "confirm": "{count, plural, =0 {Ştergeţi # carte} one {Ştergeţi # carte} few {Ştergeţi # cărţi} other {Ştergeţi # de cărţi}}",
-        "success": "{count, plural, =0 {Nicio carte nu a fost ștearsă} one {O carte duplicat a fost ștearsă} few {# cărți duplicat șterse} other {# de cărți duplicat șterse}}"
+        "success": "{count, plural, =0 {Nicio carte nu a fost ștearsă} one {O carte duplicat a fost ștearsă} few {# cărți duplicat șterse} other {# de cărți duplicat șterse}}",
+        "title": "Ștergeți definitiv cărțile duplicate?",
+        "description": "{count, plural, =0 {Acest lucru va şterge definitiv # de carte şi fişierele selectate.} one {Aceasta va şterge definitiv # şi fişierele selectate.} few {Aceasta va şterge definitiv # cărţi şi fişierele selectate.} other {Aceasta va şterge definitiv # de cărţi şi fişierele selectate.}}"
       },
       "errors": {
         "start": "Nu s-a putut începe scanarea duplicat.",
@@ -6918,7 +6906,19 @@
       "pagination": {
         "label": "Pagini duplicate grupuri",
         "page": "Pagina {page} {total}"
-      }
+      },
+      "scanSettings": "Setări scanare",
+      "description": "Scanează fișierele și metadatele pentru potențialele înregistrări duplicat. Nimic nu este șters în timpul unei scanări.",
+      "groupsFound": "{count, plural, =0 {Niciun grup duplicat} one {Un grup duplicat} few {# grupuri duplicate} other {# de grupuri duplicate}}",
+      "keepThis": "Păstrează această carte",
+      "discardThis": "Renunță la această carte",
+      "selectKeeperFirst": "Selectați mai întâi un deținător",
+      "noDirectMatch": "Nicio potrivire directă cu păstrător",
+      "moreFiles": "+{count} mai mult",
+      "showDetails": "Afișare detalii",
+      "hideDetails": "Ascundeți detaliile",
+      "deleteSelected": "Ștergeți {count} selectate",
+      "openBook": "Deschide detalii pentru {title}"
     },
     "entityManager": {
       "unknown": "Necunoscut",

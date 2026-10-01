@@ -102,6 +102,8 @@ describe('UploadService', () => {
     processNewBookImportAsync: vi.fn(),
     extractMetadataAsync: vi.fn(),
     extractAudioDurationAsync: vi.fn(),
+    extractAddedAudioChaptersAsync: vi.fn(),
+    reconcileCoversAsync: vi.fn(),
   };
 
   const user = { id: 7, isSuperuser: false, permissions: [] } as any;
@@ -209,6 +211,62 @@ describe('UploadService', () => {
       456,
     );
     expect(processor.processNewBookImportAsync).toHaveBeenCalledWith(99, 1, '/library/Frank Herbert/Dune.epub', 'epub');
+  });
+
+  it('inspects and marks a read-aloud EPUB when the upload pattern references the token', async () => {
+    db.select
+      .mockReturnValueOnce(selectChain([{ id: 1, allowedFormats: ['epub'], fileNamingPattern: '{title}< ({readaloud})>' }]))
+      .mockReturnValueOnce(selectChain([{ id: 2, libraryId: 1, path: '/library' }]));
+    mockExtractEpubMetadata.mockResolvedValue({
+      title: 'Dune',
+      subtitle: null,
+      publisher: null,
+      publishedYear: null,
+      language: null,
+      seriesName: null,
+      seriesIndex: null,
+      isbn13: null,
+      authors: [{ name: 'Frank Herbert' }],
+      tags: [],
+      description: null,
+      isbn10: null,
+    });
+    const inspect = vi.spyOn(service as any, 'inspectMediaOverlayFields').mockResolvedValue({
+      mediaOverlayAvailable: true,
+      mediaOverlayDurationSeconds: 3600,
+      mediaOverlayCheckedAt: new Date(),
+    });
+
+    const result = await service.upload(1, 2, 'raw.epub', {} as any, user);
+
+    expect(result.filename).toBe('Dune (readaloud).epub');
+    expect(storage.moveToPath).toHaveBeenCalledWith('/tmp/upload.bin', '/library/Dune (readaloud).epub');
+    expect(inspect).toHaveBeenCalledOnce();
+  });
+
+  it('does not inspect media overlays for naming when the upload pattern omits the token', async () => {
+    db.select
+      .mockReturnValueOnce(selectChain([{ id: 1, allowedFormats: ['epub'], fileNamingPattern: '{title}' }]))
+      .mockReturnValueOnce(selectChain([{ id: 2, libraryId: 1, path: '/library' }]));
+    mockExtractEpubMetadata.mockResolvedValue({
+      title: 'Dune',
+      subtitle: null,
+      publisher: null,
+      publishedYear: null,
+      language: null,
+      seriesName: null,
+      seriesIndex: null,
+      isbn13: null,
+      authors: [{ name: 'Frank Herbert' }],
+      tags: [],
+      description: null,
+      isbn10: null,
+    });
+    const inspect = vi.spyOn(service as any, 'inspectMediaOverlayFields');
+
+    await service.upload(1, 2, 'raw.epub', {} as any, user);
+
+    expect(inspect).not.toHaveBeenCalled();
   });
 
   it('stores the directory-entry spelling when an upload targets a case-insensitive parent path', async () => {
@@ -1089,6 +1147,21 @@ describe('UploadService', () => {
       await service.addFileToBook(10, 'chapter-02.mp3', {} as any, user);
 
       expect(processor.extractAudioDurationAsync).toHaveBeenCalledWith(10, '/library/Book Title/chapter-02.mp3', 'mp3');
+      expect(processor.reconcileCoversAsync).toHaveBeenCalledWith([10]);
+    });
+
+    it('schedules audio chapter extraction when an M4B is added to an EPUB-primary book', async () => {
+      mockUploadedFormat('m4b');
+      db.select.mockReturnValueOnce(selectJoinChain([makeBookRow()])).mockReturnValueOnce(noHashConflict());
+      mockElection({ primaryFileId: 99, status: 'present', formatPriority: ['epub', 'm4b'] }, [
+        { id: 99, format: 'epub', sizeBytes: 1000 },
+        { id: 55, format: 'm4b', sizeBytes: 456 },
+      ]);
+
+      await service.addFileToBook(10, 'book.m4b', {} as any, user);
+
+      expect(processor.extractAudioDurationAsync).toHaveBeenCalledWith(10, expect.stringMatching(/book\.m4b$/), 'm4b');
+      expect(processor.extractAddedAudioChaptersAsync).toHaveBeenCalledWith(10, 'm4b');
     });
 
     it('delegates duration extraction to the processor regardless of format (processor gates on audio)', async () => {
@@ -1236,6 +1309,7 @@ describe('UploadService', () => {
       await expect(service.addFileToBook(10, 'book.epub', {} as any, user)).rejects.toThrow('primary update failed');
 
       expect(processor.extractAudioDurationAsync).not.toHaveBeenCalled();
+      expect(processor.extractAddedAudioChaptersAsync).not.toHaveBeenCalled();
       expect(storage.cleanup).toHaveBeenCalledWith('/tmp/upload.bin');
       expect(storage.cleanup).not.toHaveBeenCalledWith('/library/Book Title/book.epub');
     });

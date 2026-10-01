@@ -86,7 +86,7 @@ describe('Drizzle migration journal', () => {
     const migration = readFileSync(fileURLToPath(new URL('./0093_add_read_aloud_and_podcasts.sql', migrationsDirUrl)), 'utf8');
     expect(migration).toContain("'kobo', 'audiobook'");
 
-    for (let idx = 93; idx <= 97; idx += 1) {
+    for (let idx = 93; idx <= 102; idx += 1) {
       const prefix = migrationPrefix(idx);
       const snapshot = JSON.parse(
         readFileSync(fileURLToPath(new URL(`./meta/${prefix}_snapshot.json`, migrationsDirUrl)), 'utf8'),

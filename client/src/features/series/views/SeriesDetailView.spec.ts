@@ -124,6 +124,7 @@ function makeBook(overrides: Partial<BookCard> = {}): BookCard {
     readStatus: null,
     addedAt: '2026-01-01T00:00:00.000Z',
     updatedAt: null,
+    coverVersion: 'legacy:2026-01-01T00:00:00.000Z',
     metadataScore: null,
     hasCover: false,
     hasMetadataLocks: false,
@@ -356,6 +357,25 @@ describe('SeriesDetailView', () => {
     expect(comicsGroup.text()).toContain('Comics')
     expect(comicsGroup.text()).toContain('1')
     expect(comicsGroup.get('[data-testid="virtual-book-grid"]').attributes('data-book-ids')).toBe('10')
+  })
+
+  it('shows a mixed ebook and audiobook in both media sections', async () => {
+    mocks.items = ref([
+      makeBook({
+        id: 7,
+        files: [
+          { id: 1, format: 'epub', role: 'primary', sizeBytes: null },
+          { id: 2, format: 'm4b', role: 'content', sizeBytes: null },
+        ],
+      }),
+    ])
+
+    const wrapper = mountView()
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="series-media-group-books"] [data-testid="virtual-book-grid"]').attributes('data-book-ids')).toBe('7')
+    expect(wrapper.get('[data-testid="series-media-group-audiobooks"] [data-testid="virtual-book-grid"]').attributes('data-book-ids')).toBe('7')
+    expect(wrapper.find('[data-testid="series-media-group-comics"]').exists()).toBe(false)
   })
 
   it('switches between grouped and plain grid rendering', async () => {
